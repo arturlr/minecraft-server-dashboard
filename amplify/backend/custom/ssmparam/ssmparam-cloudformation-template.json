@@ -1,0 +1,84 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Parameters": {
+    "env": {
+      "Type": "String"
+    },
+    "ProjectName": {
+      "Default": "minecraftDashboard",
+      "Type": "String",
+      "Description": "A description to identify project"
+    },
+    "authgeckohosting28bd00b7IdentityPoolId": {
+      "Type": "String",
+      "Description": "Input parameter describing IdentityPoolId attribute for auth/geckohosting28bd00b7 resource"
+    },
+    "authgeckohosting28bd00b7IdentityPoolName": {
+      "Type": "String",
+      "Description": "Input parameter describing IdentityPoolName attribute for auth/geckohosting28bd00b7 resource"
+    },
+    "authgeckohosting28bd00b7HostedUIDomain": {
+      "Type": "String",
+      "Description": "Input parameter describing HostedUIDomain attribute for auth/geckohosting28bd00b7 resource"
+    },
+    "authgeckohosting28bd00b7OAuthMetadata": {
+      "Type": "String",
+      "Description": "Input parameter describing OAuthMetadata attribute for auth/geckohosting28bd00b7 resource"
+    },
+    "authgeckohosting28bd00b7UserPoolId": {
+      "Type": "String",
+      "Description": "Input parameter describing UserPoolId attribute for auth/geckohosting28bd00b7 resource"
+    },
+    "authgeckohosting28bd00b7UserPoolArn": {
+      "Type": "String",
+      "Description": "Input parameter describing UserPoolArn attribute for auth/geckohosting28bd00b7 resource"
+    },
+    "authgeckohosting28bd00b7UserPoolName": {
+      "Type": "String",
+      "Description": "Input parameter describing UserPoolName attribute for auth/geckohosting28bd00b7 resource"
+    },
+    "authgeckohosting28bd00b7AppClientIDWeb": {
+      "Type": "String",
+      "Description": "Input parameter describing AppClientIDWeb attribute for auth/geckohosting28bd00b7 resource"
+    },
+    "authgeckohosting28bd00b7AppClientID": {
+      "Type": "String",
+      "Description": "Input parameter describing AppClientID attribute for auth/geckohosting28bd00b7 resource"
+    },
+    "apigeckohostingGraphQLAPIIdOutput": {
+      "Type": "String",
+      "Description": "Input parameter describing GraphQLAPIIdOutput attribute for api/geckohosting resource"
+    },
+    "apigeckohostingGraphQLAPIEndpointOutput": {
+      "Type": "String",
+      "Description": "Input parameter describing GraphQLAPIEndpointOutput attribute for api/geckohosting resource"
+    }
+  },
+  "Resources": {
+    "AppsyncUrlKey": {
+      "Type": "AWS::SSM::Parameter",
+      "Properties": {
+        "Type": "String",
+        "Name": {
+          "Fn::Sub": "/amplify/${ProjectName}/appsyncUrl"
+        },
+        "Value": {
+          "Ref": "apigeckohostingGraphQLAPIEndpointOutput"
+        }
+      }
+    },
+    "CognitoIdKey": {
+      "Type": "AWS::SSM::Parameter",
+      "Properties": {
+        "Type": "String",
+        "Name": {
+          "Fn::Sub": "/amplify/${ProjectName}/cognitoPoolId"
+        },
+        "Value": {
+          "Ref": "authgeckohosting28bd00b7UserPoolId"
+        }
+      }
+    }
+  },
+  "Outputs": {}
+}

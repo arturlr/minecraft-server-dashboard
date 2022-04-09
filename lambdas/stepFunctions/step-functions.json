@@ -1,0 +1,81 @@
+{
+  "Comment": "gecko StateMachine",
+  "StartAt": "Pass",
+  "States": {
+    "Pass": {
+      "Type": "Pass",
+      "Next": "ActionChoice"
+    },
+    "ActionChoice": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.action",
+          "StringEquals": "start",
+          "Next": "startServer"
+        },
+        {
+          "Or": [
+            {
+              "Variable": "$.action",
+              "StringEquals": "stop"
+            },
+            {
+              "Variable": "$.action",
+              "StringEquals": "restart"
+            }
+          ],
+          "Next": "changeServerState"
+        }
+      ],
+      "Default": "Fail"
+    },
+    "changeServerState": {
+      "Type": "Task",
+      "Resource": "${changeServerState}",
+      "End": true
+    },
+    "startServer": {
+      "Type": "Task",
+      "Resource": "${changeServerState}",
+      "Next": "Choice"
+    },
+    "Choice": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "And": [
+            {
+              "Variable": "$.isInstanceReady",
+              "BooleanEquals": true
+            },
+            {
+              "Variable": "$.state",
+              "StringEquals": "running"
+            }
+          ],
+          "Next": "executeSSM"
+        },
+        {
+          "Variable": "$.isSuccessful",
+          "BooleanEquals": false,
+          "Next": "Fail"
+        }
+      ],
+      "Default": "Wait"
+    },
+    "Wait": {
+      "Type": "Wait",
+      "Seconds": 45,
+      "Next": "startServer"
+    },
+    "executeSSM": {
+      "Type": "Task",
+      "Resource": "${executeSSM}",
+      "End": true
+    },
+    "Fail": {
+      "Type": "Fail"
+    }
+  }
+}

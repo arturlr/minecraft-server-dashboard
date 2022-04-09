@@ -1,0 +1,232 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+    "MineDash Backend \n"
+
+Parameters:  
+
+  ProjectName:
+    Type: String
+    Default: minecraft-dashboard
+  AppValue:
+    Type: String
+    Default: minecraft
+  AppSyncUrl:
+    Type: String
+
+    
+Globals:
+  Function:
+    AutoPublishAlias: live
+    Handler: index.handler
+    MemorySize: 256
+    Runtime: python3.8
+    Timeout: 120
+    Tracing: Active
+  Environment:
+    Variables:
+      aplicationName: !Ref ProjectName
+      appValue: !Ref AppValue
+      APPSYNC_URL: !Ref AppSyncUrl
+
+Resources:
+
+PythonJoseLayer:
+  Type: AWS::Serverless::LayerVersion
+  Properties:
+    Description: PythonJose
+    ContentUri: ./layers/python-jose/python-jose.zip
+    CompatibleRuntimes:
+      - python3.8
+      - python3.7
+    RetentionPolicy: Delete
+
+  GraphQLLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      Description: Requests
+      ContentUri: ./layers/graphql/graphql.zip
+      CompatibleRuntimes:
+        - python3.8
+        - python3.7
+      RetentionPolicy: Delete
+
+  EventResponse:
+    Type: AWS::Serverless::Function 
+    Properties:
+      CodeUri: ./lambdas/eventResponse/
+      Layers:
+        - Ref: GraphQLLayer
+      Events:
+        CronPutMetricSchedule: 
+          Type: Schedule
+          Properties:
+            Schedule: 'rate(2 minute)'
+            Name: TestSchedule
+            Description: Sends EC2 Metric information to GraphQL
+            Enabled: false
+        EC2StateTrigger:
+          Type: CloudWatchEvent 
+          Properties:
+            Pattern:
+              source:
+                - aws.ec2
+              detail-type:
+                - EC2 Instance State-change Notification                
+      Policies:
+        - CostExplorerReadOnlyPolicy: {}
+        - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
+        - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess
+        - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
+        - arn:aws:iam::aws:policy/AWSCloudTrailReadOnlyAccess
+        - Version: '2012-10-17' # Policy Document
+          Statement:
+            - Effect: Allow
+              Action:
+                - appsync:ListGraphqlApis
+                - appsync:GetGraphqlApi
+                - appsync:GraphQL
+              Resource: '*'
+        - Version: '2012-10-17' # Policy Document
+          Statement:
+            - Effect: Allow
+              Action:
+                - events:ListRules
+                - events:DescribeRules
+                - events:DisableRule
+                - events:EnableRule
+              Resource: '*'
+
+  ListServers:
+    Type: AWS::Serverless::Function 
+    Properties:
+      CodeUri: ./lambdas/listServers/
+      Layers:
+        - Ref: PythonJoseLayer
+      Policies:
+        - CostExplorerReadOnlyPolicy: {}
+        - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
+        - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess
+        - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
+        - arn:aws:iam::aws:policy/AWSCloudTrailReadOnlyAccess
+
+  TriggerServerAction:
+    Type: AWS::Serverless::Function 
+    Properties:
+      CodeUri: ./lambdas/triggerServerAction/
+      Layers:
+        - Ref: PythonJoseLayer
+      Policies:
+        - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
+        - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess
+        - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
+        - StepFunctionsExecutionPolicy:
+            StateMachineName: !GetAtt StateMachine.Name
+      Environment:
+        Variables: 
+          StepFunctionsArn: !Ref StateMachine
+
+  ChangeServerState:
+    Type: AWS::Serverless::Function 
+    Properties:
+      CodeUri: ./lambdas/stepFunctions/changeServerState/
+      Policies:
+        - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
+        - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess
+        - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
+        - Version: '2012-10-17' # Policy Document
+          Statement:
+            - Effect: Allow
+              Action:
+                - cloudwatch:PutMetricAlarm
+              Resource: '*'
+        - Version: '2012-10-17' # Policy Document
+          Statement:
+            - Effect: Allow
+              Action:
+                - ec2:StartInstances
+                - ec2:StopInstances
+                - ec2:RebootInstances
+              Resource: '*'
+
+  SendCommand:
+    Type: AWS::Serverless::Function 
+    Properties:
+      CodeUri: ./lambdas/stepFunctions/sendCommand/
+      Policies:
+        - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
+        - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess
+        - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
+        - Version: '2012-10-17' # Policy Document
+          Statement:
+            - Effect: Allow
+              Action:
+                - ssm:List*
+                - ssm:Describe*
+                - ssm:Get*
+                - ssm:SendCommand
+              Resource: '*'
+
+  StateMachine:
+    Type: AWS::StepFunctions::StateMachine
+    Properties:
+      StateMachineName: !Sub '${ProjectName}-StateMachine'
+      StateMachineType: STANDARD
+      DefinitionUri: ./lambdas/stepFunctions/state_machine.json
+      DefinitionSubstitutions:
+        changeServerState: !GetAtt ChangeServerState.Arn
+        executeSSM: !GetAtt SendCommand.Arn
+      RoleArn: !GetAtt StatesExecutionRole.Arn
+      LoggingConfiguration:
+        Destinations:
+          - CloudWatchLogsLogGroup:
+             LogGroupArn: !GetAtt StateMachineLogGroup.Arn
+        IncludeExecutionData: True
+        Level: ALL
+
+  StateMachineLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '${ProjectName}-StateMachine-LogGroup-${AWS::Region}'
+  
+  StatesExecutionRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service:
+                - !Sub states.${AWS::Region}.amazonaws.com
+            Action: "sts:AssumeRole"
+      Path: "/"
+      Policies:
+        - PolicyName: StatesExecutionPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - lambda:InvokeFunction
+                  - logs:CreateLogDelivery
+                  - logs:GetLogDelivery
+                  - logs:UpdateLogDelivery
+                  - logs:DeleteLogDelivery
+                  - logs:ListLogDeliveries
+                  - logs:PutResourcePolicy
+                  - logs:DescribeResourcePolicies
+                  - logs:DescribeLogGroups
+                Resource: "*"
+
+Outputs:
+  StateMachineArn:
+        Value: !Ref StateMachine
+  StateMachineName:
+      Value: !GetAtt StateMachine.Name
+  EventResponseArn:
+      Value: !GetAtt EventResponse.Arn
+  ListServersArn:
+      Value: !GetAtt ListServers.Arn
+  SendCommandArn:
+      Value: !GetAtt SendCommand.Arn
