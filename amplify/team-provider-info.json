@@ -1,0 +1,20 @@
+{
+  "dev": {
+    "awscloudformation": {
+      "AuthRoleName": "amplify-geckohosting-dev-171734-authRole",
+      "UnauthRoleArn": "arn:aws:iam::514046899996:role/amplify-geckohosting-dev-171734-unauthRole",
+      "AuthRoleArn": "arn:aws:iam::514046899996:role/amplify-geckohosting-dev-171734-authRole",
+      "Region": "us-west-2",
+      "DeploymentBucketName": "amplify-geckohosting-dev-171734-deployment",
+      "UnauthRoleName": "amplify-geckohosting-dev-171734-unauthRole",
+      "StackName": "amplify-geckohosting-dev-171734",
+      "StackId": "arn:aws:cloudformation:us-west-2:514046899996:stack/amplify-geckohosting-dev-171734/8aa20fa0-9e7d-11ec-8f8d-02d331628cc3",
+      "AmplifyAppId": "d1nhrdfo24vftz"
+    },
+    "categories": {
+      "auth": {
+        "geckohosting28bd00b7": {}
+      }
+    }
+  }
+}

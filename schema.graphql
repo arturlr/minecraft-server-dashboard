@@ -1,0 +1,73 @@
+type Query {
+  listServers: [ServerInfo] @function(name: "listServers") @aws_cognito_user_pools
+  getServerMetric(serverId: String!): ServerMetric @function( name: "getServerMetric") @aws_cognito_user_pools
+}
+
+type Mutation {
+  putServerMetric(input: ServerMetricInput!): ServerMetric @aws_iam
+  changeServerState(input: String!, action: String!): String @aws_cognito_user_pools
+}
+
+type Subscription {
+  onPutServerMetricByEmail(userEmail: AWSEmail!): ServerMetric 
+    @aws_subscribe(mutations: ["putServerMetric"])
+  onPutServerMetricByServer(serverId: String!): ServerMetric 
+    @aws_subscribe(mutations: ["putServerMetric"])
+}
+
+type ServerInfo {
+  id: String!
+  name: String!
+  type: String!
+  vCpus: Int
+  memSize: Int
+  diskSize: Int
+  instanceStatus: String
+  systemStatus: String
+  state: String
+  monthlyTotalUsage: UsageCost
+  dailyUsage: [UsageCost]
+}
+
+type UsageCost {
+  date: AWSDate!
+  unblendedCost: Float!
+  usageQuantity: Float!
+}
+
+type ServerMetric @aws_iam @aws_cognito_user_pools{
+  id: ID!
+  serverId: String!
+  state: String!
+  launchTime: String
+  publicIp: String
+  instanceStatus: String
+  systemStatus: String
+  cpuStats: AWSJSON
+  networkStats: AWSJSON
+  activeUsers: Int
+  dailyUsage: AWSJSON
+  userEmail: AWSEmail!
+}
+
+input ServerMetricInput {
+  id: ID!
+  serverId: String!
+  state: String!
+  launchTime: String
+  publicIp: String
+  instanceStatus: String
+  systemStatus: String
+  cpuStats: AWSJSON
+  networkStats: AWSJSON
+  activeUsers: Int
+  userEmail: AWSEmail!
+}
+
+type LoginAudit @model @auth(rules: [{ allow: private }])
+{
+  id: ID!
+  email: AWSEmail!
+  action: String!
+  expirationEpoch: AWSTimestamp
+}

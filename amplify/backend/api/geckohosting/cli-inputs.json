@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "serviceConfiguration": {
+    "apiName": "geckohosting",
+    "serviceName": "AppSync",
+    "gqlSchemaPath": "/Users/artrodri/github/home/gecko-hosting/amplify/backend/api/geckohosting/schema.graphql",
+    "defaultAuthType": {
+      "mode": "AMAZON_COGNITO_USER_POOLS",
+      "cognitoUserPoolId": "authgeckohosting28bd00b7"
+    },
+    "additionalAuthTypes": [
+      {
+        "mode": "AWS_IAM"
+      }
+    ]
+  }
+}
