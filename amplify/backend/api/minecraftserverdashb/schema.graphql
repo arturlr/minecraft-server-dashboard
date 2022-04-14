@@ -1,5 +1,6 @@
 type Query {
   listServers: [ServerInfo] @function(name: "listServers") @aws_cognito_user_pools
+  getMonthlyCost: [MonthlyCost] @function(name: "getMonthlyCost") @aws_cognito_user_pools
 }
 
 type Mutation {
@@ -19,8 +20,6 @@ type Subscription {
 
 type ServerMetric  @aws_iam @aws_cognito_user_pools {
   id: String!
-  monthlyUsage: AWSJSON
-  dailyUsage: AWSJSON
   cpuStats: AWSJSON
   networkStats: AWSJSON
   activeUsers: Int
@@ -28,11 +27,23 @@ type ServerMetric  @aws_iam @aws_cognito_user_pools {
 
 input ServerMetricInput {
   id: String!
-  monthlyUsage: AWSJSON
-  dailyUsage: AWSJSON
   cpuStats: AWSJSON
   networkStats: AWSJSON
   activeUsers: Int
+}
+
+type MonthlyCost @aws_iam @aws_cognito_user_pools {
+  id: String!
+  timePeriod: String!
+  UnblendedCost: Float!
+  UsageQuantity: Float!
+}
+
+input MonthlyCostInput {
+  id: String!
+  timePeriod: String
+  UnblendedCost: Float
+  UsageQuantity: Float
 }
 
 type ServerInfo @aws_iam @aws_cognito_user_pools {

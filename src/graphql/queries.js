@@ -21,6 +21,16 @@ export const listServers = /* GraphQL */ `
     }
   }
 `;
+export const getMonthlyCost = /* GraphQL */ `
+  query GetMonthlyCost {
+    getMonthlyCost {
+      id
+      timePeriod
+      UnblendedCost
+      UsageQuantity
+    }
+  }
+`;
 export const getLoginAudit = /* GraphQL */ `
   query GetLoginAudit($id: ID!) {
     getLoginAudit(id: $id) {

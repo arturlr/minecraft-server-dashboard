@@ -1,19 +1,19 @@
 {
   "dev": {
     "awscloudformation": {
-      "AuthRoleName": "amplify-geckohosting-dev-171734-authRole",
-      "UnauthRoleArn": "arn:aws:iam::514046899996:role/amplify-geckohosting-dev-171734-unauthRole",
-      "AuthRoleArn": "arn:aws:iam::514046899996:role/amplify-geckohosting-dev-171734-authRole",
+      "AuthRoleName": "amplify-minecraftserverdashb-dev-175627-authRole",
+      "UnauthRoleArn": "arn:aws:iam::514046899996:role/amplify-minecraftserverdashb-dev-175627-unauthRole",
+      "AuthRoleArn": "arn:aws:iam::514046899996:role/amplify-minecraftserverdashb-dev-175627-authRole",
       "Region": "us-west-2",
-      "DeploymentBucketName": "amplify-geckohosting-dev-171734-deployment",
-      "UnauthRoleName": "amplify-geckohosting-dev-171734-unauthRole",
-      "StackName": "amplify-geckohosting-dev-171734",
-      "StackId": "arn:aws:cloudformation:us-west-2:514046899996:stack/amplify-geckohosting-dev-171734/8aa20fa0-9e7d-11ec-8f8d-02d331628cc3",
-      "AmplifyAppId": "d1nhrdfo24vftz"
+      "DeploymentBucketName": "amplify-minecraftserverdashb-dev-175627-deployment",
+      "UnauthRoleName": "amplify-minecraftserverdashb-dev-175627-unauthRole",
+      "StackName": "amplify-minecraftserverdashb-dev-175627",
+      "StackId": "arn:aws:cloudformation:us-west-2:514046899996:stack/amplify-minecraftserverdashb-dev-175627/ba903ac0-bb8d-11ec-8044-023f5a09cb25",
+      "AmplifyAppId": "d3pld69o80f9tr"
     },
     "categories": {
       "auth": {
-        "geckohosting28bd00b7": {}
+        "minecraftserverdashbb59cd6eb": {}
       }
     }
   }

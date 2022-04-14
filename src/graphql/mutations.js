@@ -5,8 +5,6 @@ export const putServerMetric = /* GraphQL */ `
   mutation PutServerMetric($input: ServerMetricInput!) {
     putServerMetric(input: $input) {
       id
-      monthlyUsage
-      dailyUsage
       cpuStats
       networkStats
       activeUsers

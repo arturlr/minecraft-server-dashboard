@@ -1,6 +1,6 @@
 export type AmplifyDependentResourcesAttributes = {
     "auth": {
-        "geckohosting28bd00b7": {
+        "minecraftserverdashbb59cd6eb": {
             "IdentityPoolId": "string",
             "IdentityPoolName": "string",
             "HostedUIDomain": "string",
@@ -13,7 +13,7 @@ export type AmplifyDependentResourcesAttributes = {
         }
     },
     "api": {
-        "geckohosting": {
+        "minecraftserverdashb": {
             "GraphQLAPIIdOutput": "string",
             "GraphQLAPIEndpointOutput": "string"
         }

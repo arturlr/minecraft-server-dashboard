@@ -50,9 +50,11 @@ export function addServerStats(
 
 export function upadateServersList(
   { commit }, { serverData }) {
+    commit("SET_LOADER", true);
     console.group("store/general/actions/upadateServersList");
     console.log(serverData.id + 'state changed to ' + serverData.state)
     commit("UPDATE_SERVERS_DICT", serverData);
+    commit("SET_LOADER", false);
     console.groupEnd();
 }
 

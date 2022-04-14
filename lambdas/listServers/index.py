@@ -20,10 +20,10 @@ ce_client = boto3.client('ce')
 cognito_idp = boto3.client('cognito-idp')
 ENCODING = 'utf-8'
 
-dt_1st_day_of_the_month=date.today().replace(day=1)
+dt_now = datetime.utcnow()
+dt_1st_day_of_the_month=datetime.utcnow().replace(day=1,hour=0,minute=0,second=0)
 dt_14_days_past_today=datetime.utcnow() - timedelta(days=14)
 dt_4_four_hours_before=datetime.utcnow() - timedelta(hours=4)
-dt_now = datetime.utcnow()
 
 appValue = os.getenv('appValue')
 
@@ -63,7 +63,7 @@ def _is_token_valid(token, keys):
     # now we can use the claims
     return claims
 
-def getUsageCost(instanceId,granularity,startDate,endDate):
+def getUsageCost(granularity,startDate,endDate,tagValue):
     try:
         usageQuantity = 0
         unblendedCost = 0
@@ -85,8 +85,8 @@ def getUsageCost(instanceId,granularity,startDate,endDate):
                         },
                         {
                             "Tags": {
-                                "Key": "InstanceId",
-                                "Values": [ instanceId
+                                "Key": "App",
+                                "Values": [ tagValue
                                 ]
                             }
                         }
@@ -153,23 +153,6 @@ def describeInstanceStatus(instanceId):
         
     return { 'instanceStatus': instanceStatus, 'systemStatus': systemStatus }
 
-def getCloudTailEvents(instanceId, eventValue):
-    eventList = []
-
-    paginator = ct_client.get_paginator('lookup_events')
-    
-    StartingToken = None
-    
-    page_iterator = paginator.paginate(
-    	LookupAttributes=[{'AttributeKey':'EventName','AttributeValue': eventValue}],
-    	PaginationConfig={'PageSize':50, 'StartingToken':StartingToken })
-    for page in page_iterator:
-        for event in page['Events']:
-            if event['Resources'][0]["ResourceName"] == instanceId:
-                eventList.append(event['EventTime'].strftime("%m/%d/%Y - %H:%M:%S") + '#' + event['Username'] + '#' + eventValue)
-                
-    return eventList
-
 def getSsmParam(paramKey, isEncrypted=False):
     try:
         ssmResult = ssm.get_parameter(
@@ -185,6 +168,81 @@ def getSsmParam(paramKey, isEncrypted=False):
     except Exception as e:
         logger.warning(str(e) + " for " + paramKey)
         return ""
+
+def extractStateEventTime(evt,previousState,instanceId):
+    ctEvent = json.loads(evt['CloudTrailEvent'])
+    if 'responseElements' in ctEvent:
+        if ctEvent['responseElements'] != None and 'instancesSet' in ctEvent['responseElements']:
+            if 'items' in ctEvent['responseElements']['instancesSet']:
+                for item in ctEvent['responseElements']['instancesSet']['items']:
+                    if item['instanceId'] == instanceId and item['previousState']['name'] == previousState:
+                        return ctEvent['eventTime']
+    
+    return None
+
+def getInstanceHoursFromCloudTailEvents(instanceId):
+    totalMinutes = 0
+
+    eventData = []
+
+    paginator = ct_client.get_paginator('lookup_events')
+    StartingToken = None
+    
+    page_iterator = paginator.paginate(
+    	LookupAttributes=[{'AttributeKey':'ResourceName','AttributeValue': instanceId}],
+    	PaginationConfig={'PageSize':50, 'StartingToken':StartingToken },
+        StartTime=dt_1st_day_of_the_month,
+        EndTime=dt_now
+        )
+    for page in page_iterator:
+        for evt in page['Events']:
+            if evt['EventName'] == "RunInstances":
+                ctEvent = json.loads(evt['CloudTrailEvent'])
+                eventData.append({'s': 'StartInstances', 'x': ctEvent['eventTime'] })
+                
+            if evt['EventName'] == "StartInstances":
+                startEvent = extractStateEventTime(evt,"stopped",instanceId)
+                if startEvent != None:
+                    eventData.append({'s': 'StartInstances', 'x': startEvent })
+
+            if evt['EventName'] == "StopInstances":
+                stopEvent = extractStateEventTime(evt,"running",instanceId) 
+                if stopEvent != None:
+                    eventData.append({'s': 'StopInstances', 'x': stopEvent })
+ 
+    data_points = sorted(eventData, key=lambda k : k['x'])
+    
+    dtStartEvent = None
+    dtStopEvent = None
+    for point in data_points:
+        if point['s'] == "StartInstances":
+            dtStartEvent = datetime.fromisoformat(point['x'].replace("Z", "+00:00"))
+            continue
+        elif point['s'] == "StopInstances":
+            if isinstance(dtStartEvent, datetime):
+                dtStopEvent = datetime.fromisoformat(point['x'].replace("Z", "+00:00"))
+            else:
+                # Instance started before the beginning of the month
+                dtStartEvent = datetime.now().replace(day=1,hour=0,minute=0,second=0)
+                dtStopEvent = datetime.fromisoformat(point['x'].replace("Z", "+00:00")).replace(tzinfo=None)
+
+        if isinstance(dtStartEvent, datetime) and isinstance(dtStopEvent, datetime):
+            delta = dtStopEvent - dtStartEvent
+            #print(instanceId + ' s:' + dtStartEvent.strftime("%m/%d/%Y - %H:%M:%S") + ' - e:' + dtStopEvent.strftime("%m/%d/%Y - %H:%M:%S") + ' = ' + str(round(delta.total_seconds()/60,2)))
+            totalMinutes = totalMinutes + round(delta.total_seconds()/60,2)
+            dtStartEvent = None
+            dtStopEvent = None
+
+    # in case the instance is still running
+    if isinstance(dtStartEvent, datetime) and not isinstance(dtStopEvent, datetime):
+            dtStopEvent = dt_now
+            delta = dtStopEvent - dtStartEvent
+            #print(instanceId + ' s:' + dtStartEvent.strftime("%m/%d/%Y - %H:%M:%S") + ' - e:' + dtStopEvent.strftime("%m/%d/%Y - %H:%M:%S") + ' = ' + str(round(delta.total_seconds()/60,2)))
+            totalMinutes = totalMinutes + round(delta.total_seconds()/60,2)
+            dtStartEvent = None
+            dtStopEvent = None                               
+                    
+    return totalMinutes
 
 def handler(event, context):
     #print(event)
@@ -249,11 +307,6 @@ def handler(event, context):
             if tag["Key"] == "Name":
                instanceName = tag["Value"]
 
-        dt_1st_day_of_the_month=date.today().replace(day=1)
-        dt_14_days_past_today=datetime.utcnow() - timedelta(days=14)
-        dt_4_four_hours_before=datetime.utcnow() - timedelta(hours=4)
-        dt_now = datetime.utcnow()
-        
         instanceId = instance["Instances"][0]["InstanceId"]
         instanceType = ec2_client.describe_instance_types(InstanceTypes=[instance["Instances"][0]["InstanceType"]])
         vCpus = instanceType["InstanceTypes"][0]["VCpuInfo"]["DefaultVCpus"]
@@ -270,21 +323,25 @@ def handler(event, context):
         if workingDir == "":
             workingDir = getSsmParam("/minecraft/default/workingDir")
 
+        runningMinutes = getInstanceHoursFromCloudTailEvents(instanceId)
+        monthlyTotalUsage = getUsageCost("MONTHLY",dt_1st_day_of_the_month.strftime("%Y-%m-%d"),dt_now.strftime("%Y-%m-%d"),appValue)
+
+        print(round(runningMinutes/60,2))
+        print(monthlyTotalUsage)
+
         instanceArray.append({
             "id": instanceId,
             "name": instanceName,
-            "type": instance["Instances"][0]["InstanceType"],
-            "vCpus": vCpus,
+            "type": instance["Instances"][0]["InstanceType"],            
             "userEmail": userEmail,
+            "state": instance["Instances"][0]["State"]["Name"].lower(),
+            "vCpus": vCpus,            
             "memSize": memoryInfo,
             "diskSize": volume.size,
-            "publicIp": publicIp,
             "launchTime": launchTime.strftime("%m/%d/%Y - %H:%M:%S"),
+            "publicIp": publicIp,            
             "instanceStatus": instanceStatus["instanceStatus"].lower(),
             "systemStatus": instanceStatus["systemStatus"].lower(),
-            "state": instance["Instances"][0]["State"]["Name"].lower(),
-            "monthlyTotalUsage": getUsageCost(instanceId,"MONTHLY",dt_1st_day_of_the_month.strftime("%Y-%m-%d"),dt_now.strftime("%Y-%m-%d")),
-            "dailyUsage": getUsageCost(instanceId,"DAILY",dt_14_days_past_today.strftime("%Y-%m-%d"),dt_now.strftime("%Y-%m-%d")),
             "runCommand": runCommand,
             "workingDir": workingDir
         })

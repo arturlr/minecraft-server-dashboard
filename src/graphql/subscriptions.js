@@ -5,8 +5,6 @@ export const onPutServerMetric = /* GraphQL */ `
   subscription OnPutServerMetric {
     onPutServerMetric {
       id
-      monthlyUsage
-      dailyUsage
       cpuStats
       networkStats
       activeUsers

@@ -1,50 +1,64 @@
 <template>
   <div>
-    <v-alert type="info" v-model="successAlert" dismissible>
-      {{ infoMsg }}
-    </v-alert>
-    <v-alert type="error" v-model="errorAlert" dismissible>
-      {{ errorMsg }}
-    </v-alert>
+    
 
-    <v-card class="pa-2">
-      <v-progress-linear
-        v-if="isLoading"
-        indeterminate
-        height="10"
-        color="teal"
-        striped
-      ></v-progress-linear>
+    <v-card class="my-8 pa-2">
+      <v-list-item>
+        <v-list-item-content>
+          <v-list-item-title
+            class="text-h4"
+            v-if="
+              serversDict[serverId].name &&
+              serversDict[serverId].name.length > 2
+            "
+          >
+            {{ serversDict[serverId].name }}
+          </v-list-item-title>
+          <v-list-item-title class="text-h4" v-else>
+            {{ serverId }}
+          </v-list-item-title>
+          <v-list-item-subtitle
+            class="text-caption"
+            v-if="
+              serversDict[serverId].name &&
+              serversDict[serverId].name.length > 2
+            "
+            >{{ serverId }}
+          </v-list-item-subtitle>
+        </v-list-item-content>
+      </v-list-item>
+
+      <v-chip-group v-if="serversDict[serverId].state == 'running'">
+        <v-chip color="gray" label outlined>
+          <v-icon left> developer_board </v-icon>
+          {{ serversDict[serverId].vCpus }} vCPU
+        </v-chip>
+
+        <v-chip color="gray" label outlined>
+          <v-icon left> sd_card </v-icon>
+          {{ serversDict[serverId].memSize / 1024 }} GB
+        </v-chip>
+
+        <v-chip color="gray" label outlined>
+          <v-icon left> album </v-icon>
+          {{ serversDict[serverId].diskSize }} GB
+        </v-chip>
+
+        <v-chip color="gray" label outlined>
+          <v-icon left> attach_money </v-icon>
+          0
+        </v-chip>
+
+        <v-chip color="gray" label outlined>
+          <v-icon left> schedule </v-icon>
+          0 hours
+        </v-chip>
+      </v-chip-group>
+
+      <v-divider class="mx-4" vertical></v-divider>
 
       <v-row>
-        <v-list-item>
-          <v-list-item-content>
-            <v-list-item-title
-              class="text-h4"
-              v-if="
-                serversDict[serverId].name &&
-                serversDict[serverId].name.length > 2
-              "
-            >
-              {{ serversDict[serverId].name }}
-            </v-list-item-title>
-            <v-list-item-title class="text-h4" v-else>
-              {{ serverId }}
-            </v-list-item-title>
-            <v-list-item-subtitle
-              class="text-caption"
-              v-if="
-                serversDict[serverId].name &&
-                serversDict[serverId].name.length > 2
-              "
-              >{{ serverId }}
-            </v-list-item-subtitle>
-          </v-list-item-content>
-        </v-list-item>
-      </v-row>
-      <v-row>
-        <v-col cols="6">
-
+        <v-col cols="4">
           <v-text-field
             id="publicIp"
             dense
@@ -54,7 +68,7 @@
             :hint="serversDict[serverId].state"
             persistent-hint
             outlined
-            readonly            
+            readonly
           >
             <v-icon
               large
@@ -71,81 +85,32 @@
               mdi-power
             </v-icon>
           </v-text-field>
-        </v-col>
-        <v-col cols="6">
-          <apexchart
-            ref="users"
-            height="70"
-            :options="areaChartOptions"
-            :series="chartInit"
-          ></apexchart>
-        </v-col>
-      </v-row>
-      <v-row>
-        <v-card v-if="serversDict[serverId].state == 'running'">
-          <v-chip class="ma-2" color="gray" label outlined>
-            <v-icon left> developer_board </v-icon>
-            {{ serversDict[serverId].vCpus }} vCPU
-          </v-chip>
-
-          <v-chip class="ma-2" color="gray" label outlined>
-            <v-icon left> sd_card </v-icon>
-            {{ serversDict[serverId].memSize / 1024 }} GB
-          </v-chip>
-
-          <v-chip class="ma-2" color="gray" label outlined>
-            <v-icon left> album </v-icon>
-            {{ serversDict[serverId].diskSize }} GB
-          </v-chip>
-
-          <v-chip class="ma-2" color="gray" label outlined>
-            <v-icon left> attach_money </v-icon>
-            0
-          </v-chip>
-
-          <v-chip class="ma-2" color="gray" label outlined>
-            <v-icon left> schedule </v-icon>
-            0 hours
-          </v-chip>
-
-          <v-chip class="ma-2" color="gray" label outlined>
-            <v-icon left> group </v-icon>
-            0
-          </v-chip>
-        </v-card>
-      </v-row>
-
-      <v-row>
-        <v-col cols="12">
           <v-card>
-            <v-list class="transparent">
-              <v-list-item>
-                <v-list-item-content>
-                  <v-list-item-subtitle>
-                    <apexchart
-                      ref="lineChart"
-                      height="150"
-                      :options="lineChartOptions"
-                      :series="chartInit"
-                    ></apexchart>
-                  </v-list-item-subtitle>
-                </v-list-item-content>
-              </v-list-item>
-            </v-list>
+            <apexchart
+              ref="users"
+              height="90"
+              :options="areaChartOptions"
+              :series="chartInit"
+            ></apexchart>
+          </v-card>
+        </v-col>
+        <v-col cols="8">
+          <v-card>
+            <apexchart
+              ref="lineChart"
+              height="150"
+              :options="lineChartOptions"
+              :series="chartInit"
+            ></apexchart>
           </v-card>
         </v-col>
       </v-row>
 
       <v-list>
         <v-list-item>
-          <v-btn 
-          depressed 
-          x-small
-          @click="settingsDialog = true"
-          >
+          <v-btn depressed x-small @click="settingsDialog = true">
             settings
           </v-btn>
-
         </v-list-item>
         <v-list-item two-line>
           <v-list-item-content>
@@ -159,97 +124,88 @@
         </v-list-item>
       </v-list>
     </v-card>
+    <v-alert type="info" v-model="successAlert" dismissible>
+      {{ infoMsg }}
+    </v-alert>
+    <v-alert type="error" v-model="errorAlert" dismissible>
+      {{ errorMsg }}
+    </v-alert>
 
-    <v-dialog
-      v-model="settingsDialog"
-      persistent
-      max-width="600px"
-    >
+    <v-dialog v-model="settingsDialog" persistent max-width="600px">
       <v-card>
-          <v-card-title>
-            <span class="text-h6">Initialization Commands</span>
-          </v-card-title>
-          <v-card-text>
-            <v-container>
-              <v-row>
-                <v-text-field
-              dense
-              :prepend-icon="isRunCommandEdit ? 'save' : 'edit'"
-              @click:prepend="toggleEdit('runCommand')"
-              v-model="runCommand"
-              label="Minecraft run command"
-              :readonly="isRunCommandEdit === false"
-              @keyup.enter="doneEdit($event)"
-              @keyup.esc="cancelEdit('runCommand')"
-            ></v-text-field>
-              </v-row>
-              <v-row>
-                <v-text-field
-              dense
-              :prepend-inner-icon="isWorkingDirEdit ? 'save' : 'edit'"
-              v-model="serversDict[serverId].workingDir"
-              label="Minecraft working directory"
-              :readonly="isWorkingDirEdit === false"
-            ></v-text-field>
-              </v-row>
-            </v-container>
-          </v-card-text>
-          <v-card-actions>
-              <v-btn
-                color="primary"
-                text
-                @click="settingsDialog = false"
-              >
-                Close
-              </v-btn>
-            </v-card-actions>
+        <v-card-title>
+          <span class="text-h6">Initialization Commands</span>
+        </v-card-title>
+        <v-card-text>
+          <v-container>
+            <v-row>
+              <v-text-field
+                dense
+                :prepend-icon="isRunCommandEdit ? 'save' : 'edit'"
+                @click:prepend="toggleEdit('runCommand')"
+                v-model="runCommand"
+                label="Minecraft run command"
+                :readonly="isRunCommandEdit === false"
+                @keyup.enter="doneEdit($event)"
+                @keyup.esc="cancelEdit('runCommand')"
+              ></v-text-field>
+            </v-row>
+            <v-row>
+              <v-text-field
+                dense
+                :prepend-inner-icon="isWorkingDirEdit ? 'save' : 'edit'"
+                v-model="serversDict[serverId].workingDir"
+                label="Minecraft working directory"
+                :readonly="isWorkingDirEdit === false"
+              ></v-text-field>
+            </v-row>
+          </v-container>
+        </v-card-text>
+        <v-card-actions>
+          <v-btn color="primary" text @click="settingsDialog = false">
+            Close
+          </v-btn>
+        </v-card-actions>
       </v-card>
     </v-dialog>
 
-     <v-dialog
+    <v-dialog
       v-model="serverStateConfirmation"
       hide-overlay
       persistent
       width="300"
     >
-      <v-card
-        color="gray"
-        dark
-      >
+      <v-card color="gray" dark>
         <v-card-title>
           Please confirm action:
-          <v-progress-linear
-            color="white"
-            class="mb-0"
-          ></v-progress-linear>
+          <v-progress-linear color="white" class="mb-0"></v-progress-linear>
         </v-card-title>
         <v-card-actions>
           <v-spacer></v-spacer>
           <div v-if="serversDict[serverId].state == 'stopped'">
-            <v-btn            
+            <v-btn
               color="green darken-1"
               text
               @click="triggerServerState('start')"
             >
-                Start
+              Start
             </v-btn>
           </div>
           <div v-else>
-            <v-btn            
+            <v-btn
               color="orange darken-1"
               text
               @click="triggerServerState('stop')"
             >
-                Stop
+              Stop
             </v-btn>
-            <v-btn            
+            <v-btn
               color="orange darken-1"
               text
               @click="triggerServerState('restart')"
             >
-                ReStart
+              ReStart
             </v-btn>
-
           </div>
 
           <v-btn
@@ -261,37 +217,22 @@
           </v-btn>
         </v-card-actions>
       </v-card>
-    </v-dialog> 
+    </v-dialog>
 
-  <v-dialog
-      v-model="copyDialog"
-      hide-overlay
-      persistent
-      width="300"
-    >
-      <v-card
-        color="primary"
-        dark
-      >
+    <v-dialog v-model="copyDialog" hide-overlay persistent width="300">
+      <v-card color="primary" dark>
         <v-card-text>
           Copied IP Address to Clipboard
-          <v-progress-linear
-            color="white"
-            class="mb-0"
-          ></v-progress-linear>
+          <v-progress-linear color="white" class="mb-0"></v-progress-linear>
         </v-card-text>
         <v-card-actions>
           <v-spacer></v-spacer>
-          <v-btn
-            color="green darken-1"
-            text
-            @click="copyDialog = false"
-          >
+          <v-btn color="green darken-1" text @click="copyDialog = false">
             Ok
           </v-btn>
         </v-card-actions>
       </v-card>
-    </v-dialog>   
+    </v-dialog>
   </div>
 </template>
 
@@ -338,7 +279,6 @@ export default {
       ],
       lineChartOptions: {
         chart: {
-          height: 350,
           type: "line",
           toolbar: {
             show: false,
@@ -375,23 +315,27 @@ export default {
         },
       },
       areaChartOptions: {
-          chart: {
-          type: 'area',
+        chart: {
+          type: "area",
           sparkline: {
-            enabled: true
+            enabled: true,
           },
         },
+        title: {
+          text: "Users connected",
+          align: "left",
+        },
         stroke: {
-          curve: 'straight'
+          curve: "straight",
         },
         fill: {
           opacity: 0.3,
         },
         yaxis: {
-          min: 0
+          min: 0,
         },
-        colors: ['#DCE6EC']
-      }
+        colors: ["#DCE6EC"],
+      },
     };
   },
   created() {
@@ -410,7 +354,6 @@ export default {
   computed: {
     ...mapState({
       serversDict: (state) => state.general.serversDict,
-      isLoading: (state) => state.general.loading,
     }),
   },
   methods: {
@@ -434,24 +377,22 @@ export default {
       this.serverStateConfirmation = false;
       const input = {
         id: this.serverId,
-        action: state
-      }; 
+        action: state,
+      };
       const actionResult = await API.graphql({
         query: triggerServerAction,
-        variables: {input: input}
-        });
-      
-      const rsp = JSON.parse(actionResult.data.triggerServerAction)
+        variables: { input: input },
+      });
+
+      const rsp = JSON.parse(actionResult.data.triggerServerAction);
 
       if (rsp.statusCode == 200) {
-        this.infoMsg = "Server action: " + state + " successfully initiated."
-        this.successAlert = true
+        this.infoMsg = "Server action: " + state + " successfully initiated.";
+        this.successAlert = true;
+      } else {
+        this.errorMsg = rsp.body.err;
+        this.errorAlert = true;
       }
-      else {
-        this.errorMsg = rsp.body.err
-        this.errorAlert = true
-      }
-      
     },
     updateCharts() {
       this.$nextTick(() => {

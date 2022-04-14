@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "serviceConfiguration": {
+    "apiName": "minecraftserverdashb",
+    "serviceName": "AppSync",
+    "gqlSchemaPath": "/Users/artrodri/github/home/minecraft-server-dashboard/amplify/backend/api/minecraftserverdashb/schema.graphql",
+    "defaultAuthType": {
+      "mode": "AMAZON_COGNITO_USER_POOLS",
+      "cognitoUserPoolId": "authminecraftserverdashbb59cd6eb"
+    },
+    "additionalAuthTypes": [
+      {
+        "mode": "AWS_IAM"
+      }
+    ]
+  }
+}

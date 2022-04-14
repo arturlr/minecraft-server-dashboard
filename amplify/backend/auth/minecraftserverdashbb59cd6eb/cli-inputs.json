@@ -1,10 +1,10 @@
 {
   "version": "1",
   "cognitoConfig": {
-    "identityPoolName": "geckohosting28bd00b7_identitypool_28bd00b7",
+    "identityPoolName": "minecraftserverdashbb59cd6eb_identitypool_b59cd6eb",
     "allowUnauthenticatedIdentities": false,
-    "resourceNameTruncated": "geckoh28bd00b7",
-    "userPoolName": "geckohosting28bd00b7_userpool_28bd00b7",
+    "resourceNameTruncated": "minecrb59cd6eb",
+    "userPoolName": "minecraftserverdashbb59cd6eb_userpool_b59cd6eb",
     "autoVerifiedAttributes": [
       "email"
     ],
@@ -33,10 +33,10 @@
     "userpoolClientReadAttributes": [
       "email"
     ],
-    "userpoolClientLambdaRole": "geckoh28bd00b7_userpoolclient_lambda_role",
+    "userpoolClientLambdaRole": "minecrb59cd6eb_userpoolclient_lambda_role",
     "userpoolClientSetAttributes": false,
-    "sharedId": "28bd00b7",
-    "resourceName": "geckohosting28bd00b7",
+    "sharedId": "b59cd6eb",
+    "resourceName": "minecraftserverdashbb59cd6eb",
     "authSelections": "identityPoolAndUserPool",
     "useDefault": "defaultSocial",
     "hostedUI": true,
@@ -44,7 +44,7 @@
       "email"
     ],
     "triggers": {},
-    "hostedUIDomainName": "geckohosting28bd00b7-28bd00b7",
+    "hostedUIDomainName": "minecraftdashboard",
     "authProvidersUserPool": [
       "Google"
     ],

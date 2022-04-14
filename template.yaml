@@ -31,15 +31,15 @@ Globals:
 
 Resources:
 
-PythonJoseLayer:
-  Type: AWS::Serverless::LayerVersion
-  Properties:
-    Description: PythonJose
-    ContentUri: ./layers/python-jose/python-jose.zip
-    CompatibleRuntimes:
-      - python3.8
-      - python3.7
-    RetentionPolicy: Delete
+  PythonJoseLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      Description: PythonJose
+      ContentUri: ./layers/python-jose/python-jose.zip
+      CompatibleRuntimes:
+        - python3.8
+        - python3.7
+      RetentionPolicy: Delete
 
   GraphQLLayer:
     Type: AWS::Serverless::LayerVersion

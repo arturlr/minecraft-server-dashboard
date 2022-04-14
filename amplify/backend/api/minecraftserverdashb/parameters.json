@@ -1,10 +1,10 @@
 {
-  "AppSyncApiName": "geckohosting",
+  "AppSyncApiName": "minecraftserverdashb",
   "DynamoDBBillingMode": "PAY_PER_REQUEST",
   "DynamoDBEnableServerSideEncryption": false,
   "AuthCognitoUserPoolId": {
     "Fn::GetAtt": [
-      "authgeckohosting28bd00b7",
+      "authminecraftserverdashbb59cd6eb",
       "Outputs.UserPoolId"
     ]
   }

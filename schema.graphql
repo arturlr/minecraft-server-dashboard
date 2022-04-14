@@ -1,67 +1,88 @@
 type Query {
   listServers: [ServerInfo] @function(name: "listServers") @aws_cognito_user_pools
-  getServerMetric(serverId: String!): ServerMetric @function( name: "getServerMetric") @aws_cognito_user_pools
+  getMonthlyCost: [MonthlyCost] @function(name: "getMonthlyCost") @aws_cognito_user_pools
 }
 
 type Mutation {
   putServerMetric(input: ServerMetricInput!): ServerMetric @aws_iam
-  changeServerState(input: String!, action: String!): String @aws_cognito_user_pools
+  changeServerState(input: ServerInfoInput!): ServerInfo @aws_iam
+  triggerServerAction(input: ServerActionInput!): AWSJSON @function(name: "triggerServerAction") @aws_cognito_user_pools
 }
 
 type Subscription {
-  onPutServerMetricByEmail(userEmail: AWSEmail!): ServerMetric 
+  # onPutServerMetric(userEmail: AWSEmail!): ServerMetric 
+  onPutServerMetric: ServerMetric
     @aws_subscribe(mutations: ["putServerMetric"])
-  onPutServerMetricByServer(serverId: String!): ServerMetric 
-    @aws_subscribe(mutations: ["putServerMetric"])
+  # onChangeServerInfo(userEmail: AWSEmail!): ServerInfo 
+  onChangeServerInfo: ServerInfo
+    @aws_subscribe(mutations: ["changeServerState"])
 }
 
-type ServerInfo {
+type ServerMetric  @aws_iam @aws_cognito_user_pools {
   id: String!
-  name: String!
-  type: String!
-  vCpus: Int
-  memSize: Int
-  diskSize: Int
-  instanceStatus: String
-  systemStatus: String
-  state: String
-  monthlyTotalUsage: UsageCost
-  dailyUsage: [UsageCost]
-}
-
-type UsageCost {
-  date: AWSDate!
-  unblendedCost: Float!
-  usageQuantity: Float!
-}
-
-type ServerMetric @aws_iam @aws_cognito_user_pools{
-  id: ID!
-  serverId: String!
-  state: String!
-  launchTime: String
-  publicIp: String
-  instanceStatus: String
-  systemStatus: String
   cpuStats: AWSJSON
   networkStats: AWSJSON
   activeUsers: Int
-  dailyUsage: AWSJSON
-  userEmail: AWSEmail!
 }
 
 input ServerMetricInput {
-  id: ID!
-  serverId: String!
-  state: String!
+  id: String!
+  cpuStats: AWSJSON
+  networkStats: AWSJSON
+  activeUsers: Int
+}
+
+type MonthlyCost @aws_iam @aws_cognito_user_pools {
+  id: String!
+  timePeriod: String!
+  UnblendedCost: Float!
+  UsageQuantity: Float!
+}
+
+input MonthlyCostInput {
+  id: String!
+  timePeriod: String
+  UnblendedCost: Float
+  UsageQuantity: Float
+}
+
+type ServerInfo @aws_iam @aws_cognito_user_pools {
+  id: String!
+  name: String
+  type: String
+  userEmail: AWSEmail
+  state: String
+  vCpus: Int
+  memSize: Int
+  diskSize: Int
   launchTime: String
   publicIp: String
   instanceStatus: String
   systemStatus: String
-  cpuStats: AWSJSON
-  networkStats: AWSJSON
-  activeUsers: Int
-  userEmail: AWSEmail!
+  runCommand: String
+  workingDir: String
+}
+
+input ServerInfoInput {
+  id: String!
+  name: String
+  type: String
+  userEmail: AWSEmail
+  state: String
+  vCpus: Int
+  memSize: Int
+  diskSize: Int
+  launchTime: String
+  publicIp: String
+  instanceStatus: String
+  systemStatus: String
+  runCommand: String
+  workingDir: String
+}
+
+input ServerActionInput {
+  id: String!
+  action: String!
 }
 
 type LoginAudit @model @auth(rules: [{ allow: private }])
