@@ -48,6 +48,7 @@ Resources:
               "publicIp": $util.toJson($context.arguments.input.publicIp),
               "instanceStatus": $util.toJson($context.arguments.input.instanceStatus),
               "systemStatus": $util.toJson($context.arguments.input.systemStatus),
+              "runningMinutes": Str$util.toJson($context.arguments.input.runningMinutes)
           }
         }
       ResponseMappingTemplate: $utils.toJson($ctx.result)
@@ -91,5 +92,14 @@ Resources:
       Description: Minecraft Server Dashboard Appsync Endpoint.
 
 Outputs:
+  ChangeServerStateDataSourceOutput: 
+    Value: !Ref ChangeServerStateDataSource
+  ChangeServerStateResolverOutput: 
+    Value: !Ref ChangeServerStateResolver
+  PutServerMetricDataSourceOutput: 
+    Value: !Ref PutServerMetricDataSource
+  PutServerMetricStateResolverOutput: 
+    Value: !Ref PutServerMetricStateResolver
+
 Description: >-
   {"createdOn":"Mac","createdBy":"Amplify","createdWith":"8.0.1","stackType":"custom-customCloudformation","metadata":{}}

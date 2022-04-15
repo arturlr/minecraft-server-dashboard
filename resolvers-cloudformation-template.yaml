@@ -89,7 +89,16 @@ Resources:
       Type: String
       Value: !Ref apiminecraftserverdashbGraphQLAPIEndpointOutput
       Description: Minecraft Server Dashboard Appsync Endpoint.
-      
-Outputs: 
+
+Outputs:
+  ChangeServerStateDataSourceOutput: 
+    Value: !Ref ChangeServerStateDataSource
+  ChangeServerStateResolverOutput: 
+    Value: !Ref ChangeServerStateResolver
+  PutServerMetricDataSourceOutput: 
+    Value: !Ref PutServerMetricDataSource
+  PutServerMetricStateResolverOutput: 
+    Value: !Ref PutServerMetricStateResolver
+
 Description: >-
   {"createdOn":"Mac","createdBy":"Amplify","createdWith":"8.0.1","stackType":"custom-customCloudformation","metadata":{}}

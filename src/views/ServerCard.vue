@@ -28,7 +28,7 @@
         </v-list-item-content>
       </v-list-item>
 
-      <v-chip-group v-if="serversDict[serverId].state == 'running'">
+      <v-chip-group>
         <v-chip color="gray" label outlined>
           <v-icon left> developer_board </v-icon>
           {{ serversDict[serverId].vCpus }} vCPU
@@ -45,13 +45,8 @@
         </v-chip>
 
         <v-chip color="gray" label outlined>
-          <v-icon left> attach_money </v-icon>
-          0
-        </v-chip>
-
-        <v-chip color="gray" label outlined>
           <v-icon left> schedule </v-icon>
-          0 hours
+          {{ serversDict[serverId].diskSize }} hours
         </v-chip>
       </v-chip-group>
 

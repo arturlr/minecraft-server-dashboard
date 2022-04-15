@@ -1,12 +1,12 @@
 type Query {
-  listServers: [ServerInfo] @function(name: "listServers") @aws_cognito_user_pools
-  getMonthlyCost: [MonthlyCost] @function(name: "getMonthlyCost") @aws_cognito_user_pools
+  listServers: [ServerInfo] @function(name: "minecraft-server-dashboard-listServers") @aws_cognito_user_pools
+  getMonthlyCost: [MonthlyCost] @function(name: "minecraft-server-dashboard-getMonthlyCost") @aws_cognito_user_pools
 }
 
 type Mutation {
   putServerMetric(input: ServerMetricInput!): ServerMetric @aws_iam
   changeServerState(input: ServerInfoInput!): ServerInfo @aws_iam
-  triggerServerAction(input: ServerActionInput!): AWSJSON @function(name: "triggerServerAction") @aws_cognito_user_pools
+  triggerServerAction(input: ServerActionInput!): AWSJSON @function(name: "minecraft-server-dashboard-triggerServerAction") @aws_cognito_user_pools
 }
 
 type Subscription {
@@ -61,6 +61,7 @@ type ServerInfo @aws_iam @aws_cognito_user_pools {
   systemStatus: String
   runCommand: String
   workingDir: String
+  runningMinutes: String
 }
 
 input ServerInfoInput {
@@ -78,6 +79,7 @@ input ServerInfoInput {
   systemStatus: String
   runCommand: String
   workingDir: String
+  runningMinutes: String
 }
 
 input ServerActionInput {

@@ -63,64 +63,6 @@ def _is_token_valid(token, keys):
     # now we can use the claims
     return claims
 
-def getUsageCost(granularity,startDate,endDate,tagValue):
-    try:
-        usageQuantity = 0
-        unblendedCost = 0
-        request = {
-                "TimePeriod": {
-                    "Start": startDate,
-                    "End": endDate
-                },
-                "Filter": {
-                    "And": [
-                        {
-                            "Dimensions": {
-                                "Key": "USAGE_TYPE_GROUP",
-                                "Values": [
-                                    "EC2: Running Hours"
-                                ]
-                            },
-                            
-                        },
-                        {
-                            "Tags": {
-                                "Key": "App",
-                                "Values": [ tagValue
-                                ]
-                            }
-                        }
-                    ]
-                },
-                "Granularity": granularity,
-                "Metrics": [
-                    "UnblendedCost",
-                    "UsageQuantity"
-                ]
-            }
-        response = ce_client.get_cost_and_usage(**request)
-
-        if granularity == "MONTHLY":
-            for results in response['ResultsByTime']:              
-                unblendedCost = float(results['Total']['UnblendedCost']['Amount'])
-                usageQuantity = float(results['Total']['UsageQuantity']['Amount'])
-
-            return { "date": endDate, "unblendedCost": round(unblendedCost,1), "usageQuantity": round(usageQuantity,1) }
-
-        else:
-            usageDays = []
-            for results in response['ResultsByTime']:
-                usageDays.append({
-                    "date": results['TimePeriod']['Start'],
-                    "unblendedCost": float(results['Total']['UnblendedCost']['Amount']),
-                    "usageQuantity": float(results['Total']['UsageQuantity']['Amount'])
-                })
-            return usageDays
-                
-    except Exception as e:
-        logger.error(str(e))
-        return { "unblendedCost": 0, "usageQuantity": 0 }
-
 def describeInstances(name,value):
     if name == 'id':
          response = ec2_client.describe_instances(
@@ -324,10 +266,6 @@ def handler(event, context):
             workingDir = getSsmParam("/minecraft/default/workingDir")
 
         runningMinutes = getInstanceHoursFromCloudTailEvents(instanceId)
-        monthlyTotalUsage = getUsageCost("MONTHLY",dt_1st_day_of_the_month.strftime("%Y-%m-%d"),dt_now.strftime("%Y-%m-%d"),appValue)
-
-        print(round(runningMinutes/60,2))
-        print(monthlyTotalUsage)
 
         instanceArray.append({
             "id": instanceId,
@@ -343,12 +281,9 @@ def handler(event, context):
             "instanceStatus": instanceStatus["instanceStatus"].lower(),
             "systemStatus": instanceStatus["systemStatus"].lower(),
             "runCommand": runCommand,
-            "workingDir": workingDir
+            "workingDir": workingDir,
+            "runningMinutes": runningMinutes
         })
-        #startEvents = getCloudTailEvents(instanceId, "StartInstances")
-        #stopEvents = getCloudTailEvents(instanceId, "StopInstances")
-        #payload["timeLine"] = sorted(startEvents + stopEvents, reverse = True)
 
-    #print(instanceArray)
     return instanceArray 
 

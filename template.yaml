@@ -13,6 +13,7 @@ Parameters:
     Default: minecraft
   AppSyncUrl:
     Type: String
+    Default: '{{ resolve:ssm:/amplify/minecraftserverdashboard/appsyncurl:1 }}'
 
     
 Globals:
@@ -23,11 +24,6 @@ Globals:
     Runtime: python3.8
     Timeout: 120
     Tracing: Active
-  Environment:
-    Variables:
-      aplicationName: !Ref ProjectName
-      appValue: !Ref AppValue
-      APPSYNC_URL: !Ref AppSyncUrl
 
 Resources:
 
@@ -54,6 +50,7 @@ Resources:
   EventResponse:
     Type: AWS::Serverless::Function 
     Properties:
+      FunctionName: minecraft-server-dashboard-eventResponse
       CodeUri: ./lambdas/eventResponse/
       Layers:
         - Ref: GraphQLLayer
@@ -61,8 +58,7 @@ Resources:
         CronPutMetricSchedule: 
           Type: Schedule
           Properties:
-            Schedule: 'rate(2 minute)'
-            Name: TestSchedule
+            Schedule: 'rate(2 minutes)'
             Description: Sends EC2 Metric information to GraphQL
             Enabled: false
         EC2StateTrigger:
@@ -96,10 +92,16 @@ Resources:
                 - events:DisableRule
                 - events:EnableRule
               Resource: '*'
+      Environment:
+        Variables:
+          aplicationName: !Ref ProjectName
+          appValue: !Ref AppValue
+          APPSYNC_URL: !Ref AppSyncUrl
 
   ListServers:
     Type: AWS::Serverless::Function 
     Properties:
+      FunctionName: minecraft-server-dashboard-listServers
       CodeUri: ./lambdas/listServers/
       Layers:
         - Ref: PythonJoseLayer
@@ -109,10 +111,38 @@ Resources:
         - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess
         - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
         - arn:aws:iam::aws:policy/AWSCloudTrailReadOnlyAccess
+        - arn:aws:iam::aws:policy/AmazonCognitoReadOnly
+      Environment:
+        Variables:
+          aplicationName: !Ref ProjectName
+          appValue: !Ref AppValue
+          APPSYNC_URL: !Ref AppSyncUrl
+
+  GetMonthlyCost:
+    Type: AWS::Serverless::Function 
+    Properties:
+      FunctionName: minecraft-server-dashboard-getMonthlyCost
+      CodeUri: ./lambdas/getMonthlyCost/
+      Layers:
+        - Ref: PythonJoseLayer
+      Policies:
+        - CostExplorerReadOnlyPolicy: {}
+        - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
+        - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess
+        - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
+        - arn:aws:iam::aws:policy/AWSCloudTrailReadOnlyAccess
+        - arn:aws:iam::aws:policy/AmazonCognitoReadOnly
+      Environment:
+        Variables:
+          aplicationName: !Ref ProjectName
+          appValue: !Ref AppValue
+          APPSYNC_URL: !Ref AppSyncUrl
+
 
   TriggerServerAction:
     Type: AWS::Serverless::Function 
     Properties:
+      FunctionName: minecraft-server-dashboard-triggerServerAction
       CodeUri: ./lambdas/triggerServerAction/
       Layers:
         - Ref: PythonJoseLayer
@@ -120,20 +150,26 @@ Resources:
         - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
         - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess
         - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
+        - arn:aws:iam::aws:policy/AmazonCognitoReadOnly
         - StepFunctionsExecutionPolicy:
             StateMachineName: !GetAtt StateMachine.Name
       Environment:
         Variables: 
           StepFunctionsArn: !Ref StateMachine
+          aplicationName: !Ref ProjectName
+          appValue: !Ref AppValue
+          APPSYNC_URL: !Ref AppSyncUrl
 
   ChangeServerState:
     Type: AWS::Serverless::Function 
     Properties:
+      FunctionName: minecraft-server-dashboard-changeServerState
       CodeUri: ./lambdas/stepFunctions/changeServerState/
       Policies:
         - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
         - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess
         - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
+        - arn:aws:iam::aws:policy/AmazonCognitoReadOnly
         - Version: '2012-10-17' # Policy Document
           Statement:
             - Effect: Allow
@@ -148,10 +184,16 @@ Resources:
                 - ec2:StopInstances
                 - ec2:RebootInstances
               Resource: '*'
+      Environment:
+        Variables:
+          aplicationName: !Ref ProjectName
+          appValue: !Ref AppValue
+          APPSYNC_URL: !Ref AppSyncUrl
 
   SendCommand:
     Type: AWS::Serverless::Function 
     Properties:
+      FunctionName: minecraft-server-dashboard-sendCommand
       CodeUri: ./lambdas/stepFunctions/sendCommand/
       Policies:
         - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
@@ -166,28 +208,31 @@ Resources:
                 - ssm:Get*
                 - ssm:SendCommand
               Resource: '*'
+      Environment:
+        Variables:
+          aplicationName: !Ref ProjectName
+          appValue: !Ref AppValue
+          APPSYNC_URL: !Ref AppSyncUrl
 
   StateMachine:
-    Type: AWS::StepFunctions::StateMachine
+    Type: AWS::Serverless::StateMachine
     Properties:
-      StateMachineName: !Sub '${ProjectName}-StateMachine'
-      StateMachineType: STANDARD
-      DefinitionUri: ./lambdas/stepFunctions/state_machine.json
+      DefinitionUri: ./lambdas/stepFunctions/step-functions.json
       DefinitionSubstitutions:
         changeServerState: !GetAtt ChangeServerState.Arn
         executeSSM: !GetAtt SendCommand.Arn
-      RoleArn: !GetAtt StatesExecutionRole.Arn
-      LoggingConfiguration:
+      Role: !GetAtt StatesExecutionRole.Arn
+      Logging:
+        Level: ALL
+        IncludeExecutionData: true
         Destinations:
           - CloudWatchLogsLogGroup:
              LogGroupArn: !GetAtt StateMachineLogGroup.Arn
-        IncludeExecutionData: True
-        Level: ALL
 
   StateMachineLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: !Sub '${ProjectName}-StateMachine-LogGroup-${AWS::Region}'
+      LogGroupName: !Sub '/aws/states/${ProjectName}-StateMachine-LogGroup-${AWS::Region}'
   
   StatesExecutionRole:
     Type: "AWS::IAM::Role"

@@ -18,6 +18,7 @@ export const listServers = /* GraphQL */ `
       systemStatus
       runCommand
       workingDir
+      runningMinutes
     }
   }
 `;

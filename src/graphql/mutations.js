@@ -28,6 +28,7 @@ export const changeServerState = /* GraphQL */ `
       systemStatus
       runCommand
       workingDir
+      runningMinutes
     }
   }
 `;

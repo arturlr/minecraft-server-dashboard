@@ -1,0 +1,12 @@
+version = 0.1
+[default]
+[default.deploy]
+[default.deploy.parameters]
+stack_name = "minecraft-server-dashboard"
+s3_bucket = "aws-sam-cli-managed-default-samclisourcebucket-tv5fka8ymyxs"
+s3_prefix = "minecraft-server-dashboard"
+region = "us-west-2"
+confirm_changeset = true
+capabilities = "CAPABILITY_IAM CAPABILITY_AUTO_EXPAND CAPABILITY_NAMED_IAM"
+parameter_overrides = "ProjectName=\"minecraft-dashboard\" AppValue=\"minecraft\" AppSyncUrl=\"https://lqia2tpnorge5nmm2zdep26p3e.appsync-api.us-west-2.amazonaws.com/graphql\""
+image_repositories = []

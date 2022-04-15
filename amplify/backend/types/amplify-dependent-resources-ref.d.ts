@@ -17,5 +17,13 @@ export type AmplifyDependentResourcesAttributes = {
             "GraphQLAPIIdOutput": "string",
             "GraphQLAPIEndpointOutput": "string"
         }
+    },
+    "custom": {
+        "resolvers": {
+            "ChangeServerStateDataSourceOutput": "string",
+            "ChangeServerStateResolverOutput": "string",
+            "PutServerMetricDataSourceOutput": "string",
+            "PutServerMetricStateResolverOutput": "string"
+        }
     }
 }
