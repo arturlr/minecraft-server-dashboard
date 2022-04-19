@@ -7,10 +7,7 @@
         outlined
         small
       >
-        {{ monthlyUsage[0].UnblendedCost }}
-        <v-icon>
-          attach_money
-        </v-icon>
+        {{ monthlyUsage[0].UnblendedCost }} $
       </v-btn>
 
       <v-btn 
@@ -18,10 +15,7 @@
         outlined
         small
       >
-        {{ monthlyUsage[0].UsageQuantity }}
-        <v-icon>
-          av_timer
-        </v-icon>
+        {{ monthlyUsage[0].UsageQuantity }} H
       </v-btn>
       </div>
       <v-spacer></v-spacer>

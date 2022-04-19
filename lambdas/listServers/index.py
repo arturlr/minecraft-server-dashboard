@@ -257,13 +257,13 @@ def handler(event, context):
 
         instanceStatus = describeInstanceStatus(instanceId)
 
-        runCommand = getSsmParam("/minecraft/" + instanceId + "/runCommand")
+        runCommand = getSsmParam("/amplify/minecraftserverdashboard/" + instanceId + "/runCommand")
         if runCommand == "":
-            runCommand = getSsmParam("/minecraft/default/runCommand")
+            runCommand = getSsmParam("/amplify/minecraftserverdashboard/default/runCommand")
 
-        workingDir = getSsmParam("/minecraft/" + instanceId + "/workingDir")
+        workingDir = getSsmParam("/amplify/minecraftserverdashboard/" + instanceId + "/workingDir")
         if workingDir == "":
-            workingDir = getSsmParam("/minecraft/default/workingDir")
+            workingDir = getSsmParam("/amplify/minecraftserverdashboard/default/workingDir")
         
         runningMinutes = getInstanceHoursFromCloudTailEvents(instanceId)
 

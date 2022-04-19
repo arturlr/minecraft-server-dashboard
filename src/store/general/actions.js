@@ -27,6 +27,7 @@ export async function createServersList(
         servers_dict[servers_list[i].id].launchTime = servers_list[i].launchTime
         servers_dict[servers_list[i].id].runCommand = servers_list[i].runCommand
         servers_dict[servers_list[i].id].workingDir = servers_list[i].workingDir
+        servers_dict[servers_list[i].id].runningMinutes = servers_list[i].runningMinutes        
     }
       commit("SET_SERVERS_DICT", servers_dict);
       commit("SET_SERVERS_LIST", servers_list);

@@ -50,7 +50,7 @@
 
         <v-chip color="gray" label outlined>
           <v-icon left> schedule </v-icon>
-          {{ serversDict[serverId].diskSize }} hours
+          {{ (serversDict[serverId].runningMinutes/60).toFixed(2) }} hours
         </v-chip>
       </v-chip-group>
 

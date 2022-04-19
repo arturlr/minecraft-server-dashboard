@@ -13,14 +13,13 @@ from requests_aws4auth import AWS4Auth
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
+sss = boto3.client('ssm')
 appsync = boto3.client('appsync')
 ec2_client = boto3.client('ec2')
 cw_logs = boto3.client('logs')
 cw_client = boto3.client('cloudwatch')
 eb_client = boto3.client('events')
 ENCODING = 'utf-8'
-
-scheduledEventBridgeRuleName=os.environ.get('EVTBRIDGE_RULE_NAME', None)
 
 appValue = os.getenv('appValue')
 
@@ -77,6 +76,22 @@ changeServerState = """
     }
 }
 """
+
+def getSsmParam(paramKey, isEncrypted=False):
+    try:
+        ssmResult = ssm.get_parameter(
+            Name=paramKey,
+            WithDecryption=isEncrypted
+        )
+
+        if (ssmResult["ResponseMetadata"]["HTTPStatusCode"] == 200):
+            return ssmResult["Parameter"]["Value"]
+        else:
+            return ""
+
+    except Exception as e:
+        logger.warning(str(e) + " for " + paramKey)
+        return ""
 
 def describeInstances(name,value):
     if name == 'id':
@@ -229,6 +244,10 @@ def handler(event, context):
                 instancesInfo = describeInstances("state","running")
 
     if 'detail-type' in event:
+        scheduledEventBridgeRuleName = getSsmParam('/amplify/minecraftserverdashboard/scheduledrule')
+        if scheduledEventBridgeRuleName == None:
+            logger.error("Scheduled Event Name not registered")
+            return "No Scheduled Event"
         if event['detail-type'] == "EC2 Instance State-change Notification":            
             instancesRunning = describeInstances("state","running")
             if len(instancesRunning) == 0:
