@@ -1,5 +1,5 @@
 import { API, graphqlOperation } from "aws-amplify";
-import { listServers } from "../../graphql/queries";
+import { listServers, getMonthlyCost } from "../../graphql/queries";
 
 export async function createServersList(
   { commit }) {
@@ -63,3 +63,15 @@ export function saveLayout({ commit },
       console.group("store/layout/actions/saveLayout");
       commit("SET_LAYOUT", name);
     }
+
+export async function getCostUsage({ commit }) {
+    console.group("store/layout/actions/getCostUsage");
+    commit("SET_COST_USAGE", {});
+
+    const {
+        // @ts-ignore
+        data: { getMonthlyCost: results } 
+    } = await API.graphql(graphqlOperation(getMonthlyCost));
+
+    commit("SET_COST_USAGE", results);
+  }

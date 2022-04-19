@@ -1,4 +1,3 @@
-from nis import match
 import urllib
 import boto3
 import logging
@@ -16,6 +15,7 @@ logger.setLevel(logging.INFO)
 
 appsync = boto3.client('appsync')
 ec2_client = boto3.client('ec2')
+cw_logs = boto3.client('logs')
 cw_client = boto3.client('cloudwatch')
 eb_client = boto3.client('events')
 ENCODING = 'utf-8'
@@ -119,41 +119,100 @@ def describeInstanceStatus(instanceId):
         
     return { 'instanceStatus': instanceStatus, 'systemStatus': systemStatus }
 
+def getConnectUsers(instanceId,startTime):
+    try:
+        queryRsp = cw_logs.start_query(
+            logGroupName='/minecraft/serverlog/' + instanceId,
+            startTime=startTime,
+            endTime=dt_now.timestamp(),
+            queryString="""
+                filter @message like "the game" 
+                | parse @message "[net.minecraft.server.dedicated.DedicatedServer/]: * joined the game" as @userjoin
+                | parse @message "[net.minecraft.server.dedicated.DedicatedServer/]: * left the game" as @userleft
+                | stats count(@userjoin) - count(@userleft) by bin(5m) as t
+            """
+        )
+
+        if 'queryId' in queryRsp:
+            timeCount = 0
+            while timeCount < 4:
+                data = cw_logs.get_query_results(
+                    queryId=queryRsp['queryId']
+                )
+                dtY = 0
+                cdata = []
+                if data['status'] == 'Complete':
+                    for rec in data['results']:
+                        for dt in rec:
+                            if dt['field'] == 'bin(5m)':
+                                dtX = dt['value']
+                                continue
+                            elif dt['field'] == 't':
+                                dtY = dt['value']
+                        cdata.append({'y':dtY, 'x':dtX})
+                    data_points = sorted(cdata, key=lambda k : k['x'])
+                    return data_points
+                elif data['status'] == 'Scheduled' or data['status'] == 'Running':
+                    sleep(5)
+                    timeCount = timeCount + 1
+                    continue
+                elif data['status'] == 'Failed':
+                    raise Exception("Query status: Failed")                    
+                else:
+                    sleep(5)
+                    timeCount = timeCount + 1
+
+            if timeCount >= 4:
+                raise Exception("Query status: Timeout")
+            else:
+                logger.error("start_query: No Data.")
+                return []
 
 
-def getMetricData(instanceId,metricName,unit,statType,startTime,EndTime,period):
+    except Exception as e:
+        logger.error("start_query: " + str(e) + " occurred.")
+        return []
+
+
+def getMetricData(instanceId,nameSpace,metricName,unit,statType,startTime,EndTime,period):
     cdata = []
     four_hours_before=datetime.utcnow() - timedelta(hours=4)
 
-    rsp = cw_client.get_metric_statistics(
-        Namespace="AWS/EC2",
-        MetricName=metricName,
-        Dimensions=[
-            {
-            'Name': 'InstanceId',
-            'Value': instanceId
-            }
-        ],
-        StartTime=startTime,
-        EndTime=EndTime,
-        Period=period,
-        Statistics=[statType],
-        Unit=unit
-    )
+    try:
 
-    if len(rsp["Datapoints"]) == 0:
-        return None
-    else:
-        for rec in rsp["Datapoints"]:
-            if metricName == "NetworkOut":
-                cdata.append({'y': round(rec[statType]/10000, 2), 'x': rec["Timestamp"].strftime("%Y/%m/%dT%H:%M:%S")})
-            else:
-                cdata.append({'y': round(rec[statType], 2), 'x': rec["Timestamp"].strftime("%Y/%m/%dT%H:%M:%S")})
+        rsp = cw_client.get_metric_statistics(
+            Namespace=nameSpace,
+            MetricName=metricName,
+            Dimensions=[
+                {
+                'Name': 'InstanceId',
+                'Value': instanceId
+                }
+            ],
+            StartTime=startTime,
+            EndTime=EndTime,
+            Period=period,
+            Statistics=[statType],
+            Unit=unit
+        )
 
-        data_points = sorted(cdata, key=lambda k : k['x'])
-        
-        return json.dumps(data_points)
+        if len(rsp["Datapoints"]) == 0:
+            logger.warning('No Datapoint for ' + metricName)
+            return []
+        else:
+            for rec in rsp["Datapoints"]:
+                if metricName == "NetworkOut":
+                    cdata.append({'y': round(rec[statType]/10000, 2), 'x': rec["Timestamp"].strftime("%Y/%m/%dT%H:%M:%S")})
+                else:
+                    cdata.append({'y': round(rec[statType], 2), 'x': rec["Timestamp"].strftime("%Y/%m/%dT%H:%M:%S")})
 
+            data_points = sorted(cdata, key=lambda k : k['x'])
+            
+            return json.dumps(data_points)
+
+    except Exception as e:
+        logger.error('Something went wrong: ' + str(e))
+        return []
 
 def handler(event, context):        
 
@@ -209,6 +268,8 @@ def handler(event, context):
 
         input = { "id": instanceId }
 
+        activeUsers = getConnectUsers(instanceId, launchTime.timestamp())
+
         if event['detail-type'] == "EC2 Instance State-change Notification":
             input["userEmail"] = userEmail
             input["name"] = instanceName
@@ -220,11 +281,11 @@ def handler(event, context):
             payload={"query": changeServerState, 'variables': { "input": input }}
 
         if event['detail-type'] == "Scheduled Event":
-            input["cpuStats"] = getMetricData(instanceId,'CPUUtilization','Percent','Average',dt_4_four_hours_before,dt_now,300)
-            input["networkStats"] = getMetricData(instanceId,'NetworkOut','Bytes','Average',dt_4_four_hours_before,dt_now,300)
+            input['activeUsers'] = activeUsers
+            input["cpuStats"] = getMetricData(instanceId,'AWS/EC2','CPUUtilization','Percent','Average',dt_4_four_hours_before,dt_now,300)
+            input["networkStats"] = getMetricData(instanceId,'AWS/EC2','NetworkOut','Bytes','Average',dt_4_four_hours_before,dt_now,300)
+            input["memStats"] = getMetricData(instanceId,'CWAgent','mem_used_percent','Percent','Average',dt_4_four_hours_before,dt_now,300)
             payload={"query": putServerMetric, 'variables': { "input": input }}
-
-                
         response = requests.post(
             endpoint,
             auth=auth,

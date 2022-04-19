@@ -26,6 +26,10 @@ export const SET_LOADER = (state, isLoading) => {
   state.loading = isLoading;
 };
 
+export const SET_COST_USAGE = (state, data) => {
+  state.monthlyUsage = data;
+};
+
 export const SET_PAGINATION = (state, paginationToken) => {
   state.paginationToken = paginationToken;
 };

@@ -78,6 +78,7 @@ Resources:
               "id": $util.toJson($context.arguments.input.id),
               "cpuStats": $util.toJson($context.arguments.input.cpuStats),
               "networkStats": $util.toJson($context.arguments.input.networkStats),
+              "memStats": $util.toJson($context.arguments.input.memStats),
               "activeUsers": $util.toJson($context.arguments.input.activeUsers)
           }
         }

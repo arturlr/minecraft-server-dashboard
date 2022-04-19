@@ -1,6 +1,29 @@
 <template>
   <div>
     <v-app-bar dense dark>
+      <div v-if="monthlyUsage[0]">
+       <v-btn 
+        class="ma-2"
+        outlined
+        small
+      >
+        {{ monthlyUsage[0].UnblendedCost }}
+        <v-icon>
+          attach_money
+        </v-icon>
+      </v-btn>
+
+      <v-btn 
+        class="ma-2"
+        outlined
+        small
+      >
+        {{ monthlyUsage[0].UsageQuantity }}
+        <v-icon>
+          av_timer
+        </v-icon>
+      </v-btn>
+      </div>
       <v-spacer></v-spacer>
       <v-toolbar-title>Minecraft Dashboard</v-toolbar-title>
       <v-spacer></v-spacer>
@@ -47,9 +70,13 @@ export default {
     VirtualRack,
   },
   data: () => ({}),
+  async beforeCreate() {
+    await this.$store.dispatch("general/getCostUsage");
+  },
   computed: {
     ...mapState({
-      isLoading: (state) => state.general.loading
+      isLoading: (state) => state.general.loading,
+      monthlyUsage: (state) => state.general.monthlyUsage
     }),
     ...mapGetters({
       isAuthenticated: "profile/isAuthenticated",

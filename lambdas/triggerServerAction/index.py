@@ -1,3 +1,4 @@
+from operator import truediv
 import urllib
 import boto3
 import logging
@@ -12,12 +13,11 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 appValue = os.getenv('appValue')
 
-ec2_client = boto3.client('ec2')
+ssm = boto3.client('ssm')
 sfn = boto3.client('stepfunctions')
 cognito_idp = boto3.client('cognito-idp')
 
 sftArn = os.getenv('StepFunctionsArn')
-cognitoAdminGroupName = os.getenv('cognitoAdminGroupName')
 botoSession = boto3.session.Session()
 awsRegion = botoSession.region_name
 
@@ -26,6 +26,22 @@ def _response(status_code, body, headers={}):
         return {"statusCode": status_code, "body": body, "headers": headers}
     else:
         return {"statusCode": status_code, "body": body }
+
+def getSsmParam(paramKey, isEncrypted=False):
+    try:
+        ssmResult = ssm.get_parameter(
+            Name=paramKey,
+            WithDecryption=isEncrypted
+        )
+
+        if (ssmResult["ResponseMetadata"]["HTTPStatusCode"] == 200):
+            return ssmResult["Parameter"]["Value"]
+        else:
+            return None
+
+    except Exception as e:
+        logger.warning(str(e) + " for " + paramKey)
+        return None
 
 def _is_token_valid(token, keys):
     # https://github.com/awslabs/aws-support-tools/tree/master/Cognito/decode-verify-jwt
@@ -63,6 +79,62 @@ def _is_token_valid(token, keys):
     # now we can use the claims
     return claims
 
+def _check_cognito_group(instanceId, poolId):
+    try:
+        grpRsp = cognito_idp.get_group(
+                GroupName=instanceId,
+                UserPoolId=poolId
+            )
+
+        return "continue"
+        
+    except cognito_idp.exceptions.ResourceNotFoundException:
+        try:
+            grpRsp = cognito_idp.create_group(
+                GroupName=instanceId,
+                UserPoolId=poolId,
+                Description='Minecraft Dashboard'
+            )
+    
+            return "initialize"
+            
+        except Exception as e:
+            logger.info("Exception create_group")
+            logger.error(str(e))
+            return "fail" 
+        
+
+def _add_user_to_group(instanceId,poolId,userEmail=None):
+        try:
+            if userEmail == None:
+                userEmail = getSsmParam('/amplify/minecraftserverdashboard/adminemail')
+                if userEmail == None:
+                    logger.error("Unable to find admin user")
+                    return False
+
+            user = cognito_idp.list_users(
+                UserPoolId=poolId,
+                Filter="email = '" + userEmail + "'"
+            )
+
+            if len(user['Users']) == 0:
+                logger.error("Unable to find user: " + userEmail + ". User has to create a profile by login in this website")
+                return False
+
+            userRsp = cognito_idp.admin_add_user_to_group(
+                UserPoolId=poolId,
+                Username=user['Users'][0]["Username"],
+                GroupName=instanceId
+            )
+
+            return True
+    
+        except Exception as e:
+            logger.info("Exception admin_add_user_to_group")
+            logger.warning(str(e))
+            return False 
+            
+
 def handler(event, context):
     if not 'identity' in event:
         logger.error("No Identity found")
@@ -95,11 +167,30 @@ def handler(event, context):
         Username=userName
     )
 
-    
     try:                 
         instanceId = event["arguments"]["input"]["id"]
-        action = event["arguments"]["input"]["action"]
-   
+        action = event["arguments"]["input"]["action"]  
+
+        cogGrp = _check_cognito_group(instanceId,iss.split("/")[3])
+        logger.info(cogGrp)
+        if cogGrp == 'fail':
+            resp = {'err': 'Cognito groups failed'}
+            return _response(401,resp)
+        elif cogGrp == 'initialize':
+            issuccessful = _add_user_to_group(instanceId,iss.split("/")[3])
+            if issuccessful:
+                resp = {'err': 'Cognito Groups initialized. Please logout and log in back. '}
+                return _response(200,resp)
+            else:
+                resp = {'err': 'Something went wrong.'}
+                return _response(500,resp)
+        elif cogGrp == "continue":
+            logger.info("Cognito Group already initialized")
+        else:
+            logger.error("Cognito Group - Unknow error")
+            resp = {'err': 'Cognito groups failed'}
+            return _response(401,resp)
+
         authorized = False
         cognitoGroups = event["identity"]["groups"] 
         if cognitoGroups != None:       

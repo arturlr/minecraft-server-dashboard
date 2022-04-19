@@ -9,14 +9,10 @@
                 "collect_list": [
                     {
                         "file_path": "/var/log/syslog",
-                        "log_group_name": "/minecraft/syslog",
-                        "log_stream_name": "{instance_id}"
-                    },
+                        "log_group_name": "/minecraft/syslog/{instance_id}"                    },
                     {
                         "file_path": "/home/ubuntu/server/logs/latest.log",
-                        "log_group_name": "/minecraft/serverlog",
-                        "log_stream_name": "{instance_id}"
-                    }
+                        "log_group_name": "/minecraft/serverlog/{instance_id}"                    }
                 ]
             }
         }
@@ -24,9 +20,7 @@
     "metrics": {
         "append_dimensions": {
             "AutoScalingGroupName": "${aws:AutoScalingGroupName}",
-            "ImageId": "${aws:ImageId}",
-            "InstanceId": "${aws:InstanceId}",
-            "InstanceType": "${aws:InstanceType}"
+            "InstanceId": "${aws:InstanceId}"
         },
         "metrics_collected": {
             "collectd": {
@@ -44,14 +38,6 @@
             "mem": {
                 "measurement": [
                     "mem_used_percent"
-                ],
-                "metrics_collection_interval": 60
-            },
-            "netstat": {
-                "measurement": [
-                    "tcp_established",
-                    "tcp_syn_sent",
-                    "tcp_close"
                 ],
                 "metrics_collection_interval": 60
             },

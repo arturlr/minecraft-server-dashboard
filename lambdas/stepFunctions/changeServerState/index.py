@@ -99,6 +99,8 @@ def handler(event, context):
                 rsp = ec2_client.start_instances(
                     InstanceIds=[ instanceId ]
                 )
+                # check for Cognito Group for instanceId
+                # add group if does not exit with the admin user                
 
             if steps > 5 :
                 logger.error('max steps reached')

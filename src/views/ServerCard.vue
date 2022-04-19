@@ -1,7 +1,11 @@
 <template>
   <div>
-    
-
+    <v-alert type="info" v-model="successAlert" dismissible>
+      {{ infoMsg }}
+    </v-alert>
+    <v-alert type="error" v-model="errorAlert" dismissible>
+      {{ errorMsg }}
+    </v-alert>
     <v-card class="my-8 pa-2">
       <v-list-item>
         <v-list-item-content>
@@ -119,12 +123,6 @@
         </v-list-item>
       </v-list>
     </v-card>
-    <v-alert type="info" v-model="successAlert" dismissible>
-      {{ infoMsg }}
-    </v-alert>
-    <v-alert type="error" v-model="errorAlert" dismissible>
-      {{ errorMsg }}
-    </v-alert>
 
     <v-dialog v-model="settingsDialog" persistent max-width="600px">
       <v-card>

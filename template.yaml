@@ -11,6 +11,10 @@ Parameters:
   AppValue:
     Type: String
     Default: minecraft
+  AdminEmail:
+    Type: String
+    Description: Email (Gmail) that is going to be identified as the app admin
+    AllowedPattern: '[^@]+@[^@]+\.[^@]+'
   AppSyncUrl:
     Type: String
     Default: '{{ resolve:ssm:/amplify/minecraftserverdashboard/appsyncurl:1 }}'
@@ -26,6 +30,14 @@ Globals:
     Tracing: Active
 
 Resources:
+
+  AdminEmailParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /amplify/minecraftserverdashboard/adminemail
+      Type: String
+      Value: !Ref AdminEmail
+      Description: Email (Gmail) that is going to be identified as the app admin
 
   PythonJoseLayer:
     Type: AWS::Serverless::LayerVersion
@@ -75,6 +87,14 @@ Resources:
         - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess
         - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
         - arn:aws:iam::aws:policy/AWSCloudTrailReadOnlyAccess
+        - Version: '2012-10-17' # Policy Document
+          Statement:
+            - Effect: Allow
+              Action:
+                - logs:Get*
+                - logs:List*
+                - logs:StartQuery
+              Resource: !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/minecraft/*'
         - Version: '2012-10-17' # Policy Document
           Statement:
             - Effect: Allow
@@ -153,6 +173,16 @@ Resources:
         - arn:aws:iam::aws:policy/AmazonCognitoReadOnly
         - StepFunctionsExecutionPolicy:
             StateMachineName: !GetAtt StateMachine.Name
+        - SSMParameterReadPolicy:
+            ParameterName: "amplify/minecraftserverdashboard/*"
+        - Version: '2012-10-17' # Policy Document
+          Statement:
+            - Effect: Allow
+              Action:
+                - cognito-idp:CreateGroup
+                - cognito-idp:AdminAddUserToGroup
+              Resource: '*'
+            
       Environment:
         Variables: 
           StepFunctionsArn: !Ref StateMachine
@@ -170,6 +200,8 @@ Resources:
         - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess
         - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
         - arn:aws:iam::aws:policy/AmazonCognitoReadOnly
+        - SSMParameterReadPolicy:
+            ParameterName: "amplify/minecraftserverdashboard/*"
         - Version: '2012-10-17' # Policy Document
           Statement:
             - Effect: Allow
@@ -199,6 +231,8 @@ Resources:
         - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
         - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess
         - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
+        - SSMParameterReadPolicy:
+            ParameterName: "amplify/minecraftserverdashboard/*"
         - Version: '2012-10-17' # Policy Document
           Statement:
             - Effect: Allow

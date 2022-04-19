@@ -7,6 +7,7 @@ export const putServerMetric = /* GraphQL */ `
       id
       cpuStats
       networkStats
+      memStats
       activeUsers
     }
   }

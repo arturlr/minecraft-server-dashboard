@@ -17,7 +17,7 @@ cognito_idp = boto3.client('cognito-idp')
 ENCODING = 'utf-8'
 
 dt_now = datetime.utcnow()
-dt_1st_day_of_3_month_ago=datetime.utcnow().replace(day=1,hour=0,minute=0,second=0) - timedelta(months=3)
+dt_1st_day_of_month_ago = datetime.utcnow().replace(day=1,hour=0,minute=0,second=0)
 
 appValue = os.getenv('appValue')
 
@@ -172,20 +172,12 @@ def handler(event, context):
         if att["Name"] == "email":
             userEmail = att["Value"]
             break
-
-    monthlyCostArray = []
     
-    monthlyTotalUsage = getUsageCost("MONTHLY",dt_1st_day_of_3_month_ago.strftime("%Y-%m-%d"),dt_now.strftime("%Y-%m-%d"),appValue)
+    monthlyTotalUsage = getUsageCost("MONTHLY",dt_1st_day_of_month_ago.strftime("%Y-%m-%d"),dt_now.strftime("%Y-%m-%d"),appValue)
 
-    print(monthlyTotalUsage)
-
-    for entry in monthlyTotalUsage:
-        dtStart = datetime.fromisoformat(entry['TimePeriod']['Start'])
-        monthlyCostArray.append({
-            "id": entry['TimePeriod']['Start'],
-            "timePeriod": dtStart.strftime("%b"),
-            "UnblendedCost": entry['Total']['UnblendedCost']['Amount'],
-            "UsageQuantity": entry['Total']['UsageQuantity']['Amount']
-        })
-
-    return monthlyTotalUsage 
+    return [{
+            "id": monthlyTotalUsage['date'],
+            "timePeriod": dt_1st_day_of_month_ago.strftime("%b"),
+            "UnblendedCost": monthlyTotalUsage['unblendedCost'],
+            "UsageQuantity": monthlyTotalUsage['usageQuantity']
+            }]

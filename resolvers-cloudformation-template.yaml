@@ -48,6 +48,7 @@ Resources:
               "publicIp": $util.toJson($context.arguments.input.publicIp),
               "instanceStatus": $util.toJson($context.arguments.input.instanceStatus),
               "systemStatus": $util.toJson($context.arguments.input.systemStatus),
+              "runningMinutes": Str$util.toJson($context.arguments.input.runningMinutes)
           }
         }
       ResponseMappingTemplate: $utils.toJson($ctx.result)
@@ -77,6 +78,7 @@ Resources:
               "id": $util.toJson($context.arguments.input.id),
               "cpuStats": $util.toJson($context.arguments.input.cpuStats),
               "networkStats": $util.toJson($context.arguments.input.networkStats),
+              "memStats": $util.toJson($context.arguments.input.memStats),
               "activeUsers": $util.toJson($context.arguments.input.activeUsers)
           }
         }

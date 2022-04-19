@@ -169,7 +169,7 @@ def getInstanceHoursFromCloudTailEvents(instanceId):
                 dtStopEvent = datetime.fromisoformat(point['x'].replace("Z", "+00:00")).replace(tzinfo=None)
 
         if isinstance(dtStartEvent, datetime) and isinstance(dtStopEvent, datetime):
-            delta = dtStopEvent - dtStartEvent
+            delta = dtStopEvent.replace(tzinfo=None) - dtStartEvent.replace(tzinfo=None)
             #print(instanceId + ' s:' + dtStartEvent.strftime("%m/%d/%Y - %H:%M:%S") + ' - e:' + dtStopEvent.strftime("%m/%d/%Y - %H:%M:%S") + ' = ' + str(round(delta.total_seconds()/60,2)))
             totalMinutes = totalMinutes + round(delta.total_seconds()/60,2)
             dtStartEvent = None
@@ -178,7 +178,7 @@ def getInstanceHoursFromCloudTailEvents(instanceId):
     # in case the instance is still running
     if isinstance(dtStartEvent, datetime) and not isinstance(dtStopEvent, datetime):
             dtStopEvent = dt_now
-            delta = dtStopEvent - dtStartEvent
+            delta = dtStopEvent.replace(tzinfo=None) - dtStartEvent.replace(tzinfo=None)
             #print(instanceId + ' s:' + dtStartEvent.strftime("%m/%d/%Y - %H:%M:%S") + ' - e:' + dtStopEvent.strftime("%m/%d/%Y - %H:%M:%S") + ' = ' + str(round(delta.total_seconds()/60,2)))
             totalMinutes = totalMinutes + round(delta.total_seconds()/60,2)
             dtStartEvent = None
@@ -264,7 +264,7 @@ def handler(event, context):
         workingDir = getSsmParam("/minecraft/" + instanceId + "/workingDir")
         if workingDir == "":
             workingDir = getSsmParam("/minecraft/default/workingDir")
-
+        
         runningMinutes = getInstanceHoursFromCloudTailEvents(instanceId)
 
         instanceArray.append({

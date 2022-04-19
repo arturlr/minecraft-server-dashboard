@@ -22,6 +22,7 @@ type ServerMetric  @aws_iam @aws_cognito_user_pools {
   id: String!
   cpuStats: AWSJSON
   networkStats: AWSJSON
+  memStats: AWSJSON
   activeUsers: Int
 }
 
@@ -29,6 +30,7 @@ input ServerMetricInput {
   id: String!
   cpuStats: AWSJSON
   networkStats: AWSJSON
+  memStats: AWSJSON
   activeUsers: Int
 }
 
