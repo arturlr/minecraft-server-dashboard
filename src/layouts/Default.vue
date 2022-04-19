@@ -2,21 +2,33 @@
   <div>
     <v-app-bar dense dark>
       <div v-if="monthlyUsage[0]">
+      <v-tooltip bottom>
+        <template v-slot:activator="{ on, attrs }">
        <v-btn 
         class="ma-2"
         outlined
         small
+        v-bind="attrs" v-on="on"
       >
         {{ monthlyUsage[0].UnblendedCost }} $
       </v-btn>
+      </template>
+        <span> Total cost-to-date</span>
+      </v-tooltip>
 
+      <v-tooltip bottom>
+        <template v-slot:activator="{ on, attrs }">
       <v-btn 
         class="ma-2"
         outlined
         small
+        v-bind="attrs" v-on="on"
       >
         {{ monthlyUsage[0].UsageQuantity }} H
       </v-btn>
+      </template>
+        <span> Total usage hours-to-date</span>
+      </v-tooltip>
       </div>
       <v-spacer></v-spacer>
       <v-toolbar-title>Minecraft Dashboard</v-toolbar-title>

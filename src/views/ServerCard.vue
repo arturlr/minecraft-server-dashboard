@@ -48,10 +48,20 @@
           {{ serversDict[serverId].diskSize }} GB
         </v-chip>
 
-        <v-chip color="gray" label outlined>
+        <v-tooltip bottom>
+          <template v-slot:activator="{ on, attrs }">
+        <v-chip 
+          v-bind="attrs"
+          v-on="on"
+          color="gray" 
+          label 
+          outlined>
           <v-icon left> schedule </v-icon>
-          {{ (serversDict[serverId].runningMinutes/60).toFixed(2) }} hours
+          {{ (serversDict[serverId].runningMinutes/60).toFixed(1) }} hours
         </v-chip>
+        </template>
+        <span>Approximate number. Not for billing purpose</span>
+        </v-tooltip>
       </v-chip-group>
 
       <v-divider class="mx-4" vertical></v-divider>
