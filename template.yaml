@@ -11,6 +11,14 @@ Parameters:
   AppValue:
     Type: String
     Default: minecraft
+  MinecraftWorkingDir:
+    Type: String
+    Default: /opt/minecraft/server/
+    Description: The path where the Minecraft Server is running. There is an option at the app to customized it per instances
+  MinecraftRunCommand:
+    Type: String
+    Default: sudo screen -d -m java -Xmx3G -Xms3G -jar server.jar nogui &
+    Description: Default Minecraft run command. There is an option at the app to customized it per instances
   AdminEmail:
     Type: String
     Description: Email (Gmail) that is going to be identified as the app admin
@@ -38,6 +46,22 @@ Resources:
       Type: String
       Value: !Ref AdminEmail
       Description: Email (Gmail) that is going to be identified as the app admin
+
+  MinecraftWorkingDirParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /amplify/minecraftserverdashboard/default/workingDir
+      Type: String
+      Value: !Ref AdminEmail
+      Description: The path where the Minecraft Server is running. There is an option at the app to customized it per instances
+
+  MinecraftRunCommandParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /amplify/minecraftserverdashboard/default/runCommand
+      Type: String
+      Value: !Ref AdminEmail
+      Description: Default Minecraft run command. There is an option at the app to customized it per instances
 
   PythonJoseLayer:
     Type: AWS::Serverless::LayerVersion
@@ -114,6 +138,8 @@ Resources:
         - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess
         - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
         - arn:aws:iam::aws:policy/AWSCloudTrailReadOnlyAccess
+        - SSMParameterReadPolicy:
+            ParameterName: "amplify/minecraftserverdashboard*"
         - Version: '2012-10-17' # Policy Document
           Statement:
             - Effect: Allow
@@ -135,10 +161,10 @@ Resources:
             - Effect: Allow
               Action:
                 - events:ListRules
-                - events:DescribeRules
+                - events:DescribeRule
                 - events:DisableRule
                 - events:EnableRule
-              Resource: '*'
+              Resource: "*"
       Environment:
         Variables:
           aplicationName: !Ref ProjectName
@@ -159,6 +185,8 @@ Resources:
         - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
         - arn:aws:iam::aws:policy/AWSCloudTrailReadOnlyAccess
         - arn:aws:iam::aws:policy/AmazonCognitoReadOnly
+        - SSMParameterReadPolicy:
+            ParameterName: "amplify/minecraftserverdashboard*"
       Environment:
         Variables:
           aplicationName: !Ref ProjectName
@@ -179,6 +207,8 @@ Resources:
         - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
         - arn:aws:iam::aws:policy/AWSCloudTrailReadOnlyAccess
         - arn:aws:iam::aws:policy/AmazonCognitoReadOnly
+        - SSMParameterReadPolicy:
+            ParameterName: "amplify/minecraftserverdashboard*"
       Environment:
         Variables:
           aplicationName: !Ref ProjectName
@@ -201,7 +231,7 @@ Resources:
         - StepFunctionsExecutionPolicy:
             StateMachineName: !GetAtt StateMachine.Name
         - SSMParameterReadPolicy:
-            ParameterName: "amplify/minecraftserverdashboard/*"
+            ParameterName: "amplify/minecraftserverdashboard*"
         - Version: '2012-10-17' # Policy Document
           Statement:
             - Effect: Allow
@@ -228,7 +258,7 @@ Resources:
         - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
         - arn:aws:iam::aws:policy/AmazonCognitoReadOnly
         - SSMParameterReadPolicy:
-            ParameterName: "amplify/minecraftserverdashboard/*"
+            ParameterName: "amplify/minecraftserverdashboard*"
         - Version: '2012-10-17' # Policy Document
           Statement:
             - Effect: Allow
@@ -259,7 +289,7 @@ Resources:
         - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess
         - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
         - SSMParameterReadPolicy:
-            ParameterName: "amplify/minecraftserverdashboard/*"
+            ParameterName: "amplify/minecraftserverdashboard*"
         - Version: '2012-10-17' # Policy Document
           Statement:
             - Effect: Allow

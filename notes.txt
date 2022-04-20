@@ -1,66 +1,5 @@
 
-#**
-Resolvers with None data sources can locally publish events that fire
-subscriptions or otherwise transform data without hitting a backend data source.
-The value of 'payload' is forwarded to $ctx.result in the response mapping template.
-*#
-{
-  "version" : "2017-02-28",
-  "payload": { 
-  		"id": $util.toJson($context.arguments.input.id),
-      "cpuStats": $util.toJson($context.arguments.input.cpuStats),
-      "networkStats": $util.toJson($context.arguments.input.networkStats),
-      "activeUsers": $util.toJson($context.arguments.input.activeUsers),
-      "monthlyUsage": $util.toJson($context.arguments.input.monthlyUsage),
-      "dailyUsage": $util.toJson($context.arguments.input.dailyUsage)
-   }
-}
 
-#**
-Resolvers with None data sources can locally publish events that fire
-subscriptions or otherwise transform data without hitting a backend data source.
-The value of 'payload' is forwarded to $ctx.result in the response mapping template.
-*#
-{
-  "version" : "2017-02-28",
-  "payload": { 
-      "id": $util.toJson($context.arguments.input.id),
-      "name": $util.toJson($context.arguments.input.name),
-      "type": $util.toJson($context.arguments.input.type),
-      "userEmail": $util.toJson($context.arguments.input.userEmail),
-      "state": $util.toJson($context.arguments.input.state),
-      "vCpus": $util.toJson($context.arguments.input.vCpus),
-      "memSize": $util.toJson($context.arguments.input.memSize),
-      "diskSize": $util.toJson($context.arguments.input.diskSize),
-      "launchTime": $util.toJson($context.arguments.input.launchTime),
-      "publicIp": $util.toJson($context.arguments.input.publicIp),
-      "instanceStatus": $util.toJson($context.arguments.input.instanceStatus),
-      "systemStatus": $util.toJson($context.arguments.input.systemStatus),
-      "runCommand": $util.toJson($context.arguments.input.runCommand),
-      "workingDir": $util.toJson($context.arguments.input.workingDir)
-   }
-}
-
-https://serverlessland.com/patterns/appsync-stepfunctions-cdk
-
-
-{
-    "version": "2018-05-29",
-    "method": "POST",
-    "resourcePath": "/",
-    "params": {
-      "headers": {
-        "content-type": "application/x-amz-json-1.0",
-        "x-amz-target":"AWSStepFunctions.StartSyncExecution",
-        "Authorization": "$ctx.request.headers.Authorization"
-      },
-      "body": {
-        "stateMachineArn": "arn:aws:states:us-west-2:514046899996:stateMachine:MineCraftV2",
-        "name" : "$context.args.execution.name",
-        "input": "{ \\\"input\\\": \\\"$context.args.execution.input\\\"}"
-      }
-    }
-  }
 
 filter @message like "the game" 
 | parse @message "[net.minecraft.server.dedicated.DedicatedServer/]: * joined the game" as @userjoin
@@ -81,3 +20,35 @@ filter @message like "Request Headers"
 $ curl -H 'x-api-key: <API KEY>' -d '{"query":"query {...}"}' <API URL>
 
 curl -XPOST -H "Content-Type:application/graphql" -d '{ "query": "mutation CreateServerMetric($input: CreateServerMetricInput!) {CreateServerMetric(input: $input) {id,serverId,state,launchTime,publicIp,instanceStatus,systemStatus,cpu,network,activeUsers}"}' https://gtjfoqwjbvdv7jq5ie3kasoi4u.appsync-api.us-west-2.amazonaws.com/graphql
+
+
+subscription OnPutServerMetric {
+  onPutServerMetric {
+    id
+    activeUsers
+    cpuStats
+    memStats
+    networkStats
+  }
+}
+
+
+subscription OnChangeServerInfo {
+  onChangeServerInfo {
+    id
+    diskSize
+    instanceStatus
+    launchTime
+    memSize
+    publicIp
+    name
+    runCommand
+    runningMinutes
+    state
+    systemStatus
+    type
+    userEmail
+    vCpus
+    workingDir
+  }
+}  

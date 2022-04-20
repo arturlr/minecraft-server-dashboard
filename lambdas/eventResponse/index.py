@@ -13,7 +13,7 @@ from requests_aws4auth import AWS4Auth
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-sss = boto3.client('ssm')
+ssm = boto3.client('ssm')
 appsync = boto3.client('appsync')
 ec2_client = boto3.client('ec2')
 cw_logs = boto3.client('logs')
@@ -49,8 +49,7 @@ putServerMetric = """
 mutation PutServerMetric($input: ServerMetricInput!) {
     putServerMetric(input: $input) {
         id
-        monthlyUsage
-        dailyUsage
+        memStats
         cpuStats
         networkStats
         activeUsers
@@ -73,6 +72,9 @@ changeServerState = """
       publicIp
       instanceStatus
       systemStatus
+      runCommand
+      workingDir
+      runningMinutes
     }
 }
 """
@@ -90,7 +92,7 @@ def getSsmParam(paramKey, isEncrypted=False):
             return ""
 
     except Exception as e:
-        logger.warning(str(e) + " for " + paramKey)
+        logger.error(str(e) + " for " + paramKey)
         return ""
 
 def describeInstances(name,value):
@@ -116,13 +118,12 @@ def describeInstances(name,value):
         )
 
     # checking response
+    logger.info("for " + name + ": " + value + " found " + str(len(response["Reservations"])) + " instances")
     if (len(response["Reservations"])) == 0:
-        logger.error("No Instances Found")
         return []
     else:
         return response["Reservations"]
             
-
 def describeInstanceStatus(instanceId):
     statusRsp = ec2_client.describe_instance_status(InstanceIds=[instanceId])
 
@@ -138,8 +139,8 @@ def getConnectUsers(instanceId,startTime):
     try:
         queryRsp = cw_logs.start_query(
             logGroupName='/minecraft/serverlog/' + instanceId,
-            startTime=startTime,
-            endTime=dt_now.timestamp(),
+            startTime=int(round(startTime)),
+            endTime=int(round(dt_now.timestamp())),
             queryString="""
                 filter @message like "the game" 
                 | parse @message "[net.minecraft.server.dedicated.DedicatedServer/]: * joined the game" as @userjoin
@@ -181,20 +182,18 @@ def getConnectUsers(instanceId,startTime):
                 raise Exception("Query status: Timeout")
             else:
                 logger.error("start_query: No Data.")
-                return []
+                return 0
 
 
     except Exception as e:
         logger.error("start_query: " + str(e) + " occurred.")
-        return []
+        return 0
 
 
 def getMetricData(instanceId,nameSpace,metricName,unit,statType,startTime,EndTime,period):
     cdata = []
     four_hours_before=datetime.utcnow() - timedelta(hours=4)
-
     try:
-
         rsp = cw_client.get_metric_statistics(
             Namespace=nameSpace,
             MetricName=metricName,
@@ -213,7 +212,7 @@ def getMetricData(instanceId,nameSpace,metricName,unit,statType,startTime,EndTim
 
         if len(rsp["Datapoints"]) == 0:
             logger.warning('No Datapoint for ' + metricName)
-            return []
+            return "[]"
         else:
             for rec in rsp["Datapoints"]:
                 if metricName == "NetworkOut":
@@ -227,28 +226,22 @@ def getMetricData(instanceId,nameSpace,metricName,unit,statType,startTime,EndTim
 
     except Exception as e:
         logger.error('Something went wrong: ' + str(e))
-        return []
+        return "[]"
 
-def handler(event, context):        
-
+def handler(event, context):       
     instancesInfo = []
-    
     # Event Brigde
-    if 'detail' in event:    
-        logger.info(event['detail-type'])    
-        if 'instance-id' in event['detail']:
+    if 'detail-type' in event:
+        logger.info(event['detail-type'])
+
+        if event['detail-type'] == "EC2 Instance State-change Notification":   
             logger.info("Found InstanceId: " + event['detail']['instance-id'] + ' at ' + event['detail']['state'] + ' state')
             instancesInfo = describeInstances("id",event['detail']['instance-id'])
-        elif 'detail-type' in event:
-            if event['detail-type'] == "Scheduled Event":
-                instancesInfo = describeInstances("state","running")
+            scheduledEventBridgeRuleName = getSsmParam("/amplify/minecraftserverdashboard/scheduledrule")
+            if scheduledEventBridgeRuleName == None:
+                logger.error("Scheduled Event Name not registered")
+                return "No Scheduled Event"         
 
-    if 'detail-type' in event:
-        scheduledEventBridgeRuleName = getSsmParam('/amplify/minecraftserverdashboard/scheduledrule')
-        if scheduledEventBridgeRuleName == None:
-            logger.error("Scheduled Event Name not registered")
-            return "No Scheduled Event"
-        if event['detail-type'] == "EC2 Instance State-change Notification":            
             instancesRunning = describeInstances("state","running")
             if len(instancesRunning) == 0:
                 eb_client.disable_rule(Name=scheduledEventBridgeRuleName)
@@ -259,10 +252,14 @@ def handler(event, context):
                     eb_client.enable_rule(Name=scheduledEventBridgeRuleName)
                     logger.info("Enabled Evt Bridge Rule")
 
-    if len(instancesInfo) == 0:        
-        logger.error("No Instances Found")
-        return "No Instances Found"
+        elif event['detail-type'] == "Scheduled Event":
+                # Check for instances running to update their stats. It can only be a Schedule Event
+                instancesInfo = describeInstances("state","running")
+                if len(instancesInfo) == 0:  
+                    logger.error("No Instances Found for updating")
+                    return "No Instances Found for updating"
 
+    
     for instance in instancesInfo:
         instanceId = instance["Instances"][0]["InstanceId"]
         
@@ -275,7 +272,7 @@ def handler(event, context):
         else:
             publicIp = "none"
 
-        userEmail = 'unknown'
+        userEmail = 'minecraft-dashboard@maildrop.cc'
         for tag in instance["Instances"][0]["Tags"]:
             if tag["Key"] == "User":
                 userEmail = tag["Value"]
@@ -292,11 +289,15 @@ def handler(event, context):
         if event['detail-type'] == "EC2 Instance State-change Notification":
             input["userEmail"] = userEmail
             input["name"] = instanceName
+            input["type"] = instance["Instances"][0]["InstanceType"]
             input["state"] = instance["Instances"][0]["State"]["Name"].lower()
             input["systemStatus"] = ec2Status["systemStatus"].lower()
             input["instanceStatus"] = ec2Status["instanceStatus"].lower()
             input["launchTime"] = launchTime.strftime("%m/%d/%Y - %H:%M:%S")
             input["publicIp"] = publicIp
+            input["runCommand"] = ""
+            input["workingDir"] = ""
+            input["runningMinutes"] = ""
             payload={"query": changeServerState, 'variables': { "input": input }}
 
         if event['detail-type'] == "Scheduled Event":
@@ -305,12 +306,15 @@ def handler(event, context):
             input["networkStats"] = getMetricData(instanceId,'AWS/EC2','NetworkOut','Bytes','Average',dt_4_four_hours_before,dt_now,300)
             input["memStats"] = getMetricData(instanceId,'CWAgent','mem_used_percent','Percent','Average',dt_4_four_hours_before,dt_now,300)
             payload={"query": putServerMetric, 'variables': { "input": input }}
+
+        
         response = requests.post(
             endpoint,
             auth=auth,
             headers=headers,
             json=payload
         )
+        logger.info(response.json())
 
     return response.json()
 

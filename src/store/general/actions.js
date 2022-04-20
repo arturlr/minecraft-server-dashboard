@@ -63,6 +63,7 @@ export function saveLayout({ commit },
     { name }) {
       console.group("store/layout/actions/saveLayout");
       commit("SET_LAYOUT", name);
+      console.groupEnd();
     }
 
 export async function getCostUsage({ commit }) {
@@ -75,4 +76,5 @@ export async function getCostUsage({ commit }) {
     } = await API.graphql(graphqlOperation(getMonthlyCost));
 
     commit("SET_COST_USAGE", results);
+    console.groupEnd();
   }

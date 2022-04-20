@@ -295,7 +295,7 @@ export default {
           curve: "smooth",
         },
         title: {
-          text: "% CPU Utilization & Network Packages Out (10k)",
+          text: "% CPU Utilization & % Memory Utilization & Network Packages Out (10k)",
           align: "left",
         },
         grid: {

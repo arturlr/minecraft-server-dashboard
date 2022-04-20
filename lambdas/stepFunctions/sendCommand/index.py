@@ -33,13 +33,13 @@ def handler(event, context):
     try:   
         instanceId = event["instanceId"]
 
-        runCommand = getSsmParam("/" + appValue + "/" + instanceId + "/runCommand")
+        runCommand = getSsmParam("/amplify/minecraftserverdashboard/" + instanceId + "/runCommand")
         if runCommand == "":
-            runCommand = getSsmParam("/" + appValue + "/default/runCommand")
+            runCommand = getSsmParam("/amplify/minecraftserverdashboard/default/runCommand")
 
-        workingDir = getSsmParam("/" + appValue + "/" + instanceId + "/workingDir")
+        workingDir = getSsmParam("/amplify/minecraftserverdashboard/" + instanceId + "/workingDir")
         if workingDir == "":
-            workingDir = getSsmParam("/" + appValue + "/default/workingDir")
+            workingDir = getSsmParam("/amplify/minecraftserverdashboard/default/workingDir")
         
         ssm_rsp = ssm.send_command(
             InstanceIds=[instanceId],
