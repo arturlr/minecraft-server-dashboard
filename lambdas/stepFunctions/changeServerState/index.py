@@ -67,9 +67,9 @@ def updateAlarm(instanceId):
             },
         ],
         Period=300,
-        EvaluationPeriods=10,
-        DatapointsToAlarm=10,
-        Threshold=20000,
+        EvaluationPeriods=7,
+        DatapointsToAlarm=7,
+        Threshold=25000,
         TreatMissingData="missing",
         ComparisonOperator="LessThanOrEqualToThreshold"   
     )

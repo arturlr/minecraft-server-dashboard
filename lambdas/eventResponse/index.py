@@ -40,11 +40,6 @@ headers={"Content-Type": "application/json"}
 session = requests.Session()
 session.auth = auth
 
-dt_1st_day_of_the_month=date.today().replace(day=1)
-dt_14_days_past_today=datetime.utcnow() - timedelta(days=14)
-dt_4_four_hours_before=datetime.utcnow() - timedelta(hours=4)
-dt_now = datetime.utcnow()
-
 putServerMetric = """
 mutation PutServerMetric($input: ServerMetricInput!) {
     putServerMetric(input: $input) {
@@ -140,7 +135,7 @@ def getConnectUsers(instanceId,startTime):
         queryRsp = cw_logs.start_query(
             logGroupName='/minecraft/serverlog/' + instanceId,
             startTime=int(round(startTime)),
-            endTime=int(round(dt_now.timestamp())),
+            endTime=int(round(datetime.utcnow().timestamp())),
             queryString="""
                 filter @message like "the game" 
                 | parse @message "[net.minecraft.server.dedicated.DedicatedServer/]: * joined the game" as @userjoin
@@ -228,7 +223,10 @@ def getMetricData(instanceId,nameSpace,metricName,unit,statType,startTime,EndTim
         logger.error('Something went wrong: ' + str(e))
         return "[]"
 
-def handler(event, context):       
+def handler(event, context):     
+    dt_1st_day_of_the_month=date.today().replace(day=1)
+    dt_4_four_hours_before=datetime.utcnow() - timedelta(hours=4)
+    dt_now = datetime.utcnow()  
     instancesInfo = []
     # Event Brigde
     if 'detail-type' in event:

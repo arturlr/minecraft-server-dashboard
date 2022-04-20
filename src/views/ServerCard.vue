@@ -270,11 +270,6 @@ export default {
       isWorkingDirEdit: false,
       successAlert: false,
       infoMsg: null,
-      cpuChart: [
-        {
-          data: [],
-        },
-      ],
       chartInit: [
         {
           data: [],
@@ -287,16 +282,12 @@ export default {
             show: false,
           },
         },
-        colors: ["#77B6EA", "#545454"],
+        colors: ["#154360", "#5DADE2", "#D35400"],
         dataLabels: {
           enabled: false,
         },
         stroke: {
           curve: "smooth",
-        },
-        title: {
-          text: "% CPU Utilization & % Memory Utilization & Network Packages Out (10k)",
-          align: "left",
         },
         grid: {
           borderColor: "#e7e7e7",
@@ -412,6 +403,21 @@ export default {
               ? this.serversDict[this.serverId].networkStats
               : [],
           },
+          {
+            name: "Memory",
+            data: this.serversDict[this.serverId].memStats
+              ? this.serversDict[this.serverId].memStats
+              : [],
+          },
+        ]);
+
+        this.$refs.users.updateSeries([
+          {
+            name: "Users",
+            data: this.serversDict[this.serverId].activeUsers
+              ? this.serversDict[this.serverId].activeUsers
+              : [],
+          }
         ]);
       });
     },

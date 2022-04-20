@@ -72,7 +72,7 @@ export default {
         variables: {},
       }).subscribe({
         next: (eventData) => {
-          this.$store.dispatch("general/upadateServersList", {
+          this.$store.dispatch("general/upadateServersState", {
             serverData: eventData.value.data.onChangeServerInfo,
           });
         },
