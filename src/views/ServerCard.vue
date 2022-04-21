@@ -11,7 +11,7 @@
         {{ serverName }}
         <v-tooltip bottom>
           <template v-slot:activator="{ on, attrs }">
-            <v-btn text v-bind="attrs" v-on="on" @click="addUserDialog = true">
+            <v-btn text v-bind="attrs" v-on="on" @click="addUserDialog = true;addUserEmail = null">
               <v-icon> person_add </v-icon>
             </v-btn>
           </template>

@@ -94,7 +94,7 @@ def _add_user_to_group(instanceId,poolId,userEmail=None):
                 userEmail = utl.getSsmParam('/amplify/minecraftserverdashboard/adminemail')
                 if userEmail == None:
                     logger.error("Unable to find admin user")
-                    return False
+                    return {"err": "Unable to find admin user" }
 
             user = cognito_idp.list_users(
                 UserPoolId=poolId,
@@ -103,7 +103,7 @@ def _add_user_to_group(instanceId,poolId,userEmail=None):
 
             if len(user['Users']) == 0:
                 logger.error("Unable to find user: " + userEmail + ". User has to create a profile by login in this website")
-                return False
+                return {"err": "Unable to find user: " + userEmail + ". User has to create a profile by login in this website" }
 
             userRsp = cognito_idp.admin_add_user_to_group(
                 UserPoolId=poolId,
@@ -111,18 +111,18 @@ def _add_user_to_group(instanceId,poolId,userEmail=None):
                 GroupName=instanceId
             )
 
-            return True
+            return {"msg": "User added to the group"}
     
         except Exception as e:
             logger.info("Exception admin_add_user_to_group")
             logger.warning(str(e))
-            return False 
+            return { "err": str(e) } 
             
 
 def handler(event, context):
     if not 'identity' in event:
         logger.error("No Identity found")
-        resp = {'err': "No Identity found" }
+        resp = {"err": "No Identity found" }
         return _response(401,resp)
 
     iss = event["identity"]["claims"]["iss"] 
@@ -137,7 +137,7 @@ def handler(event, context):
 
     if token_claims == None:
         logger.error("Invalid Token")
-        resp = {'err': "Invalid Token" }
+        resp = {"err": "Invalid Token" }
         return _response(401,resp)        
 
     if 'cognito:username' in token_claims:
@@ -156,36 +156,36 @@ def handler(event, context):
         action = event["arguments"]["input"]["action"]  
 
         if action == "adduser":
-            email = id.split("#")[0]
+            emailPrefix = id.split("#")[0]
             instanceId = id.split("#")[1]
 
-            issuccessful = _add_user_to_group(instanceId,iss.split("/")[3],email)
-            if issuccessful:
-                resp = {'msg': 'Used add successfuly.'}
+            # get only prefix if user provided @ accidently and add the gmail suffix
+            gmailAccount = emailPrefix.split("@")[0] + '@gmail.com'
+
+            resp = _add_user_to_group(instanceId,iss.split("/")[3],gmailAccount)
+            if 'msg' in resp:
                 return _response(200,resp)
             else:
-                resp = {'err': 'Something went wrong.'}
                 return _response(500,resp)
         else:
             cogGrp = _check_cognito_group(id,iss.split("/")[3])
             logger.info(cogGrp)
             if cogGrp == 'fail':
-                resp = {'err': 'Cognito groups failed'}
-                return _response(401,resp)
+                jsonMsg = {"err": 'Cognito groups failed'}
+                return _response(401,jsonMsg)
             elif cogGrp == 'initialize':
-                issuccessful = _add_user_to_group(id,iss.split("/")[3])
-                if issuccessful:
-                    resp = {'err': 'Cognito Groups initialized. Please logout and log in back. '}
-                    return _response(200,resp)
+                resp = _add_user_to_group(id,iss.split("/")[3])
+                if 'msg' in  resp:
+                    jsonMsg = {"msg": 'Cognito Groups initialized. Please logout and log in back. '}
+                    return _response(200,jsonMsg)
                 else:
-                    resp = {'err': 'Something went wrong.'}
                     return _response(500,resp)
             elif cogGrp == "continue":
                 logger.info("Cognito Group already initialized")
             else:
                 logger.error("Cognito Group - Unknow error")
-                resp = {'err': 'Cognito groups failed'}
-                return _response(401,resp)
+                jsonMsg = {"err": 'Cognito groups failed'}
+                return _response(401,jsonMsg)
 
             authorized = False
             cognitoGroups = event["identity"]["groups"] 
@@ -197,7 +197,7 @@ def handler(event, context):
 
             if authorized == False:        
                 logger.warning("Not Authorized" )
-                resp = {'err': 'User not authorized'}
+                resp = {"err": 'User not authorized'}
                 return _response(401,resp)
             
             # Invoking Step-Functions
@@ -212,7 +212,7 @@ def handler(event, context):
             return _response(200,resp)
             
     except Exception as e:
-        resp = {'err': str(e)}
+        resp = {"err": str(e)}
         logger.error(str(e))
         return _response(500,resp)
             
