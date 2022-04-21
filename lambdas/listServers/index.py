@@ -7,23 +7,20 @@ import time
 from jose import jwk, jwt
 from jose.utils import base64url_decode
 from datetime import date, datetime, timezone, timedelta
+from helpers import utils
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
+utl = utils.Utils()
+
 ec2_client = boto3.client('ec2')
 ec2 = boto3.resource('ec2')
-ssm = boto3.client('ssm')
 cw_client = boto3.client('cloudwatch')
 ct_client = boto3.client('cloudtrail')
 ce_client = boto3.client('ce')
 cognito_idp = boto3.client('cognito-idp')
 ENCODING = 'utf-8'
-
-dt_now = datetime.utcnow()
-dt_1st_day_of_the_month=datetime.utcnow().replace(day=1,hour=0,minute=0,second=0)
-dt_14_days_past_today=datetime.utcnow() - timedelta(days=14)
-dt_4_four_hours_before=datetime.utcnow() - timedelta(hours=4)
 
 appValue = os.getenv('appValue')
 
@@ -63,54 +60,6 @@ def _is_token_valid(token, keys):
     # now we can use the claims
     return claims
 
-def describeInstances(name,value):
-    if name == 'id':
-         response = ec2_client.describe_instances(
-                InstanceIds=[value]
-                    )
-    elif name == 'email':
-        filters = [
-            {"Name":"tag:App", "Values":[ appValue ]}
-            #{"Name":"tag:User", "Values":[ value ]}
-        ]
-        response =  ec2_client.describe_instances(
-            Filters=filters            
-        )
-
-    # checking response
-    if (len(response["Reservations"])) == 0:
-        logger.error("No Instances Found")
-        return []
-    else:
-        return response["Reservations"]
-            
-def describeInstanceStatus(instanceId):
-    statusRsp = ec2_client.describe_instance_status(InstanceIds=[instanceId])
-
-    if (len(statusRsp["InstanceStatuses"])) == 0:
-        return { 'instanceStatus': "Fail", 'systemStatus': "Fail" }
-    
-    instanceStatus = statusRsp["InstanceStatuses"][0]["InstanceStatus"]["Status"]
-    systemStatus = statusRsp["InstanceStatuses"][0]["SystemStatus"]["Status"]
-        
-    return { 'instanceStatus': instanceStatus, 'systemStatus': systemStatus }
-
-def getSsmParam(paramKey, isEncrypted=False):
-    try:
-        ssmResult = ssm.get_parameter(
-            Name=paramKey,
-            WithDecryption=isEncrypted
-        )
-
-        if (ssmResult["ResponseMetadata"]["HTTPStatusCode"] == 200):
-            return ssmResult["Parameter"]["Value"]
-        else:
-            return ""
-
-    except Exception as e:
-        logger.warning(str(e) + " for " + paramKey)
-        return ""
-
 def extractStateEventTime(evt,previousState,instanceId):
     ctEvent = json.loads(evt['CloudTrailEvent'])
     if 'responseElements' in ctEvent:
@@ -133,8 +82,8 @@ def getInstanceHoursFromCloudTailEvents(instanceId):
     page_iterator = paginator.paginate(
     	LookupAttributes=[{'AttributeKey':'ResourceName','AttributeValue': instanceId}],
     	PaginationConfig={'PageSize':50, 'StartingToken':StartingToken },
-        StartTime=dt_1st_day_of_the_month,
-        EndTime=dt_now
+        StartTime=datetime.utcnow().replace(day=1,hour=0,minute=0,second=0),
+        EndTime=datetime.utcnow()
         )
     for page in page_iterator:
         for evt in page['Events']:
@@ -177,7 +126,7 @@ def getInstanceHoursFromCloudTailEvents(instanceId):
 
     # in case the instance is still running
     if isinstance(dtStartEvent, datetime) and not isinstance(dtStopEvent, datetime):
-            dtStopEvent = dt_now
+            dtStopEvent = datetime.utcnow()
             delta = dtStopEvent.replace(tzinfo=None) - dtStartEvent.replace(tzinfo=None)
             #print(instanceId + ' s:' + dtStartEvent.strftime("%m/%d/%Y - %H:%M:%S") + ' - e:' + dtStopEvent.strftime("%m/%d/%Y - %H:%M:%S") + ' = ' + str(round(delta.total_seconds()/60,2)))
             totalMinutes = totalMinutes + round(delta.total_seconds()/60,2)
@@ -187,7 +136,7 @@ def getInstanceHoursFromCloudTailEvents(instanceId):
     return totalMinutes
 
 def handler(event, context):
-    #print(event)
+
     instanceArray = []
 
     # validate query type
@@ -228,7 +177,7 @@ def handler(event, context):
             userEmail = att["Value"]
             break
 
-    instancesInfo = describeInstances('email',userEmail)
+    instancesInfo = utl.describeInstances('email',userEmail)
 
     if len(instancesInfo) == 0:
         logger.error("No Instances Found")
@@ -255,15 +204,15 @@ def handler(event, context):
         memoryInfo = instanceType["InstanceTypes"][0]["MemoryInfo"]["SizeInMiB"]
         volume = ec2.Volume(instance["Instances"][0]["BlockDeviceMappings"][0]["Ebs"]["VolumeId"])
 
-        instanceStatus = describeInstanceStatus(instanceId)
+        instanceStatus = utl.describeInstanceStatus(instanceId)
 
-        runCommand = getSsmParam("/amplify/minecraftserverdashboard/" + instanceId + "/runCommand")
-        if runCommand == "":
-            runCommand = getSsmParam("/amplify/minecraftserverdashboard/default/runCommand")
+        runCommand = utl.getSsmParam("/amplify/minecraftserverdashboard/" + instanceId + "/runCommand")
+        if runCommand == None:
+            runCommand = utl.getSsmParam("/amplify/minecraftserverdashboard/default/runCommand")
 
-        workingDir = getSsmParam("/amplify/minecraftserverdashboard/" + instanceId + "/workingDir")
-        if workingDir == "":
-            workingDir = getSsmParam("/amplify/minecraftserverdashboard/default/workingDir")
+        workingDir = utl.getSsmParam("/amplify/minecraftserverdashboard/" + instanceId + "/workingDir")
+        if workingDir == None:
+            workingDir = utl.getSsmParam("/amplify/minecraftserverdashboard/default/workingDir")
         
         runningMinutes = getInstanceHoursFromCloudTailEvents(instanceId)
 

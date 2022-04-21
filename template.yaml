@@ -63,6 +63,16 @@ Resources:
       Value: !Ref AdminEmail
       Description: Default Minecraft run command. There is an option at the app to customized it per instances
 
+  HelperLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      Description: MinecraftDashboardHelper
+      ContentUri: ./layers/helpers.zip
+      CompatibleRuntimes:
+        - python3.8
+        - python3.7
+      RetentionPolicy: Delete
+
   PythonJoseLayer:
     Type: AWS::Serverless::LayerVersion
     Properties:
@@ -123,6 +133,7 @@ Resources:
       CodeUri: ./lambdas/eventResponse/
       Layers:
         - Ref: GraphQLLayer
+        - Ref: HelperLayer
       Events:
         EC2StateTrigger:
           Type: CloudWatchEvent 
@@ -178,6 +189,7 @@ Resources:
       CodeUri: ./lambdas/listServers/
       Layers:
         - Ref: PythonJoseLayer
+        - Ref: HelperLayer
       Policies:
         - CostExplorerReadOnlyPolicy: {}
         - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
@@ -223,6 +235,7 @@ Resources:
       CodeUri: ./lambdas/triggerServerAction/
       Layers:
         - Ref: PythonJoseLayer
+        - Ref: HelperLayer
       Policies:
         - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
         - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess
@@ -252,6 +265,8 @@ Resources:
     Properties:
       FunctionName: minecraft-server-dashboard-changeServerState
       CodeUri: ./lambdas/stepFunctions/changeServerState/
+      Layers:
+        - Ref: HelperLayer
       Policies:
         - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
         - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess
@@ -284,6 +299,8 @@ Resources:
     Properties:
       FunctionName: minecraft-server-dashboard-sendCommand
       CodeUri: ./lambdas/stepFunctions/sendCommand/
+      Layers:
+        - Ref: HelperLayer
       Policies:
         - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
         - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess

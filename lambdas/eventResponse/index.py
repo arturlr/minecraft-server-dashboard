@@ -9,9 +9,12 @@ from base64 import b64encode
 from datetime import date, datetime, timezone, timedelta
 import requests
 from requests_aws4auth import AWS4Auth
+from helpers import utils
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
+
+utl = utils.Utils()
 
 ssm = boto3.client('ssm')
 appsync = boto3.client('appsync')
@@ -74,62 +77,6 @@ changeServerState = """
 }
 """
 
-def getSsmParam(paramKey, isEncrypted=False):
-    try:
-        ssmResult = ssm.get_parameter(
-            Name=paramKey,
-            WithDecryption=isEncrypted
-        )
-
-        if (ssmResult["ResponseMetadata"]["HTTPStatusCode"] == 200):
-            return ssmResult["Parameter"]["Value"]
-        else:
-            return ""
-
-    except Exception as e:
-        logger.error(str(e) + " for " + paramKey)
-        return ""
-
-def describeInstances(name,value):
-    if name == 'id':
-         response = ec2_client.describe_instances(
-                InstanceIds=[value]
-                    )
-    elif name == 'email':
-        filters = [
-            {"Name":"tag:App", "Values":[ appValue ]}
-            # {"Name":"tag:User", "Values":[ value ]}
-        ]
-        response =  ec2_client.describe_instances(
-            Filters=filters            
-        )
-    elif name == 'state':
-        filters = [
-            {"Name":"tag:App", "Values":[ appValue ]},
-            {"Name":"instance-state-name", "Values":[ value ]}
-        ]
-        response =  ec2_client.describe_instances(
-            Filters=filters            
-        )
-
-    # checking response
-    logger.info("for " + name + ": " + value + " found " + str(len(response["Reservations"])) + " instances")
-    if (len(response["Reservations"])) == 0:
-        return []
-    else:
-        return response["Reservations"]
-            
-def describeInstanceStatus(instanceId):
-    statusRsp = ec2_client.describe_instance_status(InstanceIds=[instanceId])
-
-    if (len(statusRsp["InstanceStatuses"])) == 0:
-        return { 'instanceStatus': "Fail", 'systemStatus': "Fail" }
-    
-    instanceStatus = statusRsp["InstanceStatuses"][0]["InstanceStatus"]["Status"]
-    systemStatus = statusRsp["InstanceStatuses"][0]["SystemStatus"]["Status"]
-        
-    return { 'instanceStatus': instanceStatus, 'systemStatus': systemStatus }
-
 def getConnectUsers(instanceId,startTime):
     try:
         queryRsp = cw_logs.start_query(
@@ -184,7 +131,6 @@ def getConnectUsers(instanceId,startTime):
         logger.error("start_query: " + str(e) + " occurred.")
         return 0
 
-
 def getMetricData(instanceId,nameSpace,metricName,unit,statType,startTime,EndTime,period):
     cdata = []
     four_hours_before=datetime.utcnow() - timedelta(hours=4)
@@ -234,13 +180,13 @@ def handler(event, context):
 
         if event['detail-type'] == "EC2 Instance State-change Notification":   
             logger.info("Found InstanceId: " + event['detail']['instance-id'] + ' at ' + event['detail']['state'] + ' state')
-            instancesInfo = describeInstances("id",event['detail']['instance-id'])
-            scheduledEventBridgeRuleName = getSsmParam("/amplify/minecraftserverdashboard/scheduledrule")
+            instancesInfo = utl.describeInstances("id",event['detail']['instance-id'])
+            scheduledEventBridgeRuleName = utl.getSsmParam("/amplify/minecraftserverdashboard/scheduledrule")
             if scheduledEventBridgeRuleName == None:
                 logger.error("Scheduled Event Name not registered")
                 return "No Scheduled Event"         
 
-            instancesRunning = describeInstances("state","running")
+            instancesRunning = utl.describeInstances("state","running")
             if len(instancesRunning) == 0:
                 eb_client.disable_rule(Name=scheduledEventBridgeRuleName)
                 logger.info("Disabled Evt Bridge Rule")
@@ -252,7 +198,7 @@ def handler(event, context):
 
         elif event['detail-type'] == "Scheduled Event":
                 # Check for instances running to update their stats. It can only be a Schedule Event
-                instancesInfo = describeInstances("state","running")
+                instancesInfo = utl.describeInstances("state","running")
                 if len(instancesInfo) == 0:  
                     logger.error("No Instances Found for updating")
                     return "No Instances Found for updating"
@@ -261,7 +207,7 @@ def handler(event, context):
     for instance in instancesInfo:
         instanceId = instance["Instances"][0]["InstanceId"]
         
-        ec2Status = describeInstanceStatus(instanceId)
+        ec2Status = utl.describeInstanceStatus(instanceId)
         guid = str(uuid4())
 
         launchTime = instance["Instances"][0]["LaunchTime"]

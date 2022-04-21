@@ -11,13 +11,9 @@ from datetime import date, datetime, timezone, timedelta
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-ssm = boto3.client('ssm')
 ce_client = boto3.client('ce')
 cognito_idp = boto3.client('cognito-idp')
 ENCODING = 'utf-8'
-
-dt_now = datetime.utcnow()
-dt_1st_day_of_month_ago = datetime.utcnow().replace(day=1,hour=0,minute=0,second=0)
 
 appValue = os.getenv('appValue')
 
@@ -115,24 +111,11 @@ def getUsageCost(granularity,startDate,endDate,tagValue):
         logger.error(str(e))
         return { "unblendedCost": 0, "usageQuantity": 0 }
 
-def getSsmParam(paramKey, isEncrypted=False):
-    try:
-        ssmResult = ssm.get_parameter(
-            Name=paramKey,
-            WithDecryption=isEncrypted
-        )
-
-        if (ssmResult["ResponseMetadata"]["HTTPStatusCode"] == 200):
-            return ssmResult["Parameter"]["Value"]
-        else:
-            return ""
-
-    except Exception as e:
-        logger.warning(str(e) + " for " + paramKey)
-        return ""
-
 def handler(event, context):
-    #print(event)
+    
+    dt_now = datetime.utcnow()
+    dt_1st_day_of_month_ago = datetime.utcnow().replace(day=1,hour=0,minute=0,second=0)
+
     instanceArray = []
 
     # validate query type

@@ -8,12 +8,13 @@ import time
 from jose import jwk, jwt
 from jose.utils import base64url_decode
 from datetime import datetime, timezone
+from helpers import utils
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
+utl = utils.Utils()
 appValue = os.getenv('appValue')
 
-ssm = boto3.client('ssm')
 sfn = boto3.client('stepfunctions')
 cognito_idp = boto3.client('cognito-idp')
 
@@ -26,22 +27,6 @@ def _response(status_code, body, headers={}):
         return {"statusCode": status_code, "body": body, "headers": headers}
     else:
         return {"statusCode": status_code, "body": body }
-
-def getSsmParam(paramKey, isEncrypted=False):
-    try:
-        ssmResult = ssm.get_parameter(
-            Name=paramKey,
-            WithDecryption=isEncrypted
-        )
-
-        if (ssmResult["ResponseMetadata"]["HTTPStatusCode"] == 200):
-            return ssmResult["Parameter"]["Value"]
-        else:
-            return None
-
-    except Exception as e:
-        logger.warning(str(e) + " for " + paramKey)
-        return None
 
 def _is_token_valid(token, keys):
     # https://github.com/awslabs/aws-support-tools/tree/master/Cognito/decode-verify-jwt
@@ -103,11 +88,10 @@ def _check_cognito_group(instanceId, poolId):
             logger.error(str(e))
             return "fail" 
         
-
 def _add_user_to_group(instanceId,poolId,userEmail=None):
         try:
             if userEmail == None:
-                userEmail = getSsmParam('/amplify/minecraftserverdashboard/adminemail')
+                userEmail = utl.getSsmParam('/amplify/minecraftserverdashboard/adminemail')
                 if userEmail == None:
                     logger.error("Unable to find admin user")
                     return False
@@ -168,52 +152,64 @@ def handler(event, context):
     )
 
     try:                 
-        instanceId = event["arguments"]["input"]["id"]
+        id = event["arguments"]["input"]["id"]
         action = event["arguments"]["input"]["action"]  
 
-        cogGrp = _check_cognito_group(instanceId,iss.split("/")[3])
-        logger.info(cogGrp)
-        if cogGrp == 'fail':
-            resp = {'err': 'Cognito groups failed'}
-            return _response(401,resp)
-        elif cogGrp == 'initialize':
-            issuccessful = _add_user_to_group(instanceId,iss.split("/")[3])
+        if action == "adduser":
+            email = id.split("#")[0]
+            instanceId = id.split("#")[1]
+
+            issuccessful = _add_user_to_group(instanceId,iss.split("/")[3],email)
             if issuccessful:
-                resp = {'err': 'Cognito Groups initialized. Please logout and log in back. '}
+                resp = {'msg': 'Used add successfuly.'}
                 return _response(200,resp)
             else:
                 resp = {'err': 'Something went wrong.'}
                 return _response(500,resp)
-        elif cogGrp == "continue":
-            logger.info("Cognito Group already initialized")
         else:
-            logger.error("Cognito Group - Unknow error")
-            resp = {'err': 'Cognito groups failed'}
-            return _response(401,resp)
+            cogGrp = _check_cognito_group(id,iss.split("/")[3])
+            logger.info(cogGrp)
+            if cogGrp == 'fail':
+                resp = {'err': 'Cognito groups failed'}
+                return _response(401,resp)
+            elif cogGrp == 'initialize':
+                issuccessful = _add_user_to_group(id,iss.split("/")[3])
+                if issuccessful:
+                    resp = {'err': 'Cognito Groups initialized. Please logout and log in back. '}
+                    return _response(200,resp)
+                else:
+                    resp = {'err': 'Something went wrong.'}
+                    return _response(500,resp)
+            elif cogGrp == "continue":
+                logger.info("Cognito Group already initialized")
+            else:
+                logger.error("Cognito Group - Unknow error")
+                resp = {'err': 'Cognito groups failed'}
+                return _response(401,resp)
 
-        authorized = False
-        cognitoGroups = event["identity"]["groups"] 
-        if cognitoGroups != None:       
-            for group in cognitoGroups:
-                if (group == instanceId):    
-                    authorized = True
-                    break
+            authorized = False
+            cognitoGroups = event["identity"]["groups"] 
+            if cognitoGroups != None:       
+                for group in cognitoGroups:
+                    if (group == id):    
+                        authorized = True
+                        break
 
-        if authorized == False:        
-            logger.warning("Not Authorized" )
-            resp = {'err': 'User not authorized'}
-            return _response(401,resp)
-        
-        # Invoking Step-Functions
+            if authorized == False:        
+                logger.warning("Not Authorized" )
+                resp = {'err': 'User not authorized'}
+                return _response(401,resp)
+            
+            # Invoking Step-Functions
 
-        sfn_rsp = sfn.start_execution(
-            stateMachineArn=sftArn,
-            input='{\"instanceId\" : \"' + instanceId + '\", \"action\" : \"' + action + '\"}'
-        )
+            sfn_rsp = sfn.start_execution(
+                stateMachineArn=sftArn,
+                input='{\"instanceId\" : \"' + id + '\", \"action\" : \"' + action + '\"}'
+            )
 
-        resp = {"msg" : sfn_rsp["executionArn"]}
+            resp = {"msg" : sfn_rsp["executionArn"]}
 
-        return _response(200,resp)
+            return _response(200,resp)
             
     except Exception as e:
         resp = {'err': str(e)}

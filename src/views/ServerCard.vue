@@ -7,113 +7,99 @@
       {{ errorMsg }}
     </v-alert>
     <v-card class="my-8 pa-2">
-      <v-list-item>
-        <v-list-item-content>
-          <v-list-item-title
-            class="text-h4"
-            v-if="
-              serversDict[serverId].name &&
-              serversDict[serverId].name.length > 2
-            "
-          >
-            {{ serversDict[serverId].name }}
-          </v-list-item-title>
-          <v-list-item-title class="text-h4" v-else>
-            {{ serverId }}
-          </v-list-item-title>
-          <v-list-item-subtitle
-            class="text-caption"
-            v-if="
-              serversDict[serverId].name &&
-              serversDict[serverId].name.length > 2
-            "
-            >{{ serverId }}
-          </v-list-item-subtitle>
-        </v-list-item-content>
-      </v-list-item>
-
-      <v-chip-group>
-        <v-chip color="gray" label outlined>
-          <v-icon left> developer_board </v-icon>
-          {{ serversDict[serverId].vCpus }} vCPU
-        </v-chip>
-
-        <v-chip color="gray" label outlined>
-          <v-icon left> sd_card </v-icon>
-          {{ serversDict[serverId].memSize / 1024 }} GB
-        </v-chip>
-
-        <v-chip color="gray" label outlined>
-          <v-icon left> album </v-icon>
-          {{ serversDict[serverId].diskSize }} GB
-        </v-chip>
-
+      <v-card-title class="text-h4">
+        {{ serverName }}
         <v-tooltip bottom>
           <template v-slot:activator="{ on, attrs }">
-        <v-chip 
-          v-bind="attrs"
-          v-on="on"
-          color="gray" 
-          label 
-          outlined>
-          <v-icon left> schedule </v-icon>
-          {{ (serversDict[serverId].runningMinutes/60).toFixed(1) }} hours
-        </v-chip>
-        </template>
-        <span>Approximate number. Not for billing purpose</span>
+            <v-btn text v-bind="attrs" v-on="on" @click="addUserDialog = true">
+              <v-icon> person_add </v-icon>
+            </v-btn>
+          </template>
+          <span> Add user to Start/Stop Server</span>
         </v-tooltip>
-      </v-chip-group>
+      </v-card-title>
+      <v-card-subtitle class="text-caption">{{ serverId }} </v-card-subtitle>
 
-      <v-divider class="mx-4" vertical></v-divider>
+      <v-card-text>
+        <v-chip-group>
+          <v-chip color="gray" label outlined>
+            <v-icon left> developer_board </v-icon>
+            {{ serversDict[serverId].vCpus }} vCPU
+          </v-chip>
 
-      <v-row>
-        <v-col cols="4">
-          <v-text-field
-            id="publicIp"
-            dense
-            label="Public IP"
-            :value="serversDict[serverId].publicIp"
-            append-icon="content_copy"
-            :hint="serversDict[serverId].state"
-            persistent-hint
-            outlined
-            readonly
-          >
-            <v-icon
-              large
-              @click="serverStateConfirmation = true"
-              slot="prepend"
-              v-bind:color="
-                serversDict[serverId].state === 'stopped'
-                  ? 'error'
-                  : serversDict[serverId].state === 'running'
-                  ? 'success'
-                  : 'warning'
-              "
+          <v-chip color="gray" label outlined>
+            <v-icon left> sd_card </v-icon>
+            {{ serversDict[serverId].memSize / 1024 }} GB
+          </v-chip>
+
+          <v-chip color="gray" label outlined>
+            <v-icon left> album </v-icon>
+            {{ serversDict[serverId].diskSize }} GB
+          </v-chip>
+
+          <v-tooltip bottom>
+            <template v-slot:activator="{ on, attrs }">
+              <v-chip v-bind="attrs" v-on="on" color="gray" label outlined>
+                <v-icon left> schedule </v-icon>
+                {{ (serversDict[serverId].runningMinutes / 60).toFixed(1) }}
+                hours
+              </v-chip>
+            </template>
+            <span>Approximate number. Not for billing purpose</span>
+          </v-tooltip>
+        </v-chip-group>
+
+        <v-divider class="mx-4" vertical></v-divider>
+
+        <v-row>
+          <v-col cols="4">
+            <v-text-field
+              id="publicIp"
+              dense
+              label="Public IP"
+              :value="serversDict[serverId].publicIp"
+              append-icon="content_copy"
+              :hint="serversDict[serverId].state"
+              persistent-hint
+              outlined
+              readonly
             >
-              mdi-power
-            </v-icon>
-          </v-text-field>
-          <v-card>
-            <apexchart
-              ref="users"
-              height="90"
-              :options="areaChartOptions"
-              :series="chartInit"
-            ></apexchart>
-          </v-card>
-        </v-col>
-        <v-col cols="8">
-          <v-card>
-            <apexchart
-              ref="lineChart"
-              height="150"
-              :options="lineChartOptions"
-              :series="chartInit"
-            ></apexchart>
-          </v-card>
-        </v-col>
-      </v-row>
+              <v-icon
+                large
+                @click="serverStateConfirmation = true"
+                slot="prepend"
+                v-bind:color="
+                  serversDict[serverId].state === 'stopped'
+                    ? 'error'
+                    : serversDict[serverId].state === 'running'
+                    ? 'success'
+                    : 'warning'
+                "
+              >
+                mdi-power
+              </v-icon>
+            </v-text-field>
+            <v-card>
+              <apexchart
+                ref="users"
+                height="90"
+                :options="areaChartOptions"
+                :series="chartInit"
+              ></apexchart>
+            </v-card>
+          </v-col>
+          <v-col cols="8">
+            <v-card>
+              <apexchart
+                ref="lineChart"
+                height="150"
+                :options="lineChartOptions"
+                :series="chartInit"
+              ></apexchart>
+            </v-card>
+          </v-col>
+        </v-row>
+      </v-card-text>
 
       <v-list>
         <v-list-item>
@@ -134,11 +120,39 @@
       </v-list>
     </v-card>
 
+    <v-dialog v-model="addUserDialog" persistent max-width="300px">
+      <v-card>
+        <v-card-title> Add user to start/stop </v-card-title>
+        <v-card-subtitle>
+          <strong>{{ serverName }}</strong>
+        </v-card-subtitle>
+        <v-card-text>
+          <v-container>
+            <v-row>
+              <v-text-field
+                dense
+                label="Email address"
+                v-model="addUserEmail"
+                suffix="@gmail.com"
+              ></v-text-field>
+            </v-row>
+          </v-container>
+        </v-card-text>
+        <v-card-actions>
+          <v-btn color="primary" text @click="triggerAction(addUserEmail + '#' + serverId,'adduser')"> Add </v-btn>
+          <v-btn color="warning" text @click="addUserDialog = false">
+            Cancel
+          </v-btn>          
+        </v-card-actions>        
+      </v-card>
+    </v-dialog>
+
     <v-dialog v-model="settingsDialog" persistent max-width="600px">
       <v-card>
-        <v-card-title>
-          <span class="text-h6">Initialization Commands</span>
-        </v-card-title>
+        <v-card-title> Initialization Commands </v-card-title>
+        <v-card-subtitle>
+          <strong>{{ serverName }}</strong>
+        </v-card-subtitle>
         <v-card-text>
           <v-container>
             <v-row>
@@ -174,50 +188,61 @@
 
     <v-dialog
       v-model="serverStateConfirmation"
-      hide-overlay
-      persistent
-      width="300"
+      max-width="300px"
     >
-      <v-card color="gray" dark>
-        <v-card-title>
-          Please confirm action:
-          <v-progress-linear color="white" class="mb-0"></v-progress-linear>
-        </v-card-title>
-        <v-card-actions>
-          <v-spacer></v-spacer>
-          <div v-if="serversDict[serverId].state == 'stopped'">
-            <v-btn
-              color="green darken-1"
-              text
-              @click="triggerServerState('start')"
-            >
-              Start
-            </v-btn>
-          </div>
-          <div v-else>
-            <v-btn
-              color="orange darken-1"
-              text
-              @click="triggerServerState('stop')"
-            >
-              Stop
-            </v-btn>
-            <v-btn
-              color="orange darken-1"
-              text
-              @click="triggerServerState('restart')"
-            >
-              ReStart
-            </v-btn>
-          </div>
+      <v-card>
+        <v-list-item two-line>
+            <v-list-item-content>
+              <v-list-item-title class="text-h6">
+                {{ serverName }}
+              </v-list-item-title>
+              <v-list-item-subtitle>Confirm actions: </v-list-item-subtitle>
+            </v-list-item-content>
+          </v-list-item>
+          <v-card-actions>
+            <div v-if="serversDict[serverId].state == 'stopped'">
+              <v-btn
+                color="success"
+                outlined
+                small
+                class="pa-2"
+                @click="triggerAction(this.serverId,'start')"
+              >
+                Start
+              </v-btn>
+            </div>
+            <div v-else>
+              <v-btn
+                color="warning"
+                outlined
+                small
+                @click="triggerAction(this.serverId, 'stop')"
+              >
+                Stop 
+              </v-btn>
 
-          <v-btn
-            color="gray darken-1"
-            text
-            @click="serverStateConfirmation = false"
-          >
-            Cancel
-          </v-btn>
+              <span> &nbsp; </span>
+
+              <v-btn
+                color="warning"
+                outlined
+                small
+                @click="triggerAction(this.serverId,'restart')"
+              >
+                ReStart
+              </v-btn>
+            </div>
+
+            <v-spacer></v-spacer>
+
+            <v-btn
+              color="gray darken-1"
+              outlined
+              small
+              @click="serverStateConfirmation = false"
+            >
+              Cancel
+            </v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -270,6 +295,8 @@ export default {
       isWorkingDirEdit: false,
       successAlert: false,
       infoMsg: null,
+      addUserEmail: null,
+      addUserDialog: false,
       chartInit: [
         {
           data: [],
@@ -349,6 +376,16 @@ export default {
     ...mapState({
       serversDict: (state) => state.general.serversDict,
     }),
+    serverName() {
+      if (
+        this.serversDict[this.serverId].name &&
+        this.serversDict[this.serverId].name.length > 2
+      ) {
+        return this.serversDict[this.serverId].name;
+      } else {
+        return this.serverId;
+      }
+    },
   },
   methods: {
     toggleEdit(param) {
@@ -367,11 +404,12 @@ export default {
         this.runCommand = this.serversDict[this.serverId].runCommand;
       }
     },
-    async triggerServerState(state) {
+    async triggerAction(id, action) {
       this.serverStateConfirmation = false;
+      this.addUserDialog = false;
       const input = {
-        id: this.serverId,
-        action: state,
+        id: id,
+        action: action,
       };
       const actionResult = await API.graphql({
         query: triggerServerAction,
@@ -381,12 +419,13 @@ export default {
       const rsp = JSON.parse(actionResult.data.triggerServerAction);
 
       if (rsp.statusCode == 200) {
-        this.infoMsg = "Server action: " + state + " successfully initiated.";
+        this.infoMsg = "Server action: " + action + " successfully initiated.";
         this.successAlert = true;
       } else {
         this.errorMsg = rsp.body.err;
         this.errorAlert = true;
       }
+      
     },
     updateCharts() {
       this.$nextTick(() => {
@@ -398,7 +437,7 @@ export default {
               : [],
           },
           {
-            name: "Network",
+            name: "NetworkOut",
             data: this.serversDict[this.serverId].networkStats
               ? this.serversDict[this.serverId].networkStats
               : [],
@@ -417,7 +456,7 @@ export default {
             data: this.serversDict[this.serverId].activeUsers
               ? this.serversDict[this.serverId].activeUsers
               : [],
-          }
+          },
         ]);
       });
     },

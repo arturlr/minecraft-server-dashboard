@@ -14,6 +14,7 @@ const oauth = {
   redirectSignOut: `${window.location.origin}/`,
   responseType: aws_exports.oauth.responseType
 };
+//https://github.com/aws-amplify/amplify-cli/issues/2792
 
 var configUpdate = aws_exports;
 configUpdate.oauth = oauth;

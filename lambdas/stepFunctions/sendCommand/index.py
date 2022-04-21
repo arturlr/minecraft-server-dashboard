@@ -5,41 +5,27 @@ import os
 import json
 import time
 from datetime import datetime
+from helpers import utils
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-ec2_client = boto3.client('ec2')
+utl = utils.Utils()
+
 ssm = boto3.client('ssm')
 appValue = os.getenv('appValue')
-
-def getSsmParam(paramKey, isEncrypted=False):
-    try:
-        ssmResult = ssm.get_parameter(
-            Name=paramKey,
-            WithDecryption=isEncrypted
-        )
-
-        if (ssmResult["ResponseMetadata"]["HTTPStatusCode"] == 200):
-            return ssmResult["Parameter"]["Value"]
-        else:
-            return ""
-
-    except Exception as e:
-        logger.warning(str(e) + " for " + paramKey)
-        return ""
 
 def handler(event, context):
     try:   
         instanceId = event["instanceId"]
 
-        runCommand = getSsmParam("/amplify/minecraftserverdashboard/" + instanceId + "/runCommand")
-        if runCommand == "":
-            runCommand = getSsmParam("/amplify/minecraftserverdashboard/default/runCommand")
+        runCommand = utl.getSsmParam("/amplify/minecraftserverdashboard/" + instanceId + "/runCommand")
+        if runCommand == None:
+            runCommand = utl.getSsmParam("/amplify/minecraftserverdashboard/default/runCommand")
 
-        workingDir = getSsmParam("/amplify/minecraftserverdashboard/" + instanceId + "/workingDir")
+        workingDir = utl.getSsmParam("/amplify/minecraftserverdashboard/" + instanceId + "/workingDir")
         if workingDir == "":
-            workingDir = getSsmParam("/amplify/minecraftserverdashboard/default/workingDir")
+            workingDir = utl.getSsmParam("/amplify/minecraftserverdashboard/default/workingDir")
         
         ssm_rsp = ssm.send_command(
             InstanceIds=[instanceId],

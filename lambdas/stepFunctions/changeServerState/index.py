@@ -6,9 +6,12 @@ import json
 import time
 from base64 import b64encode
 from datetime import datetime, timezone, timedelta
+from helpers import utils
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
+
+utl = utils.Utils()
 
 ec2_client = boto3.client('ec2')
 cw_client = boto3.client('cloudwatch')
@@ -16,39 +19,6 @@ appValue = os.getenv('appValue')
 
 session = boto3.session.Session()
 awsRegion = session.region_name
-
-def describeInstances(name,value):
-    if name == 'id':
-         response = ec2_client.describe_instances(
-                InstanceIds=[value]
-                    )
-    elif name == 'email':
-        filters = [
-            {"Name":"tag:App", "Values":[ appValue ]}
-            #{"Name":"tag:User", "Values":[ value ]}
-        ]
-        response =  ec2_client.describe_instances(
-            Filters=filters            
-        )
-
-    # checking response
-    if (len(response["Reservations"])) == 0:
-        logger.error("No Instances Found")
-        return []
-    else:
-        return response["Reservations"]
-            
-def describeInstanceStatus(instanceId):
-    statusRsp = ec2_client.describe_instance_status(InstanceIds=[instanceId])
-
-    if (len(statusRsp["InstanceStatuses"])) == 0:
-        return { 'instanceStatus': "Fail", 'systemStatus': "Fail" }
-    
-    instanceStatus = statusRsp["InstanceStatuses"][0]["InstanceStatus"]["Status"]
-    systemStatus = statusRsp["InstanceStatuses"][0]["SystemStatus"]["Status"]
-        
-    return { 'instanceStatus': instanceStatus, 'systemStatus': systemStatus }
-
 
 def updateAlarm(instanceId):
     logger.info("updateAlarm: " + instanceId )
@@ -83,13 +53,13 @@ def handler(event, context):
         else:
             steps = 0
 
-        instanceInfo = describeInstances('id',instanceId)
+        instanceInfo = utl.describeInstances('id',instanceId)
 
         launchTime = instanceInfo[0]["Instances"][0]["LaunchTime"]            
         state = instanceInfo[0]["Instances"][0]["State"]["Name"]
 
         if action == "start":
-            instanceStatus = describeInstanceStatus(instanceId)
+            instanceStatus = utl.describeInstanceStatus(instanceId)
             IsInstanceReady = False
             if instanceStatus["instanceStatus"] == "ok" and instanceStatus["systemStatus"] == "ok":
                 IsInstanceReady = True
