@@ -21,34 +21,4 @@ $ curl -H 'x-api-key: <API KEY>' -d '{"query":"query {...}"}' <API URL>
 
 curl -XPOST -H "Content-Type:application/graphql" -d '{ "query": "mutation CreateServerMetric($input: CreateServerMetricInput!) {CreateServerMetric(input: $input) {id,serverId,state,launchTime,publicIp,instanceStatus,systemStatus,cpu,network,activeUsers}"}' https://gtjfoqwjbvdv7jq5ie3kasoi4u.appsync-api.us-west-2.amazonaws.com/graphql
 
-
-subscription OnPutServerMetric {
-  onPutServerMetric {
-    id
-    activeUsers
-    cpuStats
-    memStats
-    networkStats
-  }
-}
-
-
-subscription OnChangeServerInfo {
-  onChangeServerInfo {
-    id
-    diskSize
-    instanceStatus
-    launchTime
-    memSize
-    publicIp
-    name
-    runCommand
-    runningMinutes
-    state
-    systemStatus
-    type
-    userEmail
-    vCpus
-    workingDir
-  }
-}  
+  
