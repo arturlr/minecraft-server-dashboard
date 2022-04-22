@@ -147,7 +147,7 @@
       </v-card>
     </v-dialog>
 
-    <v-dialog v-model="settingsDialog" persistent max-width="600px">
+    <v-dialog v-model="settingsDialog" max-width="600px">
       <v-card>
         <v-card-title> Initialization Commands </v-card-title>
         <v-card-subtitle>
@@ -170,7 +170,7 @@
             <v-row>
               <v-text-field
                 dense
-                :prepend-inner-icon="isWorkingDirEdit ? 'save' : 'edit'"
+                :prepend-icon="isWorkingDirEdit ? 'save' : 'edit'" 
                 v-model="workingDir"
                 label="Minecraft working directory"
                 :readonly="isWorkingDirEdit === false"
@@ -394,24 +394,35 @@ export default {
   methods: {
     async actionField(action,param) {
       if (param == "runCommand") {
+        if (action == 'edit' && this.isRunCommandEdit == true) {
+          action = 'save'
+        }
         this.isRunCommandEdit = !this.isRunCommandEdit;
+        
         switch(action) {
           case 'cancel':
             this.runCommand = this.serversDict[this.serverId].runCommand;
             break;
           case 'save':
-            await this.triggerAction('addparameter','/amplify/minecraftserverdashboard/' + this.serverId +'/runCommand',this.runCommand);
+            if (this.runCommand != this.serversDict[this.serverId].runCommand) {
+              await this.triggerAction('addparameter','/amplify/minecraftserverdashboard/' + this.serverId +'/runCommand',this.runCommand);
+            }
             break;
         }
       }
       else if (param == "workingDir") {
+        if (action == 'edit' && this.isWorkingDirEdit == true) {
+          action = 'save'
+        }
         this.isWorkingDirEdit = !this.isWorkingDirEdit;
         switch(action) {
           case 'cancel':
             this.workingDir = this.serversDict[this.serverId].workingDir;
             break;
           case 'save':
-            await this.triggerAction('addparameter','/amplify/minecraftserverdashboard/' + this.serverId +'/workingDir',this.workingDir);
+            if (this.workingDir != this.serversDict[this.serverId].workingDir) {
+              await this.triggerAction('addparameter','/amplify/minecraftserverdashboard/' + this.serverId +'/workingDir',this.workingDir);
+            }
             break;
         }
       }
@@ -419,8 +430,9 @@ export default {
     async triggerAction(action, paramKey="", paramValue="") {
       this.serverStateConfirmation = false;
       this.addUserDialog = false;
+      console.log(paramValue)
       const input = {
-        instance: this.serverId,
+        instanceId: this.serverId,
         action: action,
         paramKey: paramKey,
         paramValue: paramValue

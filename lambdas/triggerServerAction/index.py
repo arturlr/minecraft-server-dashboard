@@ -209,6 +209,7 @@ def handler(event, context):
         #
         # Action Processing
         #
+        logger.info(action)
         if action == "adduser":
             # get only prefix if user provided @ accidently and add the gmail suffix
             gmailAccount = paramValue.split("@")[0] + '@gmail.com'
@@ -218,14 +219,15 @@ def handler(event, context):
             else:
                 return _response(500,resp)
 
-        elif action == "addparamenter":
+        elif action == "addparameter":
             response = ssm.put_parameter(
                 Name=paramKey,
-                Value=paramValue
+                Value=paramValue,
+                Type='String',
+                Overwrite=True
             )
 
-            resp = {"msg" : "updated version: " + response["version"]}
-
+            resp = {"msg" : "Parameter save"}
             return _response(200,resp)
 
         else:
@@ -234,7 +236,6 @@ def handler(event, context):
                 stateMachineArn=sftArn,
                 input='{\"instanceId\" : \"' + instanceId + '\", \"action\" : \"' + action + '\"}'
             )
-
             resp = {"msg" : sfn_rsp["executionArn"]}
 
             return _response(200,resp)
