@@ -139,7 +139,7 @@
           </v-container>
         </v-card-text>
         <v-card-actions>
-          <v-btn color="primary" text @click="triggerAction(addUserEmail + '#' + serverId,'adduser')"> Add </v-btn>
+          <v-btn color="primary" text @click="triggerAction('adduser','email',addUserEmail)"> Add </v-btn>
           <v-btn color="warning" text @click="addUserDialog = false">
             Cancel
           </v-btn>          
@@ -158,22 +158,25 @@
             <v-row>
               <v-text-field
                 dense
-                :prepend-icon="isRunCommandEdit ? 'save' : 'edit'"
-                @click:prepend="toggleEdit('runCommand')"
+                :prepend-icon="isRunCommandEdit ? 'save' : 'edit'"                
                 v-model="runCommand"
                 label="Minecraft run command"
                 :readonly="isRunCommandEdit === false"
-                @keyup.enter="doneEdit($event)"
-                @keyup.esc="cancelEdit('runCommand')"
+                @click:prepend="actionField('edit','runCommand')"
+                @keyup.enter="actionField('save','runCommand')"
+                @keyup.esc="actionField('cancel','runCommand')"
               ></v-text-field>
             </v-row>
             <v-row>
               <v-text-field
                 dense
                 :prepend-inner-icon="isWorkingDirEdit ? 'save' : 'edit'"
-                v-model="serversDict[serverId].workingDir"
+                v-model="workingDir"
                 label="Minecraft working directory"
                 :readonly="isWorkingDirEdit === false"
+                @click:prepend="actionField('edit','workingDir')"
+                @keyup.enter="actionField('save','workingDir')"
+                @keyup.esc="actionField('cancel','workingDir')"
               ></v-text-field>
             </v-row>
           </v-container>
@@ -206,7 +209,7 @@
                 outlined
                 small
                 class="pa-2"
-                @click="triggerAction(this.serverId,'start')"
+                @click="triggerAction('start')"
               >
                 Start
               </v-btn>
@@ -216,7 +219,7 @@
                 color="warning"
                 outlined
                 small
-                @click="triggerAction(this.serverId, 'stop')"
+                @click="triggerAction('stop')"
               >
                 Stop 
               </v-btn>
@@ -227,7 +230,7 @@
                 color="warning"
                 outlined
                 small
-                @click="triggerAction(this.serverId,'restart')"
+                @click="triggerAction('restart')"
               >
                 ReStart
               </v-btn>
@@ -363,6 +366,7 @@ export default {
     if (this.$route.params) {
       this.serverId = this.$route.params.id;
       this.runCommand = this.serversDict[this.serverId].runCommand;
+      this.workingDir = this.serversDict[this.serverId].workingDir;
       this.subscribePutServerMetric();
     }
   },
@@ -388,28 +392,38 @@ export default {
     },
   },
   methods: {
-    toggleEdit(param) {
+    async actionField(action,param) {
       if (param == "runCommand") {
         this.isRunCommandEdit = !this.isRunCommandEdit;
+        switch(action) {
+          case 'cancel':
+            this.runCommand = this.serversDict[this.serverId].runCommand;
+            break;
+          case 'save':
+            await this.triggerAction('addparameter','/amplify/minecraftserverdashboard/' + this.serverId +'/runCommand',this.runCommand);
+            break;
+        }
+      }
+      else if (param == "workingDir") {
+        this.isWorkingDirEdit = !this.isWorkingDirEdit;
+        switch(action) {
+          case 'cancel':
+            this.workingDir = this.serversDict[this.serverId].workingDir;
+            break;
+          case 'save':
+            await this.triggerAction('addparameter','/amplify/minecraftserverdashboard/' + this.serverId +'/workingDir',this.workingDir);
+            break;
+        }
       }
     },
-    doneEdit(param) {
-      if (param == "runCommand") {
-        this.isRunCommandEdit = !this.isRunCommandEdit;
-      }
-    },
-    cancelEdit(param) {
-      if (param == "runCommand") {
-        this.isRunCommandEdit = !this.isRunCommandEdit;
-        this.runCommand = this.serversDict[this.serverId].runCommand;
-      }
-    },
-    async triggerAction(id, action) {
+    async triggerAction(action, paramKey="", paramValue="") {
       this.serverStateConfirmation = false;
       this.addUserDialog = false;
       const input = {
-        id: id,
+        instance: this.serverId,
         action: action,
+        paramKey: paramKey,
+        paramValue: paramValue
       };
       const actionResult = await API.graphql({
         query: triggerServerAction,

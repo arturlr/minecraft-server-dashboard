@@ -84,9 +84,11 @@ input ServerInfoInput {
   runningMinutes: String
 }
 
-input ServerActionInput {
-  id: String!
+input ServerActionInput {  
   action: String!
+  instanceId: String!
+  paramKey: String
+  paramValue: String
 }
 
 type LoginAudit @model @auth(rules: [{ allow: private }])

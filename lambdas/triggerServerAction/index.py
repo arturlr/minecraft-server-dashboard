@@ -15,12 +15,15 @@ logger.setLevel(logging.INFO)
 utl = utils.Utils()
 appValue = os.getenv('appValue')
 
+ssm = boto3.client('ssm')
 sfn = boto3.client('stepfunctions')
 cognito_idp = boto3.client('cognito-idp')
 
 sftArn = os.getenv('StepFunctionsArn')
 botoSession = boto3.session.Session()
 awsRegion = botoSession.region_name
+
+adminEmail = utl.getSsmParam('/amplify/minecraftserverdashboard/adminemail')
 
 def _response(status_code, body, headers={}):
     if bool(headers): # Return True if dictionary is not empty # use json.dumps for body when using with API GW
@@ -64,38 +67,36 @@ def _is_token_valid(token, keys):
     # now we can use the claims
     return claims
 
-def _check_cognito_group(instanceId, poolId):
+def _group_exists(instanceId, poolId):
     try:
         grpRsp = cognito_idp.get_group(
                 GroupName=instanceId,
                 UserPoolId=poolId
             )
 
-        return "continue"
+        return True
         
     except cognito_idp.exceptions.ResourceNotFoundException:
-        try:
-            grpRsp = cognito_idp.create_group(
-                GroupName=instanceId,
-                UserPoolId=poolId,
-                Description='Minecraft Dashboard'
-            )
-    
-            return "initialize"
+        logger.warning("Group " + instanceId + " does not exist.")
+        return False
             
-        except Exception as e:
+def _create_group(instanceId, poolId):    
+    try:
+        grpRsp = cognito_idp.create_group(
+            GroupName=instanceId,
+            UserPoolId=poolId,
+            Description='Minecraft Dashboard'
+        )
+
+        return True
+
+    except Exception as e:
             logger.info("Exception create_group")
             logger.error(str(e))
-            return "fail" 
+            return False
         
-def _add_user_to_group(instanceId,poolId,userEmail=None):
+def _add_user_to_group(instanceId,poolId,userEmail):
         try:
-            if userEmail == None:
-                userEmail = utl.getSsmParam('/amplify/minecraftserverdashboard/adminemail')
-                if userEmail == None:
-                    logger.error("Unable to find admin user")
-                    return {"err": "Unable to find admin user" }
-
             user = cognito_idp.list_users(
                 UserPoolId=poolId,
                 Filter="email = '" + userEmail + "'"
@@ -151,60 +152,87 @@ def handler(event, context):
         Username=userName
     )
 
+    invokerEmail=""
+    for att in cog_user["UserAttributes"]:
+        if att["Name"] == "email":
+            invokerEmail = att["Value"]
+            break
+
     try:                 
-        id = event["arguments"]["input"]["id"]
-        action = event["arguments"]["input"]["action"]  
+        instanceId = event["arguments"]["input"]["instanceId"]
+        action = event["arguments"]["input"]["action"]
 
+        if 'paramKey' in event["arguments"]["input"]:
+            paramKey = event["arguments"]["input"]['paramKey']
+        else:
+            paramKey = None
+
+        if 'paramValue' in event["arguments"]["input"]:
+            paramValue = event["arguments"]["input"]['paramValue']
+        else:
+            paramValue = None
+
+        #
+        # Autorization Begin
+        #
+        authorized = False
+        cognitoGroups = event["identity"]["groups"] 
+        if cognitoGroups != None:       
+            for group in cognitoGroups:
+                if (group == instanceId):    
+                    authorized = True
+                    break
+
+        if authorized == False:        
+            logger.warning("Not Authorized per group")
+            if invokerEmail == adminEmail:
+                logger.info("Authorized as Admin")
+                authorized = True
+            
+        if authorized == False:
+            resp = {"err": 'User not authorized'}
+            return _response(401,resp)
+
+        #
+        # Group Checking and Creation
+        #
+        cogGrp = _group_exists(instanceId,iss.split("/")[3])
+        if cogGrp == False:
+            # Create Group
+            crtGrp = _create_group(instanceId,iss.split("/")[3])
+            if crtGrp:
+                # adding Admin Account to the group
+                resp = _add_user_to_group(instanceId,iss.split("/")[3],adminEmail)
+            else:
+                return _response(401,{"err": 'Cognito group creation failed'})
+
+        #
+        # Action Processing
+        #
         if action == "adduser":
-            emailPrefix = id.split("#")[0]
-            instanceId = id.split("#")[1]
-
             # get only prefix if user provided @ accidently and add the gmail suffix
-            gmailAccount = emailPrefix.split("@")[0] + '@gmail.com'
-
+            gmailAccount = paramValue.split("@")[0] + '@gmail.com'
             resp = _add_user_to_group(instanceId,iss.split("/")[3],gmailAccount)
-            if 'msg' in resp:
+            if 'msg' in  resp:
                 return _response(200,resp)
             else:
                 return _response(500,resp)
+
+        elif action == "addparamenter":
+            response = ssm.put_parameter(
+                Name=paramKey,
+                Value=paramValue
+            )
+
+            resp = {"msg" : "updated version: " + response["version"]}
+
+            return _response(200,resp)
+
         else:
-            cogGrp = _check_cognito_group(id,iss.split("/")[3])
-            logger.info(cogGrp)
-            if cogGrp == 'fail':
-                jsonMsg = {"err": 'Cognito groups failed'}
-                return _response(401,jsonMsg)
-            elif cogGrp == 'initialize':
-                resp = _add_user_to_group(id,iss.split("/")[3])
-                if 'msg' in  resp:
-                    jsonMsg = {"msg": 'Cognito Groups initialized. Please logout and log in back. '}
-                    return _response(200,jsonMsg)
-                else:
-                    return _response(500,resp)
-            elif cogGrp == "continue":
-                logger.info("Cognito Group already initialized")
-            else:
-                logger.error("Cognito Group - Unknow error")
-                jsonMsg = {"err": 'Cognito groups failed'}
-                return _response(401,jsonMsg)
-
-            authorized = False
-            cognitoGroups = event["identity"]["groups"] 
-            if cognitoGroups != None:       
-                for group in cognitoGroups:
-                    if (group == id):    
-                        authorized = True
-                        break
-
-            if authorized == False:        
-                logger.warning("Not Authorized" )
-                resp = {"err": 'User not authorized'}
-                return _response(401,resp)
-            
-            # Invoking Step-Functions
-
+            # Invoking Step-Functions to change EC2 Stage
             sfn_rsp = sfn.start_execution(
                 stateMachineArn=sftArn,
-                input='{\"instanceId\" : \"' + id + '\", \"action\" : \"' + action + '\"}'
+                input='{\"instanceId\" : \"' + instanceId + '\", \"action\" : \"' + action + '\"}'
             )
 
             resp = {"msg" : sfn_rsp["executionArn"]}

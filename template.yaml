@@ -23,10 +23,6 @@ Parameters:
     Type: String
     Description: Email (Gmail) that is going to be identified as the app admin
     AllowedPattern: '[^@]+@[^@]+\.[^@]+'
-  AppSyncUrl:
-    Type: String
-    Default: '{{ resolve:ssm:/amplify/minecraftserverdashboard/appsyncurl:1 }}'
-
     
 Globals:
   Function:
@@ -52,7 +48,7 @@ Resources:
     Properties:
       Name: /amplify/minecraftserverdashboard/default/workingDir
       Type: String
-      Value: !Ref AdminEmail
+      Value: !Ref MinecraftWorkingDir
       Description: The path where the Minecraft Server is running. There is an option at the app to customized it per instances
 
   MinecraftRunCommandParameter:
@@ -60,7 +56,7 @@ Resources:
     Properties:
       Name: /amplify/minecraftserverdashboard/default/runCommand
       Type: String
-      Value: !Ref AdminEmail
+      Value: !Ref MinecraftRunCommand
       Description: Default Minecraft run command. There is an option at the app to customized it per instances
 
   HelperLayer:
@@ -180,7 +176,7 @@ Resources:
         Variables:
           aplicationName: !Ref ProjectName
           appValue: !Ref AppValue
-          APPSYNC_URL: !Ref AppSyncUrl
+          APPSYNC_URL: '{{resolve:ssm:/amplify/minecraftserverdashboard/appsyncurl:1}}'
 
   ListServers:
     Type: AWS::Serverless::Function 
@@ -203,7 +199,7 @@ Resources:
         Variables:
           aplicationName: !Ref ProjectName
           appValue: !Ref AppValue
-          APPSYNC_URL: !Ref AppSyncUrl
+          APPSYNC_URL: '{{resolve:ssm:/amplify/minecraftserverdashboard/appsyncurl:1}}'
 
   GetMonthlyCost:
     Type: AWS::Serverless::Function 
@@ -225,7 +221,7 @@ Resources:
         Variables:
           aplicationName: !Ref ProjectName
           appValue: !Ref AppValue
-          APPSYNC_URL: !Ref AppSyncUrl
+          APPSYNC_URL: '{{resolve:ssm:/amplify/minecraftserverdashboard/appsyncurl:1}}'
 
 
   TriggerServerAction:
@@ -249,6 +245,12 @@ Resources:
           Statement:
             - Effect: Allow
               Action:
+                - ssm:PutParameter                
+              Resource: !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/amplify/minecraftserverdashboard*
+        - Version: '2012-10-17' # Policy Document
+          Statement:
+            - Effect: Allow
+              Action:
                 - cognito-idp:CreateGroup
                 - cognito-idp:AdminAddUserToGroup
               Resource: '*'
@@ -258,7 +260,7 @@ Resources:
           StepFunctionsArn: !Ref StateMachine
           aplicationName: !Ref ProjectName
           appValue: !Ref AppValue
-          APPSYNC_URL: !Ref AppSyncUrl
+          APPSYNC_URL: '{{resolve:ssm:/amplify/minecraftserverdashboard/appsyncurl:1}}'
 
   ChangeServerState:
     Type: AWS::Serverless::Function 
@@ -292,7 +294,7 @@ Resources:
         Variables:
           aplicationName: !Ref ProjectName
           appValue: !Ref AppValue
-          APPSYNC_URL: !Ref AppSyncUrl
+          APPSYNC_URL: '{{resolve:ssm:/amplify/minecraftserverdashboard/appsyncurl:1}}'
 
   SendCommand:
     Type: AWS::Serverless::Function 
@@ -320,7 +322,7 @@ Resources:
         Variables:
           aplicationName: !Ref ProjectName
           appValue: !Ref AppValue
-          APPSYNC_URL: !Ref AppSyncUrl
+          APPSYNC_URL: '{{resolve:ssm:/amplify/minecraftserverdashboard/appsyncurl:1}}'
 
   StateMachine:
     Type: AWS::Serverless::StateMachine
