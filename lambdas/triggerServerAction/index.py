@@ -74,6 +74,7 @@ def _group_exists(instanceId, poolId):
                 UserPoolId=poolId
             )
 
+        logger.info(grpRsp)
         return True
         
     except cognito_idp.exceptions.ResourceNotFoundException:
@@ -199,9 +200,11 @@ def handler(event, context):
         cogGrp = _group_exists(instanceId,iss.split("/")[3])
         if cogGrp == False:
             # Create Group
+            logger.warning("Group " + instanceId + " does not exit. Creating one.")
             crtGrp = _create_group(instanceId,iss.split("/")[3])
             if crtGrp:
                 # adding Admin Account to the group
+                logger.info("Group created. Now adding admin user to it.")
                 resp = _add_user_to_group(instanceId,iss.split("/")[3],adminEmail)
             else:
                 return _response(401,{"err": 'Cognito group creation failed'})
