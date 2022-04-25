@@ -73,12 +73,11 @@ def _group_exists(instanceId, poolId):
                 GroupName=instanceId,
                 UserPoolId=poolId
             )
-
-        logger.info(grpRsp)
+            
         return True
         
     except cognito_idp.exceptions.ResourceNotFoundException:
-        logger.warning("Group " + instanceId + " does not exist.")
+        logger.warning("Group does not exist.")
         return False
             
 def _create_group(instanceId, poolId):    
@@ -160,6 +159,7 @@ def handler(event, context):
             break
 
     try:                 
+        logger.info(event["arguments"]["input"])
         instanceId = event["arguments"]["input"]["instanceId"]
         action = event["arguments"]["input"]["action"]
 
@@ -183,13 +183,11 @@ def handler(event, context):
                 if (group == instanceId):    
                     authorized = True
                     break
-
-        if authorized == False:        
-            logger.warning("Not Authorized per group")
-            if invokerEmail == adminEmail:
-                logger.info("Authorized as Admin")
-                authorized = True
-            
+       
+        if invokerEmail == adminEmail:
+            logger.info("Authorized as Admin")
+            authorized = True
+        
         if authorized == False:
             resp = {"err": 'User not authorized'}
             return _response(401,resp)
@@ -212,7 +210,6 @@ def handler(event, context):
         #
         # Action Processing
         #
-        logger.info(action)
         if action == "adduser":
             # get only prefix if user provided @ accidently and add the gmail suffix
             gmailAccount = paramValue.split("@")[0] + '@gmail.com'

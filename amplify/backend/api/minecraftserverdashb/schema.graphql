@@ -23,7 +23,7 @@ type ServerMetric  @aws_iam @aws_cognito_user_pools {
   cpuStats: AWSJSON
   networkStats: AWSJSON
   memStats: AWSJSON
-  activeUsers: Int
+  activeUsers: AWSJSON
 }
 
 input ServerMetricInput {
@@ -31,7 +31,7 @@ input ServerMetricInput {
   cpuStats: AWSJSON
   networkStats: AWSJSON
   memStats: AWSJSON
-  activeUsers: Int
+  activeUsers: AWSJSON
 }
 
 type MonthlyCost @aws_iam @aws_cognito_user_pools {
