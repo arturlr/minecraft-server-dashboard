@@ -33,17 +33,23 @@
       <v-spacer></v-spacer>
       <v-toolbar-title>Minecraft Dashboard</v-toolbar-title>
       <v-spacer></v-spacer>
+
       <v-tooltip bottom>
         <template v-slot:activator="{ on, attrs }">
           <v-btn text color="warning" v-bind="attrs" v-on="on">
-            {{ fullName }}
+            <v-icon>account_circle</v-icon>
           </v-btn>
         </template>
         <span>{{ email }}</span>
       </v-tooltip>
-      <v-btn icon color="warning" @click="signOut">
+      <v-tooltip bottom>
+        <template v-slot:activator="{ on, attrs }">
+      <v-btn icon color="warning" @click="signOut" v-bind="attrs" v-on="on">
         <v-icon>mdi-export</v-icon>
       </v-btn>
+      </template>
+        <span>Logout</span>
+      </v-tooltip>
     </v-app-bar>
     <v-progress-linear
         v-if="isLoading"

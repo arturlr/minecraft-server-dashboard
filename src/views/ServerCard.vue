@@ -7,20 +7,11 @@
       {{ errorMsg }}
     </v-alert>
     <v-card class="my-8 pa-2">
-      <v-card-title class="text-h4">
+      <v-card-title class="text-h6">
         {{ serverName }}
-        <v-tooltip bottom>
-          <template v-slot:activator="{ on, attrs }">
-            <v-btn text v-bind="attrs" v-on="on" @click="addUserDialog = true;addUserEmail = null">
-              <v-icon> person_add </v-icon>
-            </v-btn>
-          </template>
-          <span> Add user to Start/Stop Server</span>
-        </v-tooltip>
       </v-card-title>
       <v-card-subtitle class="text-caption">{{ serverId }} </v-card-subtitle>
-
-      <v-card-text>
+  
         <v-chip-group>
           <v-chip color="gray" label outlined>
             <v-icon left> developer_board </v-icon>
@@ -52,7 +43,7 @@
         <v-divider class="mx-4" vertical></v-divider>
 
         <v-row>
-          <v-col cols="4">
+          <v-col md="auto" class="d-flex flex-column">
             <v-text-field
               id="publicIp"
               dense
@@ -88,7 +79,7 @@
               ></apexchart>
             </v-card>
           </v-col>
-          <v-col cols="8">
+          <v-col class="d-flex flex-column">
             <v-card>
               <apexchart
                 ref="lineChart"
@@ -99,14 +90,28 @@
             </v-card>
           </v-col>
         </v-row>
-      </v-card-text>
+
+        <v-card-actions>
+          <v-tooltip bottom>
+          <template v-slot:activator="{ on, attrs }">
+            <v-btn text v-bind="attrs" v-on="on" @click="settingsDialog = true">
+              <v-icon> settings </v-icon>
+            </v-btn>
+          </template>
+          <span> Configure Minecraft Server initialization command</span>
+        </v-tooltip>
+          <v-tooltip bottom>
+          <template v-slot:activator="{ on, attrs }">
+            <v-btn text v-bind="attrs" v-on="on" @click="addUserDialog = true;addUserEmail = null">
+              <v-icon> person_add </v-icon>
+            </v-btn>
+          </template>
+          <span> Add user to Start/Stop Server</span>
+        </v-tooltip>
+        </v-card-actions>
+      
 
       <v-list>
-        <v-list-item>
-          <v-btn depressed x-small @click="settingsDialog = true">
-            settings
-          </v-btn>
-        </v-list-item>
         <v-list-item two-line>
           <v-list-item-content>
             <v-list-item-title class="font-weight-light">
