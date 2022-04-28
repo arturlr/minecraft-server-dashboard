@@ -19,6 +19,7 @@ export const listServers = /* GraphQL */ `
       runCommand
       workingDir
       runningMinutes
+      groupMembers
     }
   }
 `;

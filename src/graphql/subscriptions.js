@@ -30,6 +30,7 @@ export const onChangeServerInfo = /* GraphQL */ `
       runCommand
       workingDir
       runningMinutes
+      groupMembers
     }
   }
 `;

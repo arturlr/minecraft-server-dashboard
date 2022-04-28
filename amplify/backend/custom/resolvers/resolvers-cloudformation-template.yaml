@@ -50,7 +50,8 @@ Resources:
               "systemStatus": $util.toJson($context.arguments.input.systemStatus),
               "workingDir": $util.toJson($context.arguments.input.workingDir),
               "runCommand": $util.toJson($context.arguments.input.runCommand),
-              "runningMinutes": $util.toJson($context.arguments.input.runningMinutes)
+              "runningMinutes": $util.toJson($context.arguments.input.runningMinutes),
+              "groupMembers": $util.toJson($context.arguments.input.groupMembers)
           }
         }
       ResponseMappingTemplate: $utils.toJson($ctx.result)

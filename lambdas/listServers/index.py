@@ -60,6 +60,19 @@ def _is_token_valid(token, keys):
     # now we can use the claims
     return claims
 
+def _group_exists(instanceId, poolId):
+    try:
+        grpRsp = cognito_idp.get_group(
+                GroupName=instanceId,
+                UserPoolId=poolId
+            )
+            
+        return True
+        
+    except cognito_idp.exceptions.ResourceNotFoundException:
+        logger.warning("Group does not exist.")
+        return False
+
 def extractStateEventTime(evt,previousState,instanceId):
     ctEvent = json.loads(evt['CloudTrailEvent'])
     if 'responseElements' in ctEvent:
@@ -216,6 +229,31 @@ def handler(event, context):
         
         runningMinutes = getInstanceHoursFromCloudTailEvents(instanceId)
 
+        groupMembers = []
+
+        cogGrp = _group_exists(instanceId,iss.split("/")[3])
+        if cogGrp:
+            response = cognito_idp.list_users_in_group(
+                UserPoolId=iss.split("/")[3],
+                GroupName=instanceId
+            )            
+            if len(response["Users"]) > 0:
+                for user in response["Users"]:            
+                    for att in user["Attributes"]:
+                        if att["Name"] == "email":
+                            email = att["Value"]
+                        elif att["Name"] == "sub":
+                            id = att["Value"]
+                        elif att["Name"] == "given_name":
+                            given_name = att["Value"]
+                        elif att["Name"] == "family_name":
+                            family_name = att["Value"]
+                    groupMembers.append({
+                        "id": id,
+                        "email": email,
+                        "fullname": given_name + ' ' + family_name                        
+                    })                        
+
         instanceArray.append({
             "id": instanceId,
             "name": instanceName,
@@ -231,7 +269,8 @@ def handler(event, context):
             "systemStatus": instanceStatus["systemStatus"].lower(),
             "runCommand": runCommand,
             "workingDir": workingDir,
-            "runningMinutes": runningMinutes
+            "runningMinutes": runningMinutes,
+            "groupMembers": groupMembers
         })
 
     return instanceArray 

@@ -11,7 +11,7 @@
                         "file_path": "/var/log/syslog",
                         "log_group_name": "/minecraft/syslog/{instance_id}"                    },
                     {
-                        "file_path": "/home/ubuntu/server/logs/latest.log",
+                        "file_path": "/opt/minecraft/server/logs/latest.log",
                         "log_group_name": "/minecraft/serverlog/{instance_id}"                    }
                 ]
             }

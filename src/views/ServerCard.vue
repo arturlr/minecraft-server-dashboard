@@ -120,23 +120,35 @@
       </v-list>
     </v-card>
 
-    <v-dialog v-model="addUserDialog" persistent max-width="300px">
+    <v-dialog v-model="addUserDialog" max-width="300px">
       <v-card>
         <v-card-title> Add user to start/stop </v-card-title>
         <v-card-subtitle>
           <strong>{{ serverName }}</strong>
         </v-card-subtitle>
         <v-card-text>
-          <v-container>
-            <v-row>
+          <v-row>
               <v-text-field
                 dense
                 label="Email address"
                 v-model="addUserEmail"
                 suffix="@gmail.com"
               ></v-text-field>
-            </v-row>
-          </v-container>
+          </v-row>
+          <v-row>
+              <v-list two-line>
+                <v-header>Current Members</v-header>
+                 <v-list-item
+                    v-for="user in groupMembers"
+                    :key="user.id"
+                  >
+                <v-list-item-content>
+                  <v-list-item-title v-text="user.fullname"></v-list-item-title>
+                  <v-list-item-subtitle v-text="user.email"></v-list-item-subtitle>
+                </v-list-item-content>
+                 </v-list-item>
+              </v-list>
+          </v-row>
         </v-card-text>
         <v-card-actions>
           <v-btn color="primary" text @click="triggerAction('adduser','email',addUserEmail)"> Add </v-btn>
@@ -366,7 +378,7 @@ export default {
     if (this.$route.params) {
       this.serverId = this.$route.params.id;
       this.runCommand = this.serversDict[this.serverId].runCommand;
-      this.workingDir = this.serversDict[this.serverId].workingDir;
+      this.workingDir = this.serversDict[this.serverId].workingDir;      
       this.subscribePutServerMetric();
     }
   },
@@ -380,6 +392,15 @@ export default {
     ...mapState({
       serversDict: (state) => state.general.serversDict,
     }),
+    groupMembers() {
+      if (this.serversDict[this.serverId].groupMembers && 
+          this.serversDict[this.serverId].groupMembers.length > 0) {
+            return JSON.parse(this.serversDict[this.serverId].groupMembers)
+          }
+      else {
+        return []
+      }    
+    },
     serverName() {
       if (
         this.serversDict[this.serverId].name &&
@@ -430,7 +451,6 @@ export default {
     async triggerAction(action, paramKey="", paramValue="") {
       this.serverStateConfirmation = false;
       this.addUserDialog = false;
-      console.log(paramValue)
       const input = {
         instanceId: this.serverId,
         action: action,
@@ -445,7 +465,7 @@ export default {
       const rsp = JSON.parse(actionResult.data.triggerServerAction);
 
       if (rsp.statusCode == 200) {
-        this.infoMsg = "Server action: " + action + " successfully initiated.";
+        this.infoMsg = "Server action: " + action + " done.";
         this.successAlert = true;
       } else {
         this.errorMsg = rsp.body.err;

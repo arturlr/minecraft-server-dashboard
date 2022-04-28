@@ -98,18 +98,23 @@ def getConnectUsers(instanceId,startTime):
                     queryId=queryRsp['queryId']
                 )
                 dtY = 0
+                dtX = ""
                 cdata = []
                 if data['status'] == 'Complete':
-                    for rec in data['results']:
-                        for dt in rec:
-                            if dt['field'] == 'bin(5m)':
-                                dtX = dt['value']
-                                continue
-                            elif dt['field'] == 't':
-                                dtY = dt['value']
-                        cdata.append({'y':dtY, 'x':dtX})
-                    data_points = sorted(cdata, key=lambda k : k['x'])
-                    return data_points
+                    if len(data['results']) > 0:
+                        for rec in data['results']:
+                            for dt in rec:
+                                if dt['field'] == 'bin(5m)':
+                                    dtX = dt['value']
+                                    continue
+                                elif dt['field'] == 't':
+                                    dtY = dt['value']
+                            cdata.append({'y':dtY, 'x':dtX})
+                        data_points = sorted(cdata, key=lambda k : k['x'])
+                        print(data_points)                    
+                        return data_points
+                    else:
+                        return "[]"
                 elif data['status'] == 'Scheduled' or data['status'] == 'Running':
                     sleep(5)
                     timeCount = timeCount + 1
@@ -124,12 +129,12 @@ def getConnectUsers(instanceId,startTime):
                 raise Exception("Query status: Timeout")
             else:
                 logger.error("start_query: No Data.")
-                return 0
+                return "[]"
 
 
     except Exception as e:
         logger.error("start_query: " + str(e) + " occurred.")
-        return 0
+        return "[]"
 
 def getMetricData(instanceId,nameSpace,metricName,unit,statType,startTime,EndTime,period):
     cdata = []

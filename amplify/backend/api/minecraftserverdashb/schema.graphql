@@ -64,6 +64,7 @@ type ServerInfo @aws_iam @aws_cognito_user_pools {
   runCommand: String
   workingDir: String
   runningMinutes: String
+  groupMembers: AWSJSON
 }
 
 input ServerInfoInput {
@@ -82,6 +83,7 @@ input ServerInfoInput {
   runCommand: String
   workingDir: String
   runningMinutes: String
+  groupMembers: AWSJSON
 }
 
 input ServerActionInput {  
