@@ -8,7 +8,7 @@
       <v-list-item three-line>
         <v-list-item-content>
           <div class="text-overline mb-4">
-            Rodrigues' Minecraft Management 
+            Minecraft Dashboard by GeckoByte 
           </div>
           <v-list-item-subtitle>This application requires you to login using your Google Account.</v-list-item-subtitle>
         </v-list-item-content>
