@@ -31,25 +31,43 @@
       </v-tooltip>
       </div>
       <v-spacer></v-spacer>
-      <v-toolbar-title>Minecraft Dashboard</v-toolbar-title>
+      <v-toolbar-title v-if="!isMobile">Minecraft Dashboard</v-toolbar-title>
+      <v-toolbar-title v-else>MD</v-toolbar-title>
       <v-spacer></v-spacer>
 
-      <v-tooltip bottom>
-        <template v-slot:activator="{ on, attrs }">
-          <v-btn text color="warning" v-bind="attrs" v-on="on">
-            <v-icon>account_circle</v-icon>
-          </v-btn>
-        </template>
-        <span>{{ email }}</span>
-      </v-tooltip>
-      <v-tooltip bottom>
-        <template v-slot:activator="{ on, attrs }">
-      <v-btn icon color="warning" @click="signOut" v-bind="attrs" v-on="on">
-        <v-icon>mdi-export</v-icon>
-      </v-btn>
+      <v-menu
+        bottom
+        min-width="200px"
+        rounded
+        offset-y
+      >
+      <template v-slot:activator="{ on }">
+            <v-btn text color="warning" v-on="on">
+              <v-icon>account_circle</v-icon>
+            </v-btn>
       </template>
-        <span>Logout</span>
-      </v-tooltip>
+        <v-card>
+          <v-list-item-content class="justify-center">
+            <div class="mx-auto text-center">
+              <h3>{{ fullName }}</h3>
+              <p class="text-caption mt-1">
+                {{ email }}
+              </p>
+
+              <v-divider class="my-3"></v-divider>
+                    <v-tooltip bottom>
+                <template v-slot:activator="{ on, attrs }">
+              <v-btn icon color="warning" @click="signOut" v-bind="attrs" v-on="on">
+                <v-icon>mdi-export</v-icon>
+              </v-btn>
+              </template>
+                <span>Logout</span>
+              </v-tooltip>
+            </div>
+          </v-list-item-content>
+        </v-card>
+      </v-menu>
+
     </v-app-bar>
     <v-progress-linear
         v-if="isLoading"
@@ -95,6 +113,9 @@ export default {
       email: "profile/email",
       fullName: "profile/fullName",
     }),
+    isMobile() {
+      return this.$vuetify.breakpoint.xsOnly;
+    },
   },
   methods: {
     async signOut() {

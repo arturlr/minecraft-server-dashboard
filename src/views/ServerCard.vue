@@ -11,8 +11,11 @@
         {{ serverName }}
       </v-card-title>
       <v-card-subtitle class="text-caption">{{ serverId }} </v-card-subtitle>
-  
-        <v-chip-group>
+      <v-card-text>
+        <v-row>
+        <v-chip-group
+          column
+        >
           <v-chip color="gray" label outlined>
             <v-icon left> developer_board </v-icon>
             {{ serversDict[serverId].vCpus }} vCPU
@@ -30,7 +33,7 @@
 
           <v-tooltip bottom>
             <template v-slot:activator="{ on, attrs }">
-              <v-chip v-bind="attrs" v-on="on" color="gray" label outlined>
+              <v-chip v-if="!isMobile" v-bind="attrs" v-on="on" color="gray" label outlined>
                 <v-icon left> schedule </v-icon>
                 {{ (serversDict[serverId].runningMinutes / 60).toFixed(1) }}
                 hours
@@ -38,9 +41,10 @@
             </template>
             <span>Approximate number. Not for billing purpose</span>
           </v-tooltip>
+          
         </v-chip-group>
+        </v-row>
 
-        <v-divider class="mx-4" vertical></v-divider>
 
         <v-row>
           <v-col md="auto" class="d-flex flex-column">
@@ -79,7 +83,17 @@
               ></apexchart>
             </v-card>
           </v-col>
-          <v-col class="d-flex flex-column">
+          <div v-if="isMobile">
+            <v-card>
+              <apexchart
+                ref="lineChart"
+                height="150"
+                :options="lineChartOptions"
+                :series="chartInit"
+              ></apexchart>
+              </v-card>
+          </div>           
+          <v-col v-else class="d-flex flex-column">
             <v-card>
               <apexchart
                 ref="lineChart"
@@ -90,6 +104,7 @@
             </v-card>
           </v-col>
         </v-row>
+      </v-card-text>
 
         <v-card-actions>
           <v-tooltip bottom>
@@ -415,6 +430,9 @@ export default {
       } else {
         return this.serverId;
       }
+    },
+    isMobile() {
+      return this.$vuetify.breakpoint.xsOnly;
     },
   },
   methods: {
