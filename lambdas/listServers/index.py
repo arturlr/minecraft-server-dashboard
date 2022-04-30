@@ -218,14 +218,6 @@ def handler(event, context):
         volume = ec2.Volume(instance["Instances"][0]["BlockDeviceMappings"][0]["Ebs"]["VolumeId"])
 
         instanceStatus = utl.describeInstanceStatus(instanceId)
-
-        runCommand = utl.getSsmParam("/amplify/minecraftserverdashboard/" + instanceId + "/runCommand")
-        if runCommand == None:
-            runCommand = utl.getSsmParam("/amplify/minecraftserverdashboard/default/runCommand")
-
-        workingDir = utl.getSsmParam("/amplify/minecraftserverdashboard/" + instanceId + "/workingDir")
-        if workingDir == None:
-            workingDir = utl.getSsmParam("/amplify/minecraftserverdashboard/default/workingDir")
         
         runningMinutes = getInstanceHoursFromCloudTailEvents(instanceId)
 
@@ -267,8 +259,6 @@ def handler(event, context):
             "publicIp": publicIp,            
             "instanceStatus": instanceStatus["instanceStatus"].lower(),
             "systemStatus": instanceStatus["systemStatus"].lower(),
-            "runCommand": runCommand,
-            "workingDir": workingDir,
             "runningMinutes": runningMinutes,
             "groupMembers": groupMembers
         })

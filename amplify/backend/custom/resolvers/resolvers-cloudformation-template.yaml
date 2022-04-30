@@ -48,8 +48,6 @@ Resources:
               "publicIp": $util.toJson($context.arguments.input.publicIp),
               "instanceStatus": $util.toJson($context.arguments.input.instanceStatus),
               "systemStatus": $util.toJson($context.arguments.input.systemStatus),
-              "workingDir": $util.toJson($context.arguments.input.workingDir),
-              "runCommand": $util.toJson($context.arguments.input.runCommand),
               "runningMinutes": $util.toJson($context.arguments.input.runningMinutes),
               "groupMembers": $util.toJson($context.arguments.input.groupMembers)
           }

@@ -27,8 +27,6 @@ export const onChangeServerInfo = /* GraphQL */ `
       publicIp
       instanceStatus
       systemStatus
-      runCommand
-      workingDir
       runningMinutes
       groupMembers
     }

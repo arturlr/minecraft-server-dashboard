@@ -109,7 +109,7 @@
         <v-card-actions>
           <v-tooltip bottom>
           <template v-slot:activator="{ on, attrs }">
-            <v-btn text v-bind="attrs" v-on="on" @click="settingsDialog = true">
+            <v-btn text v-bind="attrs" v-on="on" @click="onSettingsClick">
               <v-icon> settings </v-icon>
             </v-btn>
           </template>
@@ -180,15 +180,51 @@
     </v-dialog>
 
     <v-dialog v-model="settingsDialog" max-width="600px">
-      <v-card>
-        <v-card-title> Initialization Commands </v-card-title>
+      <v-card ref="settingsForm">
+        <v-card-title> Settings </v-card-title>
         <v-card-subtitle>
           <strong>{{ serverName }}</strong>
         </v-card-subtitle>
         <v-card-text>
           <v-container>
             <v-row>
+              <v-col
+                cols="12"
+                sm="6"
+              >
+                <v-select
+                  :items="['CPUUtilization', 'NetworkOut']"
+                  label="Metric"
+                  :rules="[rules.required]"
+                  dense
+                  v-model="alarmMetric"
+                  ref="alarmMetric"
+                ></v-select>
+              </v-col>
+              <v-col
+                cols="12"
+                sm="6"
+              >
+                <v-text-field   
+                  dense               
+                  label="Instance idle threshold."
+                  hint="%CPU or NetworkOut in 10K scale (22 = 22.000)"
+                  :rules="[rules.required, rules.onlyNumbers]"
+                  maxlength="2"
+                  v-model="alarmThreshold"
+                  ref="alarmThreshold"
+                ></v-text-field>
+              </v-col>
+
+            <v-col cols="12">
               <v-text-field
+                dense
+                v-model="runCommand"
+                ref="runCommand"
+                label="Minecraft run command"
+                :rules="[rules.required]"
+              ></v-text-field>
+              <!-- <v-text-field
                 dense
                 :prepend-icon="isRunCommandEdit ? 'save' : 'edit'"                
                 v-model="runCommand"
@@ -197,24 +233,52 @@
                 @click:prepend="actionField('edit','runCommand')"
                 @keyup.enter="actionField('save','runCommand')"
                 @keyup.esc="actionField('cancel','runCommand')"
-              ></v-text-field>
-            </v-row>
-            <v-row>
+              ></v-text-field> -->
+            </v-col>
+            <v-col cols="12">
               <v-text-field
                 dense
-                :prepend-icon="isWorkingDirEdit ? 'save' : 'edit'" 
                 v-model="workingDir"
+                ref="workingDir"
                 label="Minecraft working directory"
-                :readonly="isWorkingDirEdit === false"
-                @click:prepend="actionField('edit','workingDir')"
-                @keyup.enter="actionField('save','workingDir')"
-                @keyup.esc="actionField('cancel','workingDir')"
+                :rules="[rules.required]"
               ></v-text-field>
+            </v-col>
             </v-row>
           </v-container>
         </v-card-text>
         <v-card-actions>
-          <v-btn color="primary" text @click="settingsDialog = false">
+          <v-btn 
+            color="primary"
+            text
+            @click="submit"
+          >
+            Save
+          </v-btn>
+          <v-slide-x-reverse-transition>
+            <v-tooltip
+              v-if="settingsFormHasErrors"
+              right
+            >
+              <template v-slot:activator="{ on, attrs }">
+                <v-btn
+                  icon
+                  class="my-0"
+                  v-bind="attrs"
+                  @click="resetForm"
+                  v-on="on"
+                >
+                  <v-icon>mdi-refresh</v-icon>
+                </v-btn>
+              </template>
+              <span>Refresh form</span>
+            </v-tooltip>
+          </v-slide-x-reverse-transition>
+          <v-spacer></v-spacer>          
+          <v-btn 
+            text
+            @click="settingsDialog = false"
+          >
             Close
           </v-btn>
         </v-card-actions>
@@ -316,6 +380,14 @@ export default {
   },
   data() {
     return {
+      rules: {
+        required: value => !!value || 'Required.',
+        onlyNumbers: value => {
+          const pattern = /^[0-9]*$/
+          return pattern.test(value) || 'Threshold must be only 2 numbers.'
+        },
+
+      },
       serverId: null,
       copyDialog: false,
       serverStateConfirmation: false,
@@ -325,13 +397,14 @@ export default {
       errorMsg: "",
       settingsDialog: false,
       runCommand: null,
-      isRunCommandEdit: false,
       workingDir: null,
-      isWorkingDirEdit: false,
       successAlert: false,
       infoMsg: null,
       addUserEmail: null,
       addUserDialog: false,
+      alarmMetric: null,
+      alarmThreshold: 25,
+      settingsFormHasErrors: false,
       chartInit: [
         {
           data: [],
@@ -436,41 +509,53 @@ export default {
     },
   },
   methods: {
-    async actionField(action,param) {
-      if (param == "runCommand") {
-        if (action == 'edit' && this.isRunCommandEdit == true) {
-          action = 'save'
-        }
-        this.isRunCommandEdit = !this.isRunCommandEdit;
-        
-        switch(action) {
-          case 'cancel':
-            this.runCommand = this.serversDict[this.serverId].runCommand;
-            break;
-          case 'save':
-            if (this.runCommand != this.serversDict[this.serverId].runCommand) {
-              await this.triggerAction('addparameter','/amplify/minecraftserverdashboard/' + this.serverId +'/runCommand',this.runCommand);
-            }
-            break;
-        }
-      }
-      else if (param == "workingDir") {
-        if (action == 'edit' && this.isWorkingDirEdit == true) {
-          action = 'save'
-        }
-        this.isWorkingDirEdit = !this.isWorkingDirEdit;
-        switch(action) {
-          case 'cancel':
-            this.workingDir = this.serversDict[this.serverId].workingDir;
-            break;
-          case 'save':
-            if (this.workingDir != this.serversDict[this.serverId].workingDir) {
-              await this.triggerAction('addparameter','/amplify/minecraftserverdashboard/' + this.serverId +'/workingDir',this.workingDir);
-            }
-            break;
-        }
-      }
+    async onSettingsClick() { 
+
+        const rc = await this.triggerAction('getparameter','/amplify/minecraftserverdashboard/' + this.serverId +'/runCommand',this.runCommand);
+        console.log(rc)
+        const wd = await this.triggerAction('getparameter','/amplify/minecraftserverdashboard/' + this.serverId +'/workingDir',this.workingDir);
+        console.log(wd)
+        const am = await this.triggerAction('getparameter','/amplify/minecraftserverdashboard/' + this.serverId +'/alarmMetric',this.alarmMetric);
+        console.log(am)
+        const at = await this.triggerAction('getparameter','/amplify/minecraftserverdashboard/' + this.serverId +'/alarmThreshold',this.alarmThreshold);
+        console.log(at)
+
+        this.settingsDialog = true
     },
+     resetForm () {
+        this.settingsFormHasErrors = false
+
+        this.$refs.alarmMetric.reset();
+        this.$refs.alarmThreshold.reset();
+        this.$refs.runCommand.reset();
+        this.$refs.workingDir.reset();
+      },
+      async submit () {
+        this.settingsFormHasErrors = false
+
+        this.$refs.alarmMetric.validate();
+        this.$refs.alarmThreshold.validate();
+        this.$refs.runCommand.validate();
+        this.$refs.workingDir.validate();
+        if (this.$refs.alarmMetric.hasError || 
+            this.$refs.alarmThreshold.hasError ||
+            this.$refs.runCommand.hasError ||
+            this.$refs.workingDir.hasError
+            ) {
+            this.settingsFormHasErrors = true
+            return false;
+        }
+
+        if (this.alarmMetric == "NetworkOut") {
+          this.alarmThreshold = this.alarmThreshold * 10000;
+        }
+
+        await this.triggerAction('addparameter','/amplify/minecraftserverdashboard/' + this.serverId +'/runCommand',this.runCommand);
+        await this.triggerAction('addparameter','/amplify/minecraftserverdashboard/' + this.serverId +'/workingDir',this.workingDir);
+        await this.triggerAction('addparameter','/amplify/minecraftserverdashboard/' + this.serverId +'/alarmMetric',this.alarmMetric);
+        await this.triggerAction('addparameter','/amplify/minecraftserverdashboard/' + this.serverId +'/alarmThreshold',this.alarmThreshold);
+        
+      },
     async triggerAction(action, paramKey="", paramValue="") {
       this.serverStateConfirmation = false;
       this.addUserDialog = false;

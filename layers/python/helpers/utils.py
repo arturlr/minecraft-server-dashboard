@@ -33,6 +33,37 @@ class Utils:
             logger.warning(str(e) + " for " + paramKey)
             return None
 
+    def getSsmParameters(self, paramKeys, isEncrypted=False):
+        try:
+            ssmResult = ssm.get_parameters(
+                Name=paramKeys,
+                WithDecryption=isEncrypted
+            )
+
+            if (len(ssmResult["Parameters"]) > 0):
+                return ssmResult["Parameters"]
+            else:
+                return None
+
+        except Exception as e:
+            logger.warning(str(e) + " for " + paramKeys)
+            return None
+
+    def putSsmParam(self, paramKey, paramValue, paramType):
+        try:
+            ssmResult = ssm.put_parameter(
+                Name=paramKey,
+                Value=paramValue,
+                Type=paramType,
+                Overwrite=True
+            )
+
+            return ssmResult
+
+        except Exception as e:
+            logger.warning(str(e) + " for " + paramKey)
+            return None
+
     def describeInstances(self, name,value):
         if name == 'id':
             response = ec2_client.describe_instances(

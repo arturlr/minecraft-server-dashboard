@@ -61,8 +61,6 @@ type ServerInfo @aws_iam @aws_cognito_user_pools {
   publicIp: String
   instanceStatus: String
   systemStatus: String
-  runCommand: String
-  workingDir: String
   runningMinutes: String
   groupMembers: AWSJSON
 }
@@ -80,8 +78,6 @@ input ServerInfoInput {
   publicIp: String
   instanceStatus: String
   systemStatus: String
-  runCommand: String
-  workingDir: String
   runningMinutes: String
   groupMembers: AWSJSON
 }

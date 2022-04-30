@@ -219,16 +219,27 @@ def handler(event, context):
             else:
                 return _response(500,resp)
 
+        # ADD SSM PARAMETER
         elif action == "addparameter":
-            response = ssm.put_parameter(
-                Name=paramKey,
-                Value=paramValue,
-                Type='String',
-                Overwrite=True
-            )
-
-            resp = {"msg" : "Parameter save"}
+            response = utl.putSsmParam(paramKey,paramValue,'String')
+            resp = {"msg" : "Parameter saved"}
             return _response(200,resp)
+
+        # GET SSM PARAMETERS
+        elif action == "getparameters":
+            response = utl.getSsmParameters(paramKey)
+            if response != None:
+                return _response(200,response)
+            else:
+                return _response(500,{"err": "No parameters"})
+
+        # GET SSM PARAMETER
+        elif action == "getparameter":
+            response = utl.getSsmParam(paramKey)
+            if response != None:
+                return _response(200,response)
+            else:
+                return _response(500,{"err": "No parameters"})
 
         else:
             # Invoking Step-Functions to change EC2 Stage

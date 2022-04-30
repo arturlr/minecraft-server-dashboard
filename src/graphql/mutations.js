@@ -27,8 +27,6 @@ export const changeServerState = /* GraphQL */ `
       publicIp
       instanceStatus
       systemStatus
-      runCommand
-      workingDir
       runningMinutes
       groupMembers
     }

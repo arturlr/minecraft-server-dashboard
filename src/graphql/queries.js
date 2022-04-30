@@ -16,8 +16,6 @@ export const listServers = /* GraphQL */ `
       publicIp
       instanceStatus
       systemStatus
-      runCommand
-      workingDir
       runningMinutes
       groupMembers
     }

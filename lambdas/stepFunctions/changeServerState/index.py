@@ -20,14 +20,23 @@ appValue = os.getenv('appValue')
 session = boto3.session.Session()
 awsRegion = session.region_name
 
-def updateAlarm(instanceId):
-    logger.info("updateAlarm: " + instanceId )
+def updateAlarm(instanceId,metric,threshold):
+    logger.info("updateAlarm: " + instanceId)
+
+    alarmMetric = utl.getSsmParam("/amplify/minecraftserverdashboard/" + instanceId + "/alarmMetric")
+    if alarmMetric == None:
+        alarmMetric = "NetworkOut"
+
+    alarmThreshold = utl.getSsmParam("/amplify/minecraftserverdashboard/" + instanceId + "/alarmThreshold")
+    if alarmThreshold == None:
+        alarmThreshold = 25000
+
     cw_client.put_metric_alarm(
-        AlarmName=instanceId + "-" + "Minecraft-NetworkUtilization",
+        AlarmName=instanceId + "-" + "Minecraft-Server",
         ActionsEnabled=True,
         AlarmActions=["arn:aws:automate:" + awsRegion + ":ec2:stop"],
         InsufficientDataActions=[],
-        MetricName="NetworkOut",
+        MetricName=metric,
         Namespace="AWS/EC2",
         Statistic="Average",
         Dimensions=[
@@ -39,7 +48,7 @@ def updateAlarm(instanceId):
         Period=300,
         EvaluationPeriods=7,
         DatapointsToAlarm=7,
-        Threshold=25000,
+        Threshold=threshold,
         TreatMissingData="missing",
         ComparisonOperator="LessThanOrEqualToThreshold"   
     )
