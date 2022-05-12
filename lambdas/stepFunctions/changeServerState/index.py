@@ -20,7 +20,7 @@ appValue = os.getenv('appValue')
 session = boto3.session.Session()
 awsRegion = session.region_name
 
-def updateAlarm(instanceId,metric,threshold):
+def updateAlarm(instanceId):
     logger.info("updateAlarm: " + instanceId)
 
     alarmMetric = utl.getSsmParam("/amplify/minecraftserverdashboard/" + instanceId + "/alarmMetric")
@@ -36,7 +36,7 @@ def updateAlarm(instanceId,metric,threshold):
         ActionsEnabled=True,
         AlarmActions=["arn:aws:automate:" + awsRegion + ":ec2:stop"],
         InsufficientDataActions=[],
-        MetricName=metric,
+        MetricName=alarmMetric,
         Namespace="AWS/EC2",
         Statistic="Average",
         Dimensions=[
@@ -48,7 +48,7 @@ def updateAlarm(instanceId,metric,threshold):
         Period=300,
         EvaluationPeriods=7,
         DatapointsToAlarm=7,
-        Threshold=threshold,
+        Threshold=alarmThreshold,
         TreatMissingData="missing",
         ComparisonOperator="LessThanOrEqualToThreshold"   
     )

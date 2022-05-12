@@ -113,10 +113,15 @@ def getUsageCost(granularity,startDate,endDate,tagValue):
 
 def handler(event, context):
     
-    dt_now = datetime.utcnow()
+    end_date = datetime.utcnow()
+    last_day_of_prev_month = datetime.utcnow().replace(day=1,hour=23,minute=59,second=59) - timedelta(days=1)
     dt_1st_day_of_month_ago = datetime.utcnow().replace(day=1,hour=0,minute=0,second=0)
 
-    instanceArray = []
+    if end_date.strftime("%Y-%m-%d") == dt_1st_day_of_month_ago.strftime("%Y-%m-%d"):
+        start_date = last_day_of_prev_month
+    else:
+        start_date = dt_1st_day_of_month_ago
+
 
     # validate query type
     # validate jwt token
@@ -149,18 +154,12 @@ def handler(event, context):
         UserPoolId=iss.split("/")[3],
         Username=userName
     )
-
-    userEmail=""
-    for att in cog_user["UserAttributes"]:
-        if att["Name"] == "email":
-            userEmail = att["Value"]
-            break
     
-    monthlyTotalUsage = getUsageCost("MONTHLY",dt_1st_day_of_month_ago.strftime("%Y-%m-%d"),dt_now.strftime("%Y-%m-%d"),appValue)
+    monthlyTotalUsage = getUsageCost("MONTHLY",start_date.strftime("%Y-%m-%d"),end_date.strftime("%Y-%m-%d"),appValue)
 
     return [{
             "id": monthlyTotalUsage['date'],
-            "timePeriod": dt_1st_day_of_month_ago.strftime("%b"),
+            "timePeriod": end_date.strftime("%b"),
             "UnblendedCost": monthlyTotalUsage['unblendedCost'],
             "UsageQuantity": monthlyTotalUsage['usageQuantity']
             }]

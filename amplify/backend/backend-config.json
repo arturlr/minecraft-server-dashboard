@@ -75,6 +75,35 @@
           ]
         }
       ]
+    },
+    "ssmparam": {
+      "service": "customCloudformation",
+      "providerPlugin": "awscloudformation",
+      "dependsOn": [
+        {
+          "category": "auth",
+          "resourceName": "minecraftserverdashbb59cd6eb",
+          "attributes": [
+            "IdentityPoolId",
+            "IdentityPoolName",
+            "HostedUIDomain",
+            "OAuthMetadata",
+            "UserPoolId",
+            "UserPoolArn",
+            "UserPoolName",
+            "AppClientIDWeb",
+            "AppClientID"
+          ]
+        },
+        {
+          "category": "api",
+          "resourceName": "minecraftserverdashb",
+          "attributes": [
+            "GraphQLAPIIdOutput",
+            "GraphQLAPIEndpointOutput"
+          ]
+        }
+      ]
     }
   }
 }

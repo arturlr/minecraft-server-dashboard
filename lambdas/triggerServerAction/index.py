@@ -1,4 +1,3 @@
-from operator import truediv
 import urllib
 import boto3
 import logging
@@ -231,7 +230,7 @@ def handler(event, context):
             if response != None:
                 return _response(200,response)
             else:
-                return _response(500,{"err": "No parameters"})
+                return _response(500,"No parameters")
 
         # GET SSM PARAMETER
         elif action == "getparameter":
@@ -239,7 +238,7 @@ def handler(event, context):
             if response != None:
                 return _response(200,response)
             else:
-                return _response(500,{"err": "No parameters"})
+                return _response(500,"No parameters")
 
         else:
             # Invoking Step-Functions to change EC2 Stage

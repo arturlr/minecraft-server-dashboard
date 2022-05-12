@@ -1,0 +1,78 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Parameters:
+  env:
+    Type: String
+  authminecraftserverdashbb59cd6ebIdentityPoolId:
+    Type: String
+    Description: >-
+      Input parameter describing IdentityPoolId attribute for
+      auth/minecraftserverdashbb59cd6eb resource
+  authminecraftserverdashbb59cd6ebIdentityPoolName:
+    Type: String
+    Description: >-
+      Input parameter describing IdentityPoolName attribute for
+      auth/minecraftserverdashbb59cd6eb resource
+  authminecraftserverdashbb59cd6ebHostedUIDomain:
+    Type: String
+    Description: >-
+      Input parameter describing HostedUIDomain attribute for
+      auth/minecraftserverdashbb59cd6eb resource
+  authminecraftserverdashbb59cd6ebOAuthMetadata:
+    Type: String
+    Description: >-
+      Input parameter describing OAuthMetadata attribute for
+      auth/minecraftserverdashbb59cd6eb resource
+  authminecraftserverdashbb59cd6ebUserPoolId:
+    Type: String
+    Description: >-
+      Input parameter describing UserPoolId attribute for
+      auth/minecraftserverdashbb59cd6eb resource
+  authminecraftserverdashbb59cd6ebUserPoolArn:
+    Type: String
+    Description: >-
+      Input parameter describing UserPoolArn attribute for
+      auth/minecraftserverdashbb59cd6eb resource
+  authminecraftserverdashbb59cd6ebUserPoolName:
+    Type: String
+    Description: >-
+      Input parameter describing UserPoolName attribute for
+      auth/minecraftserverdashbb59cd6eb resource
+  authminecraftserverdashbb59cd6ebAppClientIDWeb:
+    Type: String
+    Description: >-
+      Input parameter describing AppClientIDWeb attribute for
+      auth/minecraftserverdashbb59cd6eb resource
+  authminecraftserverdashbb59cd6ebAppClientID:
+    Type: String
+    Description: >-
+      Input parameter describing AppClientID attribute for
+      auth/minecraftserverdashbb59cd6eb resource
+  apiminecraftserverdashbGraphQLAPIIdOutput:
+    Type: String
+    Description: >-
+      Input parameter describing GraphQLAPIIdOutput attribute for
+      api/minecraftserverdashb resource
+  apiminecraftserverdashbGraphQLAPIEndpointOutput:
+    Type: String
+    Description: >-
+      Input parameter describing GraphQLAPIEndpointOutput attribute for
+      api/minecraftserverdashb resource
+Resources:
+  AppSyncUrlSsm:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /amplify/minecraftserverdashboard/appsyncurl
+      Type: String
+      Value:
+        Ref: apiminecraftserverdashbGraphQLAPIEndpointOutput
+      Description: Minecraft Server Dashboard Appsync Endpoint.
+  UserPoolIdPSsm:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /amplify/minecraftserverdashboard/userpoolid
+      Type: String
+      Value:
+        Ref: authminecraftserverdashbb59cd6ebUserPoolId
+      Description: Minecraft Server Dashboard Userpool Id.
+Description: >-
+  {"createdOn":"Mac","createdBy":"Amplify","createdWith":"8.0.1","stackType":"custom-customCloudformation","metadata":{}}

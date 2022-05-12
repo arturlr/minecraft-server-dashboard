@@ -12,6 +12,7 @@ Parameters:
     Description: >-
       Input parameter describing GraphQLAPIEndpointOutput attribute for
       api/minecraftserverdashb resource
+
 Resources:
   ChangeServerStateDataSource:
     Type: AWS::AppSync::DataSource
@@ -84,15 +85,7 @@ Resources:
           }
         }
       ResponseMappingTemplate: $utils.toJson($ctx.result)
-
-  AppSyncUrlParameter:
-    Type: AWS::SSM::Parameter
-    Properties:
-      Name: /amplify/minecraftserverdashboard/appsyncurl
-      Type: String
-      Value: !Ref apiminecraftserverdashbGraphQLAPIEndpointOutput
-      Description: Minecraft Server Dashboard Appsync Endpoint.
-
+   
 Outputs:
   ChangeServerStateDataSourceOutput: 
     Value: !Ref ChangeServerStateDataSource

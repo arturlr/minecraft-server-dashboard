@@ -91,8 +91,9 @@
 </template>
 <script>
 import VirtualRack from "../components/VirtualRack.vue";
-import { Auth } from "aws-amplify";
+import { Auth, API } from "aws-amplify";
 import { mapGetters, mapState } from "vuex";
+import { onChangeServerInfo } from "../graphql/subscriptions";
 
 export default {
   name: "DefaultLayout",
@@ -102,6 +103,9 @@ export default {
   data: () => ({}),
   async beforeCreate() {
     await this.$store.dispatch("general/getCostUsage");
+  },
+  created() {
+    this.subscribeChangeServerInfo();
   },
   computed: {
     ...mapState({
@@ -118,6 +122,18 @@ export default {
     },
   },
   methods: {
+    subscribeChangeServerInfo() {
+      API.graphql({
+        query: onChangeServerInfo,
+        variables: {},
+      }).subscribe({
+        next: (eventData) => {
+          this.$store.dispatch("general/upadateServersState", {
+            serverData: eventData.value.data.onChangeServerInfo,
+          });
+        },
+      });
+    },
     async signOut() {
       try {
         await Auth.signOut();

@@ -22,9 +22,12 @@ ec2_client = boto3.client('ec2')
 cw_logs = boto3.client('logs')
 cw_client = boto3.client('cloudwatch')
 eb_client = boto3.client('events')
+cognito_idp = boto3.client('cognito-idp')
 ENCODING = 'utf-8'
 
 appValue = os.getenv('appValue')
+endpoint = os.environ.get('APPSYNC_URL', None)
+userPoolId = os.environ.get('USERPOOL_ID', None)
 
 boto3_session = boto3.Session()
 credentials = boto3_session.get_credentials()
@@ -37,7 +40,7 @@ auth = AWS4Auth(
     'appsync',
     session_token=credentials.token,
 )
-endpoint = os.environ.get('APPSYNC_URL', None)
+
 headers={"Content-Type": "application/json"}
 
 session = requests.Session()
@@ -70,12 +73,24 @@ changeServerState = """
       publicIp
       instanceStatus
       systemStatus
-      runCommand
-      workingDir
       runningMinutes
+      groupMembers
     }
 }
 """
+
+def _group_exists(instanceId, poolId):
+    try:
+        grpRsp = cognito_idp.get_group(
+                GroupName=instanceId,
+                UserPoolId=poolId
+            )
+            
+        return True
+        
+    except cognito_idp.exceptions.ResourceNotFoundException:
+        logger.warning("Group does not exist.")
+        return False
 
 def getConnectUsers(instanceId,startTime):
     try:
@@ -208,10 +223,37 @@ def handler(event, context):
                     logger.error("No Instances Found for updating")
                     return "No Instances Found for updating"
 
-    
+
     for instance in instancesInfo:
         instanceId = instance["Instances"][0]["InstanceId"]
-        
+
+        #
+        # Group Checking and Creation
+        #
+        groupMembers = []
+        cogGrp = _group_exists(instanceId,userPoolId)
+        if cogGrp:
+            response = cognito_idp.list_users_in_group(
+                UserPoolId=userPoolId,
+                GroupName=instanceId
+            )            
+            if len(response["Users"]) > 0:
+                for user in response["Users"]:            
+                    for att in user["Attributes"]:
+                        if att["Name"] == "email":
+                            email = att["Value"]
+                        elif att["Name"] == "sub":
+                            id = att["Value"]
+                        elif att["Name"] == "given_name":
+                            given_name = att["Value"]
+                        elif att["Name"] == "family_name":
+                            family_name = att["Value"]
+                    groupMembers.append({
+                        "id": id,
+                        "email": email,
+                        "fullname": given_name + ' ' + family_name                        
+                    }) 
+            
         ec2Status = utl.describeInstanceStatus(instanceId)
         guid = str(uuid4())
 
@@ -244,9 +286,8 @@ def handler(event, context):
             input["instanceStatus"] = ec2Status["instanceStatus"].lower()
             input["launchTime"] = launchTime.strftime("%m/%d/%Y - %H:%M:%S")
             input["publicIp"] = publicIp
-            input["runCommand"] = ""
-            input["workingDir"] = ""
             input["runningMinutes"] = ""
+            input["groupMembers"] = json.dumps(groupMembers)
             payload={"query": changeServerState, 'variables': { "input": input }}
 
         if event['detail-type'] == "Scheduled Event":

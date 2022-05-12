@@ -18,26 +18,23 @@ appValue = os.getenv('appValue')
 def handler(event, context):
     try:   
         instanceId = event["instanceId"]
-
         runCommand = utl.getSsmParam("/amplify/minecraftserverdashboard/" + instanceId + "/runCommand")
-        if runCommand == None:
-            runCommand = utl.getSsmParam("/amplify/minecraftserverdashboard/default/runCommand")
-
         workingDir = utl.getSsmParam("/amplify/minecraftserverdashboard/" + instanceId + "/workingDir")
-        if workingDir == "":
-            workingDir = utl.getSsmParam("/amplify/minecraftserverdashboard/default/workingDir")
-        
-        ssm_rsp = ssm.send_command(
-            InstanceIds=[instanceId],
-            DocumentName='AWS-RunShellScript',
-            TimeoutSeconds=30,
-            Parameters={
-                'commands': [ runCommand ],
-                'workingDirectory': [ workingDir ]
-            }
-        )
-        
-        logger.info(ssm_rsp)
+
+        if runCommand != None and workingDir != None:
+            ssm_rsp = ssm.send_command(
+                InstanceIds=[instanceId],
+                DocumentName='AWS-RunShellScript',
+                TimeoutSeconds=30,
+                Parameters={
+                    'commands': [ runCommand ],
+                    'workingDirectory': [ workingDir ]
+                }
+            )
+            logger.info(ssm_rsp)
+        else:
+            logger.warning("RunCommand or Working Directories are not defined")
+            return { 'result': 'Failed', 'err': 'RunCommand or Working Directories are not defined' }
 
         # Save CommandID in a DDb table to submit the result via websocket
 

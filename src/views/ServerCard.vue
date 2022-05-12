@@ -157,7 +157,7 @@
           </v-row>
           <v-row>
               <v-list two-line>
-                <v-header>Current Members</v-header>
+                <v-list-header>Current Members</v-list-header>
                  <v-list-item
                     v-for="user in groupMembers"
                     :key="user.id"
@@ -511,14 +511,17 @@ export default {
   methods: {
     async onSettingsClick() { 
 
-        const rc = await this.triggerAction('getparameter','/amplify/minecraftserverdashboard/' + this.serverId +'/runCommand',this.runCommand);
-        console.log(rc)
-        const wd = await this.triggerAction('getparameter','/amplify/minecraftserverdashboard/' + this.serverId +'/workingDir',this.workingDir);
-        console.log(wd)
-        const am = await this.triggerAction('getparameter','/amplify/minecraftserverdashboard/' + this.serverId +'/alarmMetric',this.alarmMetric);
-        console.log(am)
-        const at = await this.triggerAction('getparameter','/amplify/minecraftserverdashboard/' + this.serverId +'/alarmThreshold',this.alarmThreshold);
-        console.log(at)
+        const rc = await this.triggerAction('getparameter','/amplify/minecraftserverdashboard/' + this.serverId +'/runCommand',this.runCommand, true);
+        rc ? this.runCommand = rc : this.runCommand = ""
+
+        const wd = await this.triggerAction('getparameter','/amplify/minecraftserverdashboard/' + this.serverId +'/workingDir',this.workingDir, true);
+        wd ? this.workingDir = wd : this.workingDir = ""
+
+        const am = await this.triggerAction('getparameter','/amplify/minecraftserverdashboard/' + this.serverId +'/alarmMetric',this.alarmMetric, true);
+        am ? this.alarmMetric = am : this.alarmMetric = "NetworkOut"
+
+        const at = await this.triggerAction('getparameter','/amplify/minecraftserverdashboard/' + this.serverId +'/alarmThreshold',this.alarmThreshold, true);
+        at ? this.alarmThreshold = at : this.alarmThreshold = "25"
 
         this.settingsDialog = true
     },
@@ -556,7 +559,7 @@ export default {
         await this.triggerAction('addparameter','/amplify/minecraftserverdashboard/' + this.serverId +'/alarmThreshold',this.alarmThreshold);
         
       },
-    async triggerAction(action, paramKey="", paramValue="") {
+    async triggerAction(action, paramKey="", paramValue="", returnSsmValue = false) {
       this.serverStateConfirmation = false;
       this.addUserDialog = false;
       const input = {
@@ -570,12 +573,18 @@ export default {
         variables: { input: input },
       });
 
-      const rsp = JSON.parse(actionResult.data.triggerServerAction);
+      const rsp = JSON.parse(actionResult.data.triggerServerAction);      
 
       if (rsp.statusCode == 200) {
+        if (returnSsmValue) {
+          return rsp.body
+        }
         this.infoMsg = "Server action: " + action + " done.";
         this.successAlert = true;
       } else {
+        if (returnSsmValue) {
+          return null;
+        }
         this.errorMsg = rsp.body.err;
         this.errorAlert = true;
       }

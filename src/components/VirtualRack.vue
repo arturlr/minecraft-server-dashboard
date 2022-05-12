@@ -48,8 +48,6 @@
 </template>
 <script>
 import { mapGetters, mapState } from "vuex";
-import { API } from "aws-amplify";
-import { onChangeServerInfo } from "../graphql/subscriptions";
 
 export default {
   name: "VirtualRack",
@@ -62,22 +60,7 @@ export default {
   created() {
     this.$nextTick(async () => {
       await this.$store.dispatch("general/createServersList");
-      this.subscribeChangeServerInfo();
     });
-  },
-  methods: {
-    subscribeChangeServerInfo() {
-      API.graphql({
-        query: onChangeServerInfo,
-        variables: {},
-      }).subscribe({
-        next: (eventData) => {
-          this.$store.dispatch("general/upadateServersState", {
-            serverData: eventData.value.data.onChangeServerInfo,
-          });
-        },
-      });
-    },
   },
   computed: {
     ...mapState({
