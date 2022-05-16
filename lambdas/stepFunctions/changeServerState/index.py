@@ -29,7 +29,7 @@ def updateAlarm(instanceId):
 
     alarmThreshold = utl.getSsmParam("/amplify/minecraftserverdashboard/" + instanceId + "/alarmThreshold")
     if alarmThreshold == None:
-        alarmThreshold = 25000
+        alarmThreshold = "25000"
 
     cw_client.put_metric_alarm(
         AlarmName=instanceId + "-" + "Minecraft-Server",
@@ -48,7 +48,7 @@ def updateAlarm(instanceId):
         Period=300,
         EvaluationPeriods=7,
         DatapointsToAlarm=7,
-        Threshold=alarmThreshold,
+        Threshold=int(alarmThreshold),
         TreatMissingData="missing",
         ComparisonOperator="LessThanOrEqualToThreshold"   
     )

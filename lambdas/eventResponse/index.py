@@ -10,11 +10,14 @@ from datetime import date, datetime, timezone, timedelta
 import requests
 from requests_aws4auth import AWS4Auth
 from helpers import utils
+import pytz
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 utl = utils.Utils()
+utc = pytz.utc
+pst = pytz.timezone('US/Pacific')
 
 ssm = boto3.client('ssm')
 appsync = boto3.client('appsync')
@@ -96,8 +99,8 @@ def getConnectUsers(instanceId,startTime):
     try:
         queryRsp = cw_logs.start_query(
             logGroupName='/minecraft/serverlog/' + instanceId,
-            startTime=int(round(startTime)),
-            endTime=int(round(datetime.utcnow().timestamp())),
+            startTime=int(round(startTime.timestamp())),
+            endTime=int(round(datetime.now().timestamp())),
             queryString="""
                 filter @message like "the game" 
                 | parse @message "[net.minecraft.server.dedicated.DedicatedServer/]: * joined the game" as @userjoin
@@ -177,7 +180,8 @@ def getMetricData(instanceId,nameSpace,metricName,unit,statType,startTime,EndTim
         else:
             for rec in rsp["Datapoints"]:
                 if metricName == "NetworkOut":
-                    cdata.append({'y': round(rec[statType]/10000, 2), 'x': rec["Timestamp"].strftime("%Y/%m/%dT%H:%M:%S")})
+                    # converting to 100KB
+                    cdata.append({'y': round(rec[statType]/102400, 2), 'x': rec["Timestamp"].strftime("%Y/%m/%dT%H:%M:%S")})
                 else:
                     cdata.append({'y': round(rec[statType], 2), 'x': rec["Timestamp"].strftime("%Y/%m/%dT%H:%M:%S")})
 
@@ -190,14 +194,12 @@ def getMetricData(instanceId,nameSpace,metricName,unit,statType,startTime,EndTim
         return "[]"
 
 def handler(event, context):     
-    dt_1st_day_of_the_month=date.today().replace(day=1)
     dt_4_four_hours_before=datetime.utcnow() - timedelta(hours=4)
     dt_now = datetime.utcnow()  
     instancesInfo = []
     # Event Brigde
     if 'detail-type' in event:
         logger.info(event['detail-type'])
-
         if event['detail-type'] == "EC2 Instance State-change Notification":   
             logger.info("Found InstanceId: " + event['detail']['instance-id'] + ' at ' + event['detail']['state'] + ' state')
             instancesInfo = utl.describeInstances("id",event['detail']['instance-id'])
@@ -256,7 +258,6 @@ def handler(event, context):
             
         ec2Status = utl.describeInstanceStatus(instanceId)
         guid = str(uuid4())
-
         launchTime = instance["Instances"][0]["LaunchTime"]
         if "Association" in instance["Instances"][0]["NetworkInterfaces"][0]:
             publicIp = instance["Instances"][0]["NetworkInterfaces"][0]["Association"]["PublicIp"]
@@ -275,7 +276,9 @@ def handler(event, context):
 
         input = { "id": instanceId }
 
-        activeUsers = getConnectUsers(instanceId, launchTime.timestamp())
+        # Converting to PST as the logs are in PST        
+        pstLaunchTime = launchTime.astimezone(pst)
+        activeUsers = getConnectUsers(instanceId, datetime.utcfromtimestamp(pstLaunchTime.timestamp()))
 
         if event['detail-type'] == "EC2 Instance State-change Notification":
             input["userEmail"] = userEmail
@@ -284,7 +287,7 @@ def handler(event, context):
             input["state"] = instance["Instances"][0]["State"]["Name"].lower()
             input["systemStatus"] = ec2Status["systemStatus"].lower()
             input["instanceStatus"] = ec2Status["instanceStatus"].lower()
-            input["launchTime"] = launchTime.strftime("%m/%d/%Y - %H:%M:%S")
+            input["launchTime"] = pstLaunchTime.strftime("%m/%d/%Y - %H:%M:%S")
             input["publicIp"] = publicIp
             input["runningMinutes"] = ""
             input["groupMembers"] = json.dumps(groupMembers)

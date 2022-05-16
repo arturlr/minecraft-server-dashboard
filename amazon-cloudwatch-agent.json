@@ -9,10 +9,20 @@
                 "collect_list": [
                     {
                         "file_path": "/var/log/syslog",
-                        "log_group_name": "/minecraft/syslog/{instance_id}"                    },
+                        "log_group_name": "/minecraft/syslog/{instance_id}",
+                        "retention_in_days": 3 
+                    },
                     {
                         "file_path": "/opt/minecraft/server/logs/latest.log",
-                        "log_group_name": "/minecraft/serverlog/{instance_id}"                    }
+                        "log_group_name": "/minecraft/serverlog/{instance_id}",
+                        "retention_in_days": 3,
+                        "filters": [
+                            {
+                              "type": "include",
+                              "expression": "Server thread/INFO"
+                            }
+                        ]
+                    }
                 ]
             }
         }

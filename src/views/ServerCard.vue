@@ -1,11 +1,5 @@
 <template>
   <div>
-    <v-alert type="info" v-model="successAlert" dismissible>
-      {{ infoMsg }}
-    </v-alert>
-    <v-alert type="error" v-model="errorAlert" dismissible>
-      {{ errorMsg }}
-    </v-alert>
     <v-card class="my-8 pa-2">
       <v-card-title class="text-h6">
         {{ serverName }}
@@ -54,6 +48,7 @@
               label="Public IP"
               :value="serversDict[serverId].publicIp"
               append-icon="content_copy"
+              @click:append="copyPublicIp"
               :hint="serversDict[serverId].state"
               persistent-hint
               outlined
@@ -109,8 +104,8 @@
         <v-card-actions>
           <v-tooltip bottom>
           <template v-slot:activator="{ on, attrs }">
-            <v-btn text v-bind="attrs" v-on="on" @click="onSettingsClick">
-              <v-icon> settings </v-icon>
+            <v-btn text v-bind="attrs" v-on="on" @click="processSettingsForm()">
+            <v-icon> settings </v-icon>   
             </v-btn>
           </template>
           <span> Configure Minecraft Server initialization command</span>
@@ -181,6 +176,13 @@
 
     <v-dialog v-model="settingsDialog" max-width="600px">
       <v-card ref="settingsForm">
+        <v-progress-linear
+          v-if="settingsDialogLoading"
+          indeterminate
+          height="5"
+          value="5"
+          color="teal"
+        ></v-progress-linear>
         <v-card-title> Settings </v-card-title>
         <v-card-subtitle>
           <strong>{{ serverName }}</strong>
@@ -208,9 +210,9 @@
                 <v-text-field   
                   dense               
                   label="Instance idle threshold."
-                  hint="%CPU or NetworkOut in 10K scale (22 = 22.000)"
+                  hint="%CPU or NetworkOut bytes (default 25.000 bytes)"
                   :rules="[rules.required, rules.onlyNumbers]"
-                  maxlength="2"
+                  maxlength="6"
                   v-model="alarmThreshold"
                   ref="alarmThreshold"
                 ></v-text-field>
@@ -224,16 +226,6 @@
                 label="Minecraft run command"
                 :rules="[rules.required]"
               ></v-text-field>
-              <!-- <v-text-field
-                dense
-                :prepend-icon="isRunCommandEdit ? 'save' : 'edit'"                
-                v-model="runCommand"
-                label="Minecraft run command"
-                :readonly="isRunCommandEdit === false"
-                @click:prepend="actionField('edit','runCommand')"
-                @keyup.enter="actionField('save','runCommand')"
-                @keyup.esc="actionField('cancel','runCommand')"
-              ></v-text-field> -->
             </v-col>
             <v-col cols="12">
               <v-text-field
@@ -249,6 +241,7 @@
         </v-card-text>
         <v-card-actions>
           <v-btn 
+            v-if="!settingsDialogLoading"
             color="primary"
             text
             @click="submit"
@@ -346,20 +339,43 @@
       </v-card>
     </v-dialog>
 
-    <v-dialog v-model="copyDialog" hide-overlay persistent width="300">
-      <v-card color="primary" dark>
-        <v-card-text>
-          Copied IP Address to Clipboard
-          <v-progress-linear color="white" class="mb-0"></v-progress-linear>
-        </v-card-text>
-        <v-card-actions>
-          <v-spacer></v-spacer>
-          <v-btn color="green darken-1" text @click="copyDialog = false">
-            Ok
-          </v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
+    <v-snackbar
+      v-model="successAlert"
+      timeout="3500"
+      absolute
+      color="success"
+      outlined
+      left
+      centered
+      text
+    >
+    <strong>{{ infoMsg }}</strong>
+    </v-snackbar>
+
+    <v-snackbar
+      v-model="errorAlert"
+      timeout="3500"
+      absolute
+      color="red accent-2"
+      outlined
+      left
+      centered
+      text
+    >
+    <strong>{{ errorMsg }}</strong>
+    </v-snackbar>   
+
+    <v-snackbar
+      v-model="copyDialog"
+      timeout="3500"
+      absolute
+      left
+      centered
+      color="primary"
+      text
+    >
+    <strong>Copied!</strong>
+    </v-snackbar> 
   </div>
 </template>
 
@@ -396,6 +412,7 @@ export default {
       errorAlert: false,
       errorMsg: "",
       settingsDialog: false,
+      settingsDialogLoading: false,
       runCommand: null,
       workingDir: null,
       successAlert: false,
@@ -509,21 +526,36 @@ export default {
     },
   },
   methods: {
-    async onSettingsClick() { 
 
-        const rc = await this.triggerAction('getparameter','/amplify/minecraftserverdashboard/' + this.serverId +'/runCommand',this.runCommand, true);
-        rc ? this.runCommand = rc : this.runCommand = ""
+    async processSettingsForm(submit = false) {
+      this.settingsDialog = true
+      this.settingsDialogLoading = true
+      let action = null
 
-        const wd = await this.triggerAction('getparameter','/amplify/minecraftserverdashboard/' + this.serverId +'/workingDir',this.workingDir, true);
-        wd ? this.workingDir = wd : this.workingDir = ""
+      if (submit) {
+        action = "addparameter";
+      }
+      else {
+        action = "getparameter";
+      }
 
-        const am = await this.triggerAction('getparameter','/amplify/minecraftserverdashboard/' + this.serverId +'/alarmMetric',this.alarmMetric, true);
-        am ? this.alarmMetric = am : this.alarmMetric = "NetworkOut"
+      const rc = await this.triggerAction(action,'/amplify/minecraftserverdashboard/' + this.serverId +'/runCommand',this.runCommand, true);      
+      const wd = await this.triggerAction(action,'/amplify/minecraftserverdashboard/' + this.serverId +'/workingDir',this.workingDir, true);
+      const am = await this.triggerAction(action,'/amplify/minecraftserverdashboard/' + this.serverId +'/alarmMetric',this.alarmMetric, true);
+      const at = await this.triggerAction(action,'/amplify/minecraftserverdashboard/' + this.serverId +'/alarmThreshold',this.alarmThreshold, true);
 
-        const at = await this.triggerAction('getparameter','/amplify/minecraftserverdashboard/' + this.serverId +'/alarmThreshold',this.alarmThreshold, true);
-        at ? this.alarmThreshold = at : this.alarmThreshold = "25"
+      this.settingsDialogLoading = false
 
-        this.settingsDialog = true
+      if (submit) {
+        this.settingsDialog = false
+      }
+      else {
+        rc ? this.runCommand = rc : this.runCommand = "";
+        wd ? this.workingDir = wd : this.workingDir = "";
+        am ? this.alarmMetric = am : this.alarmMetric = "NetworkOut";
+        at ? this.alarmThreshold = at : this.alarmThreshold = "25000";
+      }
+
     },
      resetForm () {
         this.settingsFormHasErrors = false
@@ -549,15 +581,8 @@ export default {
             return false;
         }
 
-        if (this.alarmMetric == "NetworkOut") {
-          this.alarmThreshold = this.alarmThreshold * 10000;
-        }
+       this.processSettingsForm(true)
 
-        await this.triggerAction('addparameter','/amplify/minecraftserverdashboard/' + this.serverId +'/runCommand',this.runCommand);
-        await this.triggerAction('addparameter','/amplify/minecraftserverdashboard/' + this.serverId +'/workingDir',this.workingDir);
-        await this.triggerAction('addparameter','/amplify/minecraftserverdashboard/' + this.serverId +'/alarmMetric',this.alarmMetric);
-        await this.triggerAction('addparameter','/amplify/minecraftserverdashboard/' + this.serverId +'/alarmThreshold',this.alarmThreshold);
-        
       },
     async triggerAction(action, paramKey="", paramValue="", returnSsmValue = false) {
       this.serverStateConfirmation = false;
@@ -600,7 +625,7 @@ export default {
               : [],
           },
           {
-            name: "NetworkOut",
+            name: "NetworkOut 100K",
             data: this.serversDict[this.serverId].networkStats
               ? this.serversDict[this.serverId].networkStats
               : [],
@@ -660,6 +685,7 @@ export default {
     copyPublicIp() {
       let serverIp = document.querySelector("#publicIp");
       serverIp.setAttribute("type", "text");
+      serverIp.value = serverIp.value + ":25565"
       serverIp.select();
       try {
         document.execCommand("copy");
@@ -668,6 +694,9 @@ export default {
       }
       serverIp.setAttribute("type", "hidden");
       this.copyDialog = true;
+      setTimeout(() => {
+        this.copyDialog = false;
+      }, 2000)
     },
   },
 };

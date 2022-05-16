@@ -45,6 +45,16 @@ Resources:
         - python3.7
       RetentionPolicy: Delete
 
+  TempoLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      Description: Date and Time libraries
+      ContentUri: ./layers/tempo/tempo.zip
+      CompatibleRuntimes:
+        - python3.8
+        - python3.7
+      RetentionPolicy: Delete
+
   PythonJoseLayer:
     Type: AWS::Serverless::LayerVersion
     Properties:
@@ -106,6 +116,7 @@ Resources:
       Layers:
         - Ref: GraphQLLayer
         - Ref: HelperLayer
+        - Ref: TempoLayer
       Events:
         EC2StateTrigger:
           Type: CloudWatchEvent 
@@ -164,6 +175,7 @@ Resources:
       Layers:
         - Ref: PythonJoseLayer
         - Ref: HelperLayer
+        - Ref: TempoLayer
       Policies:
         - CostExplorerReadOnlyPolicy: {}
         - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess

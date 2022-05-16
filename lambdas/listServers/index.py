@@ -8,11 +8,14 @@ from jose import jwk, jwt
 from jose.utils import base64url_decode
 from datetime import date, datetime, timezone, timedelta
 from helpers import utils
+import pytz
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 utl = utils.Utils()
+utc = pytz.utc
+pst = pytz.timezone('US/Pacific')
 
 ec2_client = boto3.client('ec2')
 ec2 = boto3.resource('ec2')
@@ -218,6 +221,8 @@ def handler(event, context):
         volume = ec2.Volume(instance["Instances"][0]["BlockDeviceMappings"][0]["Ebs"]["VolumeId"])
 
         instanceStatus = utl.describeInstanceStatus(instanceId)
+
+        pstLaunchTime = launchTime.astimezone(pst)
         
         runningMinutes = getInstanceHoursFromCloudTailEvents(instanceId)
 
@@ -255,7 +260,7 @@ def handler(event, context):
             "vCpus": vCpus,            
             "memSize": memoryInfo,
             "diskSize": volume.size,
-            "launchTime": launchTime.strftime("%m/%d/%Y - %H:%M:%S"),
+            "launchTime": pstLaunchTime.strftime("%m/%d/%Y - %H:%M:%S"),
             "publicIp": publicIp,            
             "instanceStatus": instanceStatus["instanceStatus"].lower(),
             "systemStatus": instanceStatus["systemStatus"].lower(),
