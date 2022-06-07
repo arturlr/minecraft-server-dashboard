@@ -49,6 +49,14 @@ headers={"Content-Type": "application/json"}
 session = requests.Session()
 session.auth = auth
 
+queryString="""
+fields @message  
+| parse @message ": * joined the game" as @userjoin
+| parse @message ": * left the game" as @userleft
+| parse @message "logged in with entity id *" as @userlogged
+| stats count(@userjoin) as userjoin, count(@userleft) as userleft, count(@userlogged) as userlogged by bin(5m) as t
+"""
+
 putServerMetric = """
 mutation PutServerMetric($input: ServerMetricInput!) {
     putServerMetric(input: $input) {
@@ -101,12 +109,7 @@ def getConnectUsers(instanceId,startTime):
             logGroupName='/minecraft/serverlog/' + instanceId,
             startTime=int(round(startTime.timestamp())),
             endTime=int(round(datetime.now().timestamp())),
-            queryString="""
-                filter @message like "the game" 
-                | parse @message "[net.minecraft.server.dedicated.DedicatedServer/]: * joined the game" as @userjoin
-                | parse @message "[net.minecraft.server.dedicated.DedicatedServer/]: * left the game" as @userleft
-                | stats count(@userjoin) - count(@userleft) by bin(5m) as t
-            """
+            queryString=queryString
         )
 
         if 'queryId' in queryRsp:

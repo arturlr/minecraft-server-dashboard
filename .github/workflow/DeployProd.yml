@@ -1,0 +1,21 @@
+name: DeployProd
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy-prod:
+    runs-on: ubuntu-latest
+    environment: production
+    #needs: [deploy-stage]
+    steps:
+      - uses: actions/checkout@v2
+      - uses: ./.github/workflow/sam-pipeline
+        with:
+          config-env: prod
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          pipeline-role: ${{ secrets.PIPELINE_ROLE }}
+          deploy-role: ${{ secrets.DEPLOY_ROLE }}

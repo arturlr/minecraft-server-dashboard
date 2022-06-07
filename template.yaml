@@ -39,40 +39,9 @@ Resources:
     Type: AWS::Serverless::LayerVersion
     Properties:
       Description: MinecraftDashboardHelper
-      ContentUri: ./layers/helpers.zip
+      ContentUri: ./layers/helpers
       CompatibleRuntimes:
         - python3.8
-        - python3.7
-      RetentionPolicy: Delete
-
-  TempoLayer:
-    Type: AWS::Serverless::LayerVersion
-    Properties:
-      Description: Date and Time libraries
-      ContentUri: ./layers/tempo/tempo.zip
-      CompatibleRuntimes:
-        - python3.8
-        - python3.7
-      RetentionPolicy: Delete
-
-  PythonJoseLayer:
-    Type: AWS::Serverless::LayerVersion
-    Properties:
-      Description: PythonJose
-      ContentUri: ./layers/python-jose/python-jose.zip
-      CompatibleRuntimes:
-        - python3.8
-        - python3.7
-      RetentionPolicy: Delete
-
-  GraphQLLayer:
-    Type: AWS::Serverless::LayerVersion
-    Properties:
-      Description: Requests
-      ContentUri: ./layers/graphql/graphql.zip
-      CompatibleRuntimes:
-        - python3.8
-        - python3.7
       RetentionPolicy: Delete
 
   ScheduledRule: 
@@ -114,9 +83,7 @@ Resources:
       FunctionName: minecraft-server-dashboard-eventResponse
       CodeUri: ./lambdas/eventResponse/
       Layers:
-        - Ref: GraphQLLayer
         - Ref: HelperLayer
-        - Ref: TempoLayer
       Events:
         EC2StateTrigger:
           Type: CloudWatchEvent 
@@ -173,9 +140,7 @@ Resources:
       FunctionName: minecraft-server-dashboard-listServers
       CodeUri: ./lambdas/listServers/
       Layers:
-        - Ref: PythonJoseLayer
         - Ref: HelperLayer
-        - Ref: TempoLayer
       Policies:
         - CostExplorerReadOnlyPolicy: {}
         - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
@@ -213,14 +178,12 @@ Resources:
           appValue: !Ref AppValue
           APPSYNC_URL: '{{resolve:ssm:/amplify/minecraftserverdashboard/appsyncurl:1}}'
 
-
   TriggerServerAction:
     Type: AWS::Serverless::Function 
     Properties:
       FunctionName: minecraft-server-dashboard-triggerServerAction
       CodeUri: ./lambdas/triggerServerAction/
       Layers:
-        - Ref: PythonJoseLayer
         - Ref: HelperLayer
       Policies:
         - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
