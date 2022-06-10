@@ -55,13 +55,19 @@ Resources:
         - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
         - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy
 
+  IAMEC2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties: 
+        InstanceProfileName: AWSEC2MinecraftProfile
+        Roles: 
+          - !Ref Ec2MinecraftDashboardInstanceRole
 
-  AmazonCloudWatchLinuxParameter:
+    AmazonCloudWatchLinuxParameter:
     Type: AWS::SSM::Parameter
     Properties:
       Name: AmazonCloudWatch-linux
       Type: String
-      Value: !Sub |
+      Value: !Sub '
         {
             "agent": {
                 "metrics_collection_interval": 60,
@@ -122,15 +128,8 @@ Resources:
                     }
                 }
             }
-        }
+        }'
       Description: Amazon CloudWatch agent config
-
-  IAMEC2InstanceProfile:
-    Type: AWS::IAM::InstanceProfile
-    Properties: 
-        InstanceProfileName: AWSEC2SSMProfile
-        Roles: 
-          - !Ref Ec2MinecraftDashboardInstanceRole
 
   AdminEmailParameter:
     Type: AWS::SSM::Parameter

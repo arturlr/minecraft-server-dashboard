@@ -5,6 +5,10 @@ WORKING_DIR="/opt/aws"
 # check if port_count.sh exists.
 if [ ! -f ${WORKING_DIR}/port_count.sh ]; then
 
+curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+unzip awscliv2.zip
+sudo ./aws/install
+
 cat << EOF > ${WORKING_DIR}/port_count.sh
 #!/bin/bash
 INSTANCE_ID=\$(curl -s http://169.254.169.254/latest/meta-data/instance-id)
