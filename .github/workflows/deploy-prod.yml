@@ -12,7 +12,7 @@ jobs:
     #needs: [deploy-stage]
     steps:
       - uses: actions/checkout@v2
-      - uses: ./.github/workflows/sam-pipeline
+      - uses: ./.github/workflows/sam-pipeline.yml
         with:
           config-env: prod
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
