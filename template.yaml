@@ -161,8 +161,6 @@ Resources:
     Properties:
       FunctionName: minecraft-server-dashboard-getMonthlyCost
       CodeUri: ./lambdas/getMonthlyCost/
-      Layers:
-        - Ref: PythonJoseLayer
       Policies:
         - CostExplorerReadOnlyPolicy: {}
         - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
