@@ -15,6 +15,10 @@ utl = utils.Utils()
 ssm = boto3.client('ssm')
 appValue = os.getenv('appValue')
 
+
+#aws ssm send-command --document-name "AWS-RunRemoteScript" --instance-ids i-0aef4c52b2acd58a2 \
+#--parameters '{"sourceType":["GitHub"],"sourceInfo":["{\"owner\":\"arturlr\", \"repository\": \"minecraft-server-dashboard\", \"path\": \"scripts/adding_cron.sh\", \"getOptions\": \"branch:dev\" }"],"commandLine": ["bash adding_cron.sh"]}'
+
 def handler(event, context):
     try:   
         instanceId = event["instanceId"]
