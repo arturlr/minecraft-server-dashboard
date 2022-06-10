@@ -27,6 +27,111 @@ Globals:
 
 Resources:
 
+  Ec2MinecraftDashboardInstanceRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      Description: EC2 MinecraftDashboard Role
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+              - ec2.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Policies:
+        - PolicyName: cloudwatchMetric
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: 
+                  - 'cloudwatch:PutMetricData'
+                  - 'cloudwatch:List*'
+                  - 'cloudwatch:Get*'
+                Resource: '*'
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+        - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy
+
+
+  AmazonCloudWatchLinuxParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: AmazonCloudWatch-linux
+      Type: String
+      Value: !Sub |
+        {
+            "agent": {
+                "metrics_collection_interval": 60,
+                "run_as_user": "root"
+            },
+            "logs": {
+                "logs_collected": {
+                    "files": {
+                        "collect_list": [
+                            {
+                                "file_path": "/var/log/syslog",
+                                "log_group_name": "/minecraft/syslog/{instance_id}",
+                                "retention_in_days": 3 
+                            },
+                            {
+                                "file_path": "/opt/minecraft/server/logs/latest.log",
+                                "log_group_name": "/minecraft/serverlog/{instance_id}",
+                                "retention_in_days": 3,
+                                "filters": [
+                                    {
+                                      "type": "include",
+                                      "expression": "Server thread/INFO"
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                }
+            },
+            "metrics": {
+                "append_dimensions": {
+                    "AutoScalingGroupName": "${aws:AutoScalingGroupName}",
+                    "InstanceId": "${aws:InstanceId}"
+                },
+                "metrics_collected": {
+                    "collectd": {
+                        "metrics_aggregation_interval": 60
+                    },
+                    "disk": {
+                        "measurement": [
+                            "used_percent"
+                        ],
+                        "metrics_collection_interval": 60,
+                        "resources": [
+                            "*"
+                        ]
+                    },
+                    "mem": {
+                        "measurement": [
+                            "mem_used_percent"
+                        ],
+                        "metrics_collection_interval": 60
+                    },
+                    "statsd": {
+                        "metrics_aggregation_interval": 60,
+                        "metrics_collection_interval": 10,
+                        "service_address": ":8125"
+                    }
+                }
+            }
+        }
+      Description: Amazon CloudWatch agent config
+
+  IAMEC2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties: 
+        InstanceProfileName: AWSEC2SSMProfile
+        Roles: 
+          - !Ref Ec2MinecraftDashboardInstanceRole
+
   AdminEmailParameter:
     Type: AWS::SSM::Parameter
     Properties:
@@ -309,6 +414,7 @@ Resources:
             Action: "sts:AssumeRole"
       Path: "/"
       Policies:
+        - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess
         - PolicyName: StatesExecutionPolicy
           PolicyDocument:
             Version: "2012-10-17"
@@ -316,6 +422,7 @@ Resources:
               - Effect: Allow
                 Action:
                   - lambda:InvokeFunction
+                  - ssm:SendCommand
                   - logs:CreateLogDelivery
                   - logs:GetLogDelivery
                   - logs:UpdateLogDelivery

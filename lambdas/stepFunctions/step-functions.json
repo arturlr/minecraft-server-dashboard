@@ -54,7 +54,7 @@
               "StringEquals": "running"
             }
           ],
-          "Next": "executeSSM"
+          "Next": "Parallel"
         },
         {
           "Variable": "$.isSuccessful",
@@ -64,15 +64,71 @@
       ],
       "Default": "Wait"
     },
+    "Parallel": {
+      "Type": "Parallel",
+      "Branches": [
+        {
+          "StartAt": "StartMinecraft",
+          "States": {
+            "StartMinecraft": {
+              "Type": "Task",
+              "Resource": "${executeSSM}",
+              "End": true
+            }
+          }
+        },
+        {
+          "StartAt": "InstallCloudWatchAgent",
+          "States": {
+            "InstallCloudWatchAgent": {
+              "Type": "Task",
+              "Parameters": {
+                "DocumentName": "AmazonCloudWatchAgent",
+                "InstanceIds": [
+                  "$.instanceId"
+                ]
+              },
+              "Resource": "arn:aws:states:::aws-sdk:ssm:sendCommand",
+              "Next": "ConfigureCloudWatchAgent",
+              "ResultPath": null
+            },
+            "ConfigureCloudWatchAgent": {
+              "Type": "Task",
+              "End": true,
+              "Parameters": {
+                "DocumentName": "AmazonCloudWatch-ManageAgent",
+                "InstanceIds": [
+                  "$.instanceId"
+                ],
+                "Parameters": {
+                  "action": [
+                    "configure"
+                  ],
+                  "mode": [
+                    "ec2"
+                  ],
+                  "optionalConfigurationLocation": [
+                    "AmazonCloudWatch-linux"
+                  ],
+                  "optionalConfigurationSource": [
+                    "ssm"
+                  ],
+                  "optionalRestart": [
+                    "yes"
+                  ]
+                }
+              },
+              "Resource": "arn:aws:states:::aws-sdk:ssm:sendCommand"
+            }
+          }
+        }
+      ],
+      "End": true
+    },
     "Wait": {
       "Type": "Wait",
       "Seconds": 60,
       "Next": "startServer"
-    },
-    "executeSSM": {
-      "Type": "Task",
-      "Resource": "${executeSSM}",
-      "End": true
     },
     "Fail": {
       "Type": "Fail"
