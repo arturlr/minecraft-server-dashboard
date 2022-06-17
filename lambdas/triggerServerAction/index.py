@@ -7,11 +7,11 @@ import time
 from jose import jwk, jwt
 from jose.utils import base64url_decode
 from datetime import datetime, timezone
-from helpers import utils
+import helpers
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
-utl = utils.Utils()
+utl = helpers.Utils()
 appValue = os.getenv('appValue')
 
 ssm = boto3.client('ssm')

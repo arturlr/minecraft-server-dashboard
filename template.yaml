@@ -356,6 +356,8 @@ Resources:
                 Action:
                   - lambda:InvokeFunction
                   - ssm:SendCommand
+                  - ssm:List*
+                  - ssm:Get*
                   - logs:CreateLogDelivery
                   - logs:GetLogDelivery
                   - logs:UpdateLogDelivery
