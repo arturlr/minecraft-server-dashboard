@@ -9,13 +9,13 @@ from base64 import b64encode
 from datetime import date, datetime, timezone, timedelta
 import requests
 from requests_aws4auth import AWS4Auth
-from helpers import utils
+import helpers
 import pytz
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-utl = utils.Utils()
+utl = helpers.Utils()
 utc = pytz.utc
 pst = pytz.timezone('US/Pacific')
 

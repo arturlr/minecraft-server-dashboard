@@ -78,28 +78,164 @@
           }
         },
         {
-          "StartAt": "InstallCloudWatchAgent",
+          "StartAt": "AgentRunning",
           "States": {
+            "AgentRunning": {
+              "Type": "Task",
+              "Next": "ListCommands",
+              "Parameters": {
+                "DocumentName": "AmazonCloudWatch-ManageAgent",
+                "InstanceIds.$": "States.Array($.instanceId)",
+                "Parameters": {
+                  "action": [
+                    "status"
+                  ],
+                  "mode": [
+                    "ec2"
+                  ]
+                }
+              },
+              "Resource": "arn:aws:states:::aws-sdk:ssm:sendCommand",
+              "ResultPath": "$.agentCheck"
+            },
+            "ListCommands": {
+              "Type": "Task",
+              "Next": "WaitCheck",
+              "Parameters": {
+                "CommandId.$": "$.agentCheck.CommandId",
+                "InstanceId.$": "$.instanceId"
+              },
+              "Resource": "arn:aws:states:::aws-sdk:ssm:listCommands",
+              "ResultPath": "$.agentCheckStatus"
+            },
+            "WaitCheck": {
+              "Type": "Wait",
+              "Seconds": 15,
+              "Next": "ChoiceAgentRunning"
+            },
+            "ChoiceAgentRunning": {
+              "Type": "Choice",
+              "Choices": [
+                {
+                  "Variable": "$.agentCheckStatus.status",
+                  "StringEquals": "running",
+                  "Next": "Success"
+                }
+              ],
+              "Default": "InstallCloudWatchAgent"
+            },
+            "Success": {
+              "Type": "Succeed"
+            },
             "InstallCloudWatchAgent": {
               "Type": "Task",
               "Parameters": {
-                "DocumentName": "AmazonCloudWatchAgent",
-                "InstanceIds": [
-                  "$.instanceId"
-                ]
+                "DocumentName": "AWS-ConfigureAWSPackage",
+                "InstanceIds.$": "States.Array($.instanceId)",
+                "Parameters": {
+                  "action": [
+                    "Install"
+                  ],
+                  "name": [
+                    "AmazonCloudWatchAgent"
+                  ]
+                }
               },
               "Resource": "arn:aws:states:::aws-sdk:ssm:sendCommand",
-              "Next": "ConfigureCloudWatchAgent",
-              "ResultPath": null
+              "Next": "ListCommandsAgentInstall",
+              "ResultPath": "$.agentInstall"
+            },
+            "ListCommandsAgentInstall": {
+              "Type": "Task",
+              "Next": "WaitAgentInstall",
+              "Parameters": {
+                "CommandId.$": "$.agentInstall.CommandId",
+                "InstanceId.$": "$.instanceId"
+              },
+              "Resource": "arn:aws:states:::aws-sdk:ssm:listCommands",
+              "ResultPath": "$.agentInstallStatus"
+            },
+            "WaitAgentInstall": {
+              "Type": "Wait",
+              "Seconds": 15,
+              "Next": "AgentResult"
+            },
+            "AgentResult": {
+              "Type": "Choice",
+              "Choices": [
+                {
+                  "Variable": "$.agentInstallStatus.Status",
+                  "StringEquals": "Success",
+                  "Next": "RunGitHubScript"
+                },
+                {
+                  "Variable": "$.agentInstallStatus.Status",
+                  "StringEquals": "Failed",
+                  "Next": "FailCommand"
+                }
+              ],
+              "Default": "ListCommandsAgentInstall"
+            },
+            "RunGitHubScript": {
+              "Type": "Task",
+              "Next": "ListCommandsScript",
+              "Parameters": {
+                "DocumentName": "AWS-RunRemoteScript",
+                "InstanceIds.$": "States.Array($.instanceId)",
+                "Parameters": {
+                  "sourceType": [
+                    "GitHub"
+                  ],
+                  "sourceInfo": [
+                    "{\"owner\":\"arturlr\", \"repository\": \"minecraft-server-dashboard\", \"path\": \"scripts/adding_cron.sh\", \"getOptions\": \"branch:dev\" }"
+                  ],
+                  "commandLine": [
+                    "bash adding_cron.sh"
+                  ]
+                }
+              },
+              "Resource": "arn:aws:states:::aws-sdk:ssm:sendCommand",
+              "ResultPath": "$.script"
+            },
+            "ListCommandsScript": {
+              "Type": "Task",
+              "Next": "WaitCustomScript",
+              "Parameters": {
+                "CommandId.$": "$.CommandId",
+                "InstanceId.$": "$.instanceId"
+              },
+              "Resource": "arn:aws:states:::aws-sdk:ssm:listCommands",
+              "ResultPath": "$.scriptStatus"
+            },
+            "WaitCustomScript": {
+              "Type": "Wait",
+              "Seconds": 15,
+              "Next": "ScriptResult"
+            },
+            "ScriptResult": {
+              "Type": "Choice",
+              "Choices": [
+                {
+                  "Variable": "$.scriptStatus.State",
+                  "StringEquals": "Failed",
+                  "Next": "FailCommand"
+                },
+                {
+                  "Variable": "$.scriptStatus.Status",
+                  "StringEquals": "Success",
+                  "Next": "ConfigureCloudWatchAgent"
+                }
+              ],
+              "Default": "WaitCustomScript"
+            },
+            "FailCommand": {
+              "Type": "Fail"
             },
             "ConfigureCloudWatchAgent": {
               "Type": "Task",
-              "End": true,
               "Parameters": {
                 "DocumentName": "AmazonCloudWatch-ManageAgent",
-                "InstanceIds": [
-                  "$.instanceId"
-                ],
+                "InstanceIds.$": "States.Array($.instanceId)",
                 "Parameters": {
                   "action": [
                     "configure"
@@ -108,7 +244,7 @@
                     "ec2"
                   ],
                   "optionalConfigurationLocation": [
-                    "AmazonCloudWatch-linux"
+                    "/amplify/minecraftserverdashboard/amazoncloudwatch-linux"
                   ],
                   "optionalConfigurationSource": [
                     "ssm"
@@ -118,7 +254,18 @@
                   ]
                 }
               },
-              "Resource": "arn:aws:states:::aws-sdk:ssm:sendCommand"
+              "Resource": "arn:aws:states:::aws-sdk:ssm:sendCommand",
+              "Next": "ListCommandsConfigureAgent",
+              "ResultPath": "$.agentConfig"
+            },
+            "ListCommandsConfigureAgent": {
+              "Type": "Task",
+              "End": true,
+              "Parameters": {
+                "CommandId.$": "$.CommandId",
+                "InstanceId.$": "$.instanceId"
+              },
+              "Resource": "arn:aws:states:::aws-sdk:ssm:listCommands"
             }
           }
         }

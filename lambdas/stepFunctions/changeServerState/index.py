@@ -6,12 +6,12 @@ import json
 import time
 from base64 import b64encode
 from datetime import datetime, timezone, timedelta
-from helpers import utils
+import helpers
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-utl = utils.Utils()
+utl = helpers.Utils()
 
 ec2_client = boto3.client('ec2')
 cw_client = boto3.client('cloudwatch')

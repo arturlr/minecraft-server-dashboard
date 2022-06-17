@@ -56,3 +56,11 @@ packagetype = "Zip"
 functions = ["SendCommand"]
 
 [layer_build_definitions]
+[layer_build_definitions.5da99deb-44cc-48d7-acab-8eedca48ae88]
+layer_name = "HelperLayer"
+codeuri = "/Users/artrodri/github/home/minecraft-server-dashboard/layers/helpers"
+build_method = "makefile"
+compatible_runtimes = ["python3.8"]
+architecture = "x86_64"
+manifest_hash = ""
+layer = "HelperLayer"

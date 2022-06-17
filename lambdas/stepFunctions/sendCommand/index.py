@@ -5,38 +5,35 @@ import os
 import json
 import time
 from datetime import datetime
-from helpers import utils
+import helpers
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-utl = utils.Utils()
+utl = helpers.Utils()
 
 ssm = boto3.client('ssm')
 appValue = os.getenv('appValue')
 
-
-# aws ssm send-command --document-name "AWS-RunRemoteScript" --instance-ids i-0aef4c52b2acd58a2 \
-# --parameters '{"sourceType":["GitHub"],"sourceInfo":["{\"owner\":\"arturlr\", \"repository\": \"minecraft-server-dashboard\", \"path\": \"scripts/adding_cron.sh\", \"getOptions\": \"branch:dev\" }"],"commandLine": ["bash adding_cron.sh"]}'
-
 def handler(event, context):
     try:
-
-        ssm_script = ssm.send_command(
-            InstanceIds=[instanceId],
-            DocumentName='AWS-RunRemoteScript',
-            TimeoutSeconds=30,
-            Parameters={
-                "sourceType": ["GitHub"],
-                "sourceInfo": [
-                    "{\"owner\":\"arturlr\", \"repository\": \"minecraft-server-dashboard\", \"path\": \"scripts/adding_cron.sh\", \"getOptions\": \"branch:dev\" }"
-                    ],
-                "commandLine": ["bash adding_cron.sh"]
-            }
-        )
-        logger.info(ssm_script)
-
         instanceId = event["instanceId"]
+
+        # ssm_script = ssm.send_command(
+        #     InstanceIds=[instanceId],
+        #     DocumentName='AWS-RunRemoteScript',
+        #     TimeoutSeconds=30,
+        #     Parameters={
+        #         "sourceType": ["GitHub"],
+        #         "sourceInfo": [
+        #             "{\"owner\":\"arturlr\", \"repository\": \"minecraft-server-dashboard\", \"path\": \"scripts/adding_cron.sh\", \"getOptions\": \"branch:dev\" }"
+        #             ],
+        #         "commandLine": ["bash adding_cron.sh"]
+        #     }
+        # )
+        # logger.info(ssm_script)
+
+        
         runCommand = utl.getSsmParam(
             "/amplify/minecraftserverdashboard/" + instanceId + "/runCommand")
         workingDir = utl.getSsmParam(
