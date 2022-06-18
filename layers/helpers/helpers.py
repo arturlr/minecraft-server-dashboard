@@ -72,7 +72,8 @@ class Utils:
         elif name == 'email':
             filters = [
                 {"Name":"tag:App", "Values":[ appValue ]},
-                {"Name":"instance-state-name", "Values":[ value ]}
+                {"Name":"instance-state-name", "Values":["pending","running","stopping","stopped"]}
+                
                 # {"Name":"tag:User", "Values":[ value ]}
             ]
             response =  ec2_client.describe_instances(
@@ -81,7 +82,7 @@ class Utils:
         elif name == 'state':
             filters = [
                 {"Name":"tag:App", "Values":[ appValue ]},
-                {"Name":"instance-state-name", "Values":["pending","running","stopping","stopped"]}
+                {"Name":"instance-state-name", "Values":[ value ]}
             ]
             response =  ec2_client.describe_instances(
                 Filters=filters            
