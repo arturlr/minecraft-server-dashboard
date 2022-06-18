@@ -4,6 +4,18 @@
 # check if port_count.sh exists.
 if [ ! -f ${WORKING_DIR}/port_count.sh ]; then
 
+APT=$(which apt)
+YUM=$(which yum)
+
+case $APT in /usr*)
+   sudo apt-get -y install zip 
+esac
+
+case $YUM in /usr*)
+   sudo yum -y install zip 
+esac
+
+
 curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
 unzip awscliv2.zip
 sudo ./aws/install
