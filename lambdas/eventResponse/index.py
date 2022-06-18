@@ -281,7 +281,7 @@ def handler(event, context):
 
         # Converting to PST as the logs are in PST        
         pstLaunchTime = launchTime.astimezone(pst)
-        activeUsers = getConnectUsers(instanceId, datetime.utcfromtimestamp(pstLaunchTime.timestamp()))
+        #activeUsers = getConnectUsers(instanceId, datetime.utcfromtimestamp(pstLaunchTime.timestamp()))
 
         if event['detail-type'] == "EC2 Instance State-change Notification":
             input["userEmail"] = userEmail
@@ -297,7 +297,7 @@ def handler(event, context):
             payload={"query": changeServerState, 'variables': { "input": input }}
 
         if event['detail-type'] == "Scheduled Event":
-            input['activeUsers'] = activeUsers
+            input['activeUsers'] = getMetricData(instanceId,'MinecraftDashboard','UserCount','Count','Sum',dt_4_four_hours_before,dt_now,300)
             input["cpuStats"] = getMetricData(instanceId,'AWS/EC2','CPUUtilization','Percent','Average',dt_4_four_hours_before,dt_now,300)
             input["networkStats"] = getMetricData(instanceId,'AWS/EC2','NetworkOut','Bytes','Average',dt_4_four_hours_before,dt_now,300)
             input["memStats"] = getMetricData(instanceId,'CWAgent','mem_used_percent','Percent','Average',dt_4_four_hours_before,dt_now,300)

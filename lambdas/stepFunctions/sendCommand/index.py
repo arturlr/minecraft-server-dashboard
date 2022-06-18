@@ -65,7 +65,7 @@ def ssmAgentCommands(instanceId, docName, params):
     while loopCount < 5:
         checkStatusCommand = listCommand(instanceId, command["CommandId"])
         time.sleep(5)
-        if checkStatusCommand["Status"] != "Success":
+        if checkStatusCommand["Status"] != "Success" and checkStatusCommand["Status"] != "Failed":
             loopCount = loopCount + 1
         else:
             loopCount = 0
@@ -102,26 +102,29 @@ def handler(event, context):
         else:
             logger.warning("RunCommand or Working Directories are not defined")
 
+
+        ## CloudWatch Agent Steps 
+
         ssmAgentStatus = ssmAgentCommands(instanceId,"AmazonCloudWatch-ManageAgent",{"action": ["status"],"mode": ["ec2"]})
         logger.info(ssmAgentStatus)
 
-        # Checking Agent Status
-        agentDetails=""
-        jpexpr = parse("$.pluginsDetails[?(@.Name[:] == 'ControlCloudWatchAgentLinux')].Output")
-        for i in jpexpr.find(ssmAgentStatus):
-            agentDetails = i.value
-            
-        if len(agentDetails) > 5:
-            agentDetailsJson = json.loads(agentDetails)
-            if agentDetailsJson["status"] == "running": 
-                logger.warning("Agent is already running. Version :" + agentDetailsJson["version"])
-                return { "msg": "Agent is already running. Version :" + agentDetailsJson["version"] }
+        # Checking Agent Status if Success. Failed messages occurs when the CloudWatch Agent is not installed. 
+        if ssmAgentStatus["Status"] == "Success":
+            agentDetails=""
+            jpexpr = parse("$.pluginsDetails[?(@.Name[:] == 'ControlCloudWatchAgentLinux')].Output")
+            for i in jpexpr.find(ssmAgentStatus):
+                agentDetails = i.value
+                
+            if len(agentDetails) > 5:
+                agentDetailsJson = json.loads(agentDetails)
+                if agentDetailsJson["status"] == "running": 
+                    logger.warning("Agent is already running. Version :" + agentDetailsJson["version"])
+                    return { "msg": "Agent is already running. Version :" + agentDetailsJson["version"] }
+                else:
+                    logger.info("Agent Status: " + agentDetailsJson["status"] + " - configuration Status: " + agentDetailsJson["configstatus"])
             else:
-                logger.info("Agent Status: " + agentDetailsJson["status"] + " - configuration Status: " + agentDetailsJson["configstatus"])
-        else:
-            logger.warning(agentDetailsJson)
-            return { "msg": "Detailed informatio not available"}
-
+                logger.warning(agentDetailsJson)
+                return { "msg": "Detailed informatio not available"}
         
         if ssmAgentStatus != None:
             ssmInstallAgent = ssmAgentCommands(instanceId,"AWS-ConfigureAWSPackage",{"action": ["Install"],"name": ["AmazonCloudWatchAgent"]})
