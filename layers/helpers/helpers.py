@@ -64,14 +64,15 @@ class Utils:
             logger.warning(str(e) + " for " + paramKey)
             return None
 
-    def describeInstances(self, name,value):
+    def describeInstances(self,name,value):
         if name == 'id':
             response = ec2_client.describe_instances(
                     InstanceIds=[value]
                         )
         elif name == 'email':
             filters = [
-                {"Name":"tag:App", "Values":[ appValue ]}
+                {"Name":"tag:App", "Values":[ appValue ]},
+                {"Name":"instance-state-name", "Values":[ value ]}
                 # {"Name":"tag:User", "Values":[ value ]}
             ]
             response =  ec2_client.describe_instances(
@@ -80,7 +81,7 @@ class Utils:
         elif name == 'state':
             filters = [
                 {"Name":"tag:App", "Values":[ appValue ]},
-                {"Name":"instance-state-name", "Values":[ value ]}
+                {"Name":"instance-state-name", "Values":["pending","running","stopping","stopped"]}
             ]
             response =  ec2_client.describe_instances(
                 Filters=filters            
