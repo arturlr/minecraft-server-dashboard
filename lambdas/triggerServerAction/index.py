@@ -229,6 +229,7 @@ def handler(event, context):
 
         # GET SSM PARAMETERS
         elif action == "getparameters":
+            
             response = utl.getSsmParameters(paramKey)
             if response != None:
                 return _response(200,response)

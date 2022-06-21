@@ -72,11 +72,11 @@ class Utils:
 
     def getSsmParameters(self, paramKeys, isEncrypted=False):
         try:
+            paramArray=paramKeys.split(",")
             ssmResult = ssm.get_parameters(
-                Names=paramKeys,
+                Names=paramArray,
                 WithDecryption=isEncrypted
             )
-
             if (len(ssmResult["Parameters"]) > 0):
                 return ssmResult["Parameters"]
             else:
