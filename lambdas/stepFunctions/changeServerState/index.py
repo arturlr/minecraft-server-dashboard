@@ -14,44 +14,7 @@ logger.setLevel(logging.INFO)
 utl = helpers.Utils()
 
 ec2_client = boto3.client('ec2')
-cw_client = boto3.client('cloudwatch')
 appValue = os.getenv('appValue')
-
-session = boto3.session.Session()
-awsRegion = session.region_name
-
-def updateAlarm(instanceId):
-    logger.info("updateAlarm: " + instanceId)
-
-    alarmMetric = utl.getSsmParam("/amplify/minecraftserverdashboard/" + instanceId + "/alarmMetric")
-    if alarmMetric == None:
-        alarmMetric = "NetworkOut"
-
-    alarmThreshold = utl.getSsmParam("/amplify/minecraftserverdashboard/" + instanceId + "/alarmThreshold")
-    if alarmThreshold == None:
-        alarmThreshold = "25000"
-
-    cw_client.put_metric_alarm(
-        AlarmName=instanceId + "-" + "Minecraft-Server",
-        ActionsEnabled=True,
-        AlarmActions=["arn:aws:automate:" + awsRegion + ":ec2:stop"],
-        InsufficientDataActions=[],
-        MetricName=alarmMetric,
-        Namespace="AWS/EC2",
-        Statistic="Average",
-        Dimensions=[
-            {
-            'Name': 'InstanceId',
-            'Value': instanceId
-            },
-        ],
-        Period=300,
-        EvaluationPeriods=7,
-        DatapointsToAlarm=7,
-        Threshold=int(alarmThreshold),
-        TreatMissingData="missing",
-        ComparisonOperator="LessThanOrEqualToThreshold"   
-    )
 
 def handler(event, context):
     try:   
@@ -74,7 +37,7 @@ def handler(event, context):
                 IsInstanceReady = True
 
             if (state == "stopped"):
-                updateAlarm(instanceId)
+                utl.updateAlarm(instanceId)
                 rsp = ec2_client.start_instances(
                     InstanceIds=[ instanceId ]
                 )

@@ -221,6 +221,9 @@ def handler(event, context):
         # ADD SSM PARAMETER
         elif action == "addparameter":
             response = utl.putSsmParam(paramKey,paramValue,'String')
+            keyName=paramKey.split('/')
+            if (keyName[-1]=="alarmThreshold"):
+                utl.updateAlarm(keyName[-1])
             resp = {"msg" : "Parameter saved"}
             return _response(200,resp)
 

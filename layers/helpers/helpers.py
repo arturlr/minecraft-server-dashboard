@@ -11,11 +11,48 @@ logger.setLevel(logging.INFO)
 
 ec2_client = boto3.client('ec2')
 ssm = boto3.client('ssm')
+cw_client = boto3.client('cloudwatch')
 appValue = os.getenv('appValue')
+
+session = boto3.session.Session()
+awsRegion = session.region_name
 
 class Utils:
     def __init__(self):
         logger.info("Utils initialized")
+
+    def updateAlarm(self, instanceId):
+        logger.info("updateAlarm: " + instanceId)
+
+        alarmMetric = self.getSsmParam("/amplify/minecraftserverdashboard/" + instanceId + "/alarmMetric")
+        if alarmMetric == None:
+            alarmMetric = "CPUUtilization"
+
+        alarmThreshold = self.getSsmParam("/amplify/minecraftserverdashboard/" + instanceId + "/alarmThreshold")
+        if alarmThreshold == None:
+            alarmThreshold = "10"
+
+        cw_client.put_metric_alarm(
+            AlarmName=instanceId + "-" + "minecraft-server",
+            ActionsEnabled=True,
+            AlarmActions=["arn:aws:automate:" + awsRegion + ":ec2:stop"],
+            InsufficientDataActions=[],
+            MetricName=alarmMetric,
+            Namespace="AWS/EC2",
+            Statistic="Average",
+            Dimensions=[
+                {
+                'Name': 'InstanceId',
+                'Value': instanceId
+                },
+            ],
+            Period=300,
+            EvaluationPeriods=7,
+            DatapointsToAlarm=7,
+            Threshold=int(alarmThreshold),
+            TreatMissingData="missing",
+            ComparisonOperator="LessThanOrEqualToThreshold"   
+    )
         
     def getSsmParam(self, paramKey, isEncrypted=False):
         try:

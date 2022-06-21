@@ -531,30 +531,50 @@ export default {
       this.settingsDialog = true
       this.settingsDialogLoading = true
       let action = null
+      let params = []
+
+      // Default values
+      this.runCommand = "";
+      this.workingDir = "";
+      this.alarmMetric = "CPUUtilization";
+      this.alarmThreshold = "10";
 
       if (submit) {
         action = "addparameter";
-      }
-      else {
-        action = "getparameter";
-      }
-
-      const rc = await this.triggerAction(action,'/amplify/minecraftserverdashboard/' + this.serverId +'/runCommand',this.runCommand, true);      
-      const wd = await this.triggerAction(action,'/amplify/minecraftserverdashboard/' + this.serverId +'/workingDir',this.workingDir, true);
-      const am = await this.triggerAction(action,'/amplify/minecraftserverdashboard/' + this.serverId +'/alarmMetric',this.alarmMetric, true);
-      const at = await this.triggerAction(action,'/amplify/minecraftserverdashboard/' + this.serverId +'/alarmThreshold',this.alarmThreshold, true);
-
-      this.settingsDialogLoading = false
-
-      if (submit) {
+        await this.triggerAction(action,'/amplify/minecraftserverdashboard/' + this.serverId +'/runCommand',this.runCommand, true);      
+        await this.triggerAction(action,'/amplify/minecraftserverdashboard/' + this.serverId +'/workingDir',this.workingDir, true);
+        await this.triggerAction(action,'/amplify/minecraftserverdashboard/' + this.serverId +'/alarmMetric',this.alarmMetric, true);
+        await this.triggerAction(action,'/amplify/minecraftserverdashboard/' + this.serverId +'/alarmThreshold',this.alarmThreshold, true);
         this.settingsDialog = false
       }
       else {
-        rc ? this.runCommand = rc : this.runCommand = "";
-        wd ? this.workingDir = wd : this.workingDir = "";
-        am ? this.alarmMetric = am : this.alarmMetric = "NetworkOut";
-        at ? this.alarmThreshold = at : this.alarmThreshold = "25000";
+        
+        action = "getparameters";
+        params = [ 
+          '/amplify/minecraftserverdashboard/' + this.serverId +'/runCommand',
+          '/amplify/minecraftserverdashboard/' + this.serverId +'/workingDir',
+          '/amplify/minecraftserverdashboard/' + this.serverId +'/alarmMe',
+          '/amplify/minecraftserverdashboard/' + this.serverId +'/alarmThreshold' 
+        ];
+        const resp = await this.triggerAction(action,params,null,true);
+        for (let i = 0; i < resp.length; i++ ) { 
+          if (resp[i].Name == '/amplify/minecraftserverdashboard/' + this.serverId +'/runCommand') {
+            this.runCommand = resp[i].Value
+          }
+          else if (resp[i].Name == '/amplify/minecraftserverdashboard/' + this.serverId +'/workingDir') {
+            this.workingDir = resp[i].Value
+          }
+          else if (resp[i].Name == '/amplify/minecraftserverdashboard/' + this.serverId +'/alarmMetric') {
+            this.alarmMetric = resp[i].Value
+          }
+          else if (resp[i].Name == '/amplify/minecraftserverdashboard/' + this.serverId +'/alarmThreshold') {
+            this.alarmThreshold = resp[i].Value
+          }
+        }
+
       }
+
+      this.settingsDialogLoading = false
 
     },
      resetForm () {
