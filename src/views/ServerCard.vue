@@ -551,10 +551,10 @@ export default {
         
         action = "getparameters";
         params = [ 
-          '/amplify/minecraftserverdashboard/' + this.serverId +'/runCommand',
-          '/amplify/minecraftserverdashboard/' + this.serverId +'/workingDir',
-          '/amplify/minecraftserverdashboard/' + this.serverId +'/alarmMe',
-          '/amplify/minecraftserverdashboard/' + this.serverId +'/alarmThreshold' 
+          '"/amplify/minecraftserverdashboard/' + this.serverId + '/runCommand"',
+          '"/amplify/minecraftserverdashboard/' + this.serverId + '/workingDir"',
+          '"/amplify/minecraftserverdashboard/' + this.serverId + '/alarmMe"',
+          '"/amplify/minecraftserverdashboard/' + this.serverId + '/alarmThreshold"' 
         ];
         const resp = await this.triggerAction(action,params,null,true);
         for (let i = 0; i < resp.length; i++ ) { 

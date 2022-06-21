@@ -73,7 +73,7 @@ class Utils:
     def getSsmParameters(self, paramKeys, isEncrypted=False):
         try:
             ssmResult = ssm.get_parameters(
-                Name=paramKeys,
+                Names=paramKeys,
                 WithDecryption=isEncrypted
             )
 
