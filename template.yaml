@@ -237,7 +237,8 @@ Resources:
           Statement:
             - Effect: Allow
               Action:
-                - ssm:PutParameter                
+                - ssm:PutParameter
+                - ssm:GetParameters          
               Resource: !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/amplify/minecraftserverdashboard*
         - Version: '2012-10-17' # Policy Document
           Statement:
