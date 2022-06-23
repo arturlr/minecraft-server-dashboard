@@ -7,38 +7,41 @@
       <v-card-subtitle class="text-caption">{{ serverId }} </v-card-subtitle>
       <v-card-text>
         <v-row>
-        <v-chip-group
-          column
-        >
-          <v-chip color="gray" label outlined>
-            <v-icon left> developer_board </v-icon>
-            {{ serversDict[serverId].vCpus }} vCPU
-          </v-chip>
+          <v-chip-group column>
+            <v-chip color="gray" label outlined>
+              <v-icon left> developer_board </v-icon>
+              {{ serversDict[serverId].vCpus }} vCPU
+            </v-chip>
 
-          <v-chip color="gray" label outlined>
-            <v-icon left> sd_card </v-icon>
-            {{ serversDict[serverId].memSize / 1024 }} GB
-          </v-chip>
+            <v-chip color="gray" label outlined>
+              <v-icon left> sd_card </v-icon>
+              {{ serversDict[serverId].memSize / 1024 }} GB
+            </v-chip>
 
-          <v-chip color="gray" label outlined>
-            <v-icon left> album </v-icon>
-            {{ serversDict[serverId].diskSize }} GB
-          </v-chip>
+            <v-chip color="gray" label outlined>
+              <v-icon left> album </v-icon>
+              {{ serversDict[serverId].diskSize }} GB
+            </v-chip>
 
-          <v-tooltip bottom>
-            <template v-slot:activator="{ on, attrs }">
-              <v-chip v-if="!isMobile" v-bind="attrs" v-on="on" color="gray" label outlined>
-                <v-icon left> schedule </v-icon>
-                {{ (serversDict[serverId].runningMinutes / 60).toFixed(1) }}
-                hours
-              </v-chip>
-            </template>
-            <span>Approximate number. Not for billing purpose</span>
-          </v-tooltip>
-          
-        </v-chip-group>
+            <v-tooltip bottom>
+              <template v-slot:activator="{ on, attrs }">
+                <v-chip
+                  v-if="!isMobile"
+                  v-bind="attrs"
+                  v-on="on"
+                  color="gray"
+                  label
+                  outlined
+                >
+                  <v-icon left> schedule </v-icon>
+                  {{ (serversDict[serverId].runningMinutes / 60).toFixed(1) }}
+                  hours
+                </v-chip>
+              </template>
+              <span>Approximate number. Not for billing purpose</span>
+            </v-tooltip>
+          </v-chip-group>
         </v-row>
-
 
         <v-row>
           <v-col md="auto" class="d-flex flex-column">
@@ -86,8 +89,8 @@
                 :options="lineChartOptions"
                 :series="chartInit"
               ></apexchart>
-              </v-card>
-          </div>           
+            </v-card>
+          </div>
           <v-col v-else class="d-flex flex-column">
             <v-card>
               <apexchart
@@ -101,25 +104,32 @@
         </v-row>
       </v-card-text>
 
-        <v-card-actions>
-          <v-tooltip bottom>
+      <v-card-actions>
+        <v-tooltip bottom>
           <template v-slot:activator="{ on, attrs }">
             <v-btn text v-bind="attrs" v-on="on" @click="processSettingsForm()">
-            <v-icon> settings </v-icon>   
+              <v-icon> settings </v-icon>
             </v-btn>
           </template>
           <span> Configure Minecraft Server initialization command</span>
         </v-tooltip>
-          <v-tooltip bottom>
+        <v-tooltip bottom>
           <template v-slot:activator="{ on, attrs }">
-            <v-btn text v-bind="attrs" v-on="on" @click="addUserDialog = true;addUserEmail = null">
+            <v-btn
+              text
+              v-bind="attrs"
+              v-on="on"
+              @click="
+                addUserDialog = true;
+                addUserEmail = null;
+              "
+            >
               <v-icon> person_add </v-icon>
             </v-btn>
           </template>
           <span> Add user to Start/Stop Server</span>
         </v-tooltip>
-        </v-card-actions>
-      
+      </v-card-actions>
 
       <v-list>
         <v-list-item two-line>
@@ -143,34 +153,39 @@
         </v-card-subtitle>
         <v-card-text>
           <v-row>
-              <v-text-field
-                dense
-                label="Email address"
-                v-model="addUserEmail"
-                suffix="@gmail.com"
-              ></v-text-field>
+            <v-text-field
+              dense
+              label="Email address"
+              v-model="addUserEmail"
+              suffix="@gmail.com"
+            ></v-text-field>
           </v-row>
           <v-row>
-              <v-list two-line>
-                <v-list-header>Current Members</v-list-header>
-                 <v-list-item
-                    v-for="user in groupMembers"
-                    :key="user.id"
-                  >
+            <v-list two-line>
+              <v-list-header>Current Members</v-list-header>
+              <v-list-item v-for="user in groupMembers" :key="user.id">
                 <v-list-item-content>
                   <v-list-item-title v-text="user.fullname"></v-list-item-title>
-                  <v-list-item-subtitle v-text="user.email"></v-list-item-subtitle>
+                  <v-list-item-subtitle
+                    v-text="user.email"
+                  ></v-list-item-subtitle>
                 </v-list-item-content>
-                 </v-list-item>
-              </v-list>
+              </v-list-item>
+            </v-list>
           </v-row>
         </v-card-text>
         <v-card-actions>
-          <v-btn color="primary" text @click="triggerAction('adduser','email',addUserEmail)"> Add </v-btn>
+          <v-btn
+            color="primary"
+            text
+            @click="triggerAction('adduser', 'email', addUserEmail)"
+          >
+            Add
+          </v-btn>
           <v-btn color="warning" text @click="addUserDialog = false">
             Cancel
-          </v-btn>          
-        </v-card-actions>        
+          </v-btn>
+        </v-card-actions>
       </v-card>
     </v-dialog>
 
@@ -190,10 +205,7 @@
         <v-card-text>
           <v-container>
             <v-row>
-              <v-col
-                cols="12"
-                sm="6"
-              >
+              <v-col cols="12" sm="6">
                 <v-select
                   :items="['CPUUtilization', 'NetworkOut']"
                   label="Metric"
@@ -203,12 +215,9 @@
                   ref="alarmMetric"
                 ></v-select>
               </v-col>
-              <v-col
-                cols="12"
-                sm="6"
-              >
-                <v-text-field   
-                  dense               
+              <v-col cols="12" sm="6">
+                <v-text-field
+                  dense
                   label="Instance idle threshold."
                   hint="%CPU or NetworkOut bytes (default 25.000 bytes)"
                   :rules="[rules.required, rules.onlyNumbers]"
@@ -218,29 +227,29 @@
                 ></v-text-field>
               </v-col>
 
-            <v-col cols="12">
-              <v-text-field
-                dense
-                v-model="runCommand"
-                ref="runCommand"
-                label="Minecraft run command"
-                :rules="[rules.required]"
-              ></v-text-field>
-            </v-col>
-            <v-col cols="12">
-              <v-text-field
-                dense
-                v-model="workingDir"
-                ref="workingDir"
-                label="Minecraft working directory"
-                :rules="[rules.required]"
-              ></v-text-field>
-            </v-col>
+              <v-col cols="12">
+                <v-text-field
+                  dense
+                  v-model="runCommand"
+                  ref="runCommand"
+                  label="Minecraft run command"
+                  :rules="[rules.required]"
+                ></v-text-field>
+              </v-col>
+              <v-col cols="12">
+                <v-text-field
+                  dense
+                  v-model="workingDir"
+                  ref="workingDir"
+                  label="Minecraft working directory"
+                  :rules="[rules.required]"
+                ></v-text-field>
+              </v-col>
             </v-row>
           </v-container>
         </v-card-text>
         <v-card-actions>
-          <v-btn 
+          <v-btn
             v-if="!settingsDialogLoading"
             color="primary"
             text
@@ -249,10 +258,7 @@
             Save
           </v-btn>
           <v-slide-x-reverse-transition>
-            <v-tooltip
-              v-if="settingsFormHasErrors"
-              right
-            >
+            <v-tooltip v-if="settingsFormHasErrors" right>
               <template v-slot:activator="{ on, attrs }">
                 <v-btn
                   icon
@@ -267,74 +273,66 @@
               <span>Refresh form</span>
             </v-tooltip>
           </v-slide-x-reverse-transition>
-          <v-spacer></v-spacer>          
-          <v-btn 
-            text
-            @click="settingsDialog = false"
-          >
-            Close
-          </v-btn>
+          <v-spacer></v-spacer>
+          <v-btn text @click="settingsDialog = false"> Close </v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
 
-    <v-dialog
-      v-model="serverStateConfirmation"
-      max-width="300px"
-    >
+    <v-dialog v-model="serverStateConfirmation" max-width="300px">
       <v-card>
         <v-list-item two-line>
-            <v-list-item-content>
-              <v-list-item-title class="text-h6">
-                {{ serverName }}
-              </v-list-item-title>
-              <v-list-item-subtitle>Confirm actions: </v-list-item-subtitle>
-            </v-list-item-content>
-          </v-list-item>
-          <v-card-actions>
-            <div v-if="serversDict[serverId].state == 'stopped'">
-              <v-btn
-                color="success"
-                outlined
-                small
-                class="pa-2"
-                @click="triggerAction('start')"
-              >
-                Start
-              </v-btn>
-            </div>
-            <div v-else>
-              <v-btn
-                color="warning"
-                outlined
-                small
-                @click="triggerAction('stop')"
-              >
-                Stop 
-              </v-btn>
-
-              <span> &nbsp; </span>
-
-              <v-btn
-                color="warning"
-                outlined
-                small
-                @click="triggerAction('restart')"
-              >
-                ReStart
-              </v-btn>
-            </div>
-
-            <v-spacer></v-spacer>
-
+          <v-list-item-content>
+            <v-list-item-title class="text-h6">
+              {{ serverName }}
+            </v-list-item-title>
+            <v-list-item-subtitle>Confirm actions: </v-list-item-subtitle>
+          </v-list-item-content>
+        </v-list-item>
+        <v-card-actions>
+          <div v-if="serversDict[serverId].state == 'stopped'">
             <v-btn
-              color="gray darken-1"
+              color="success"
               outlined
               small
-              @click="serverStateConfirmation = false"
+              class="pa-2"
+              @click="triggerAction('start',null,null)"
             >
-              Cancel
+              Start
             </v-btn>
+          </div>
+          <div v-else>
+            <v-btn
+              color="warning"
+              outlined
+              small
+              @click="triggerAction('stop',null,null)"
+            >
+              Stop
+            </v-btn>
+
+            <span> &nbsp; </span>
+
+            <v-btn
+              color="warning"
+              outlined
+              small
+              @click="triggerAction('restart',null,null)"
+            >
+              ReStart
+            </v-btn>
+          </div>
+
+          <v-spacer></v-spacer>
+
+          <v-btn
+            color="gray darken-1"
+            outlined
+            small
+            @click="serverStateConfirmation = false"
+          >
+            Cancel
+          </v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -349,7 +347,7 @@
       centered
       text
     >
-    <strong>{{ infoMsg }}</strong>
+      <strong>{{ infoMsg }}</strong>
     </v-snackbar>
 
     <v-snackbar
@@ -362,8 +360,8 @@
       centered
       text
     >
-    <strong>{{ errorMsg }}</strong>
-    </v-snackbar>   
+      <strong>{{ errorMsg }}</strong>
+    </v-snackbar>
 
     <v-snackbar
       v-model="copyDialog"
@@ -374,8 +372,8 @@
       color="primary"
       text
     >
-    <strong>Copied!</strong>
-    </v-snackbar> 
+      <strong>Copied!</strong>
+    </v-snackbar>
   </div>
 </template>
 
@@ -397,12 +395,11 @@ export default {
   data() {
     return {
       rules: {
-        required: value => !!value || 'Required.',
-        onlyNumbers: value => {
-          const pattern = /^[0-9]*$/
-          return pattern.test(value) || 'Threshold must be only 2 numbers.'
+        required: (value) => !!value || "Required.",
+        onlyNumbers: (value) => {
+          const pattern = /^[0-9]*$/;
+          return pattern.test(value) || "Threshold must be only 2 numbers.";
         },
-
       },
       serverId: null,
       copyDialog: false,
@@ -488,7 +485,7 @@ export default {
     if (this.$route.params) {
       this.serverId = this.$route.params.id;
       this.runCommand = this.serversDict[this.serverId].runCommand;
-      this.workingDir = this.serversDict[this.serverId].workingDir;      
+      this.workingDir = this.serversDict[this.serverId].workingDir;
       this.subscribePutServerMetric();
     }
   },
@@ -503,13 +500,14 @@ export default {
       serversDict: (state) => state.general.serversDict,
     }),
     groupMembers() {
-      if (this.serversDict[this.serverId].groupMembers && 
-          this.serversDict[this.serverId].groupMembers.length > 0) {
-            return JSON.parse(this.serversDict[this.serverId].groupMembers)
-          }
-      else {
-        return []
-      }    
+      if (
+        this.serversDict[this.serverId].groupMembers &&
+        this.serversDict[this.serverId].groupMembers.length > 0
+      ) {
+        return JSON.parse(this.serversDict[this.serverId].groupMembers);
+      } else {
+        return [];
+      }
     },
     serverName() {
       if (
@@ -526,101 +524,146 @@ export default {
     },
   },
   methods: {
-
     async processSettingsForm(submit = false) {
-      this.settingsDialog = true
-      this.settingsDialogLoading = true
-      let action = null
-      let params = []
+      this.settingsDialog = true;
+      this.settingsDialogLoading = true;
+      let action = null;
+      let params = [];
 
       if (submit) {
         action = "addparameter";
-        await this.triggerAction(action,'/amplify/minecraftserverdashboard/' + this.serverId +'/runCommand',this.runCommand, true);      
-        await this.triggerAction(action,'/amplify/minecraftserverdashboard/' + this.serverId +'/workingDir',this.workingDir, true);
-        await this.triggerAction(action,'/amplify/minecraftserverdashboard/' + this.serverId +'/alarmMetric',this.alarmMetric, true);
-        await this.triggerAction(action,'/amplify/minecraftserverdashboard/' + this.serverId +'/alarmThreshold',this.alarmThreshold, true);
-        this.settingsDialog = false
-      }
-      else {
+        await this.triggerAction(
+          action,
+          "/amplify/minecraftserverdashboard/" + this.serverId + "/runCommand",
+          this.runCommand,
+          true
+        );
+        await this.triggerAction(
+          action,
+          "/amplify/minecraftserverdashboard/" + this.serverId + "/workingDir",
+          this.workingDir,
+          true
+        );
+        await this.triggerAction(
+          action,
+          "/amplify/minecraftserverdashboard/" + this.serverId + "/alarmMetric",
+          this.alarmMetric,
+          true
+        );
+        await this.triggerAction(
+          action,
+          "/amplify/minecraftserverdashboard/" + this.serverId + "/alarmThreshold",
+          this.alarmThreshold,
+          true
+        );
+        this.settingsDialog = false;
+      } else {
         // Default values
         this.runCommand = "";
         this.workingDir = "";
         this.alarmMetric = "";
         this.alarmThreshold = "";
-        
+
         action = "getparameters";
-        params = 
-          "/amplify/minecraftserverdashboard/" + this.serverId + "/runCommand" + "," +
-          "/amplify/minecraftserverdashboard/" + this.serverId + "/workingDir" + "," +
-          "/amplify/minecraftserverdashboard/" + this.serverId + "/alarmMetric" + "," +
-          "/amplify/minecraftserverdashboard/" + this.serverId + "/alarmThreshold";
-        const resp = await this.triggerAction(action,params,null,true);
-        for (let i = 0; i < resp.length; i++ ) { 
-          if (resp[i].Name == '/amplify/minecraftserverdashboard/' + this.serverId +'/runCommand') {
-            this.runCommand = resp[i].Value
-          }
-          else if (resp[i].Name == '/amplify/minecraftserverdashboard/' + this.serverId +'/workingDir') {
-            this.workingDir = resp[i].Value
-          }
-          else if (resp[i].Name == '/amplify/minecraftserverdashboard/' + this.serverId +'/alarmMetric') {
-            this.alarmMetric = resp[i].Value
-          }
-          else if (resp[i].Name == '/amplify/minecraftserverdashboard/' + this.serverId +'/alarmThreshold') {
-            this.alarmThreshold = resp[i].Value
+        params =
+          "/amplify/minecraftserverdashboard/" +
+          this.serverId +
+          "/runCommand" +
+          "," +
+          "/amplify/minecraftserverdashboard/" +
+          this.serverId +
+          "/workingDir" +
+          "," +
+          "/amplify/minecraftserverdashboard/" +
+          this.serverId +
+          "/alarmMetric" +
+          "," +
+          "/amplify/minecraftserverdashboard/" +
+          this.serverId +
+          "/alarmThreshold";
+        const resp = await this.triggerAction(action, params, null, true);
+        for (let i = 0; i < resp.length; i++) {
+          if (
+            resp[i].Name ==
+            "/amplify/minecraftserverdashboard/" + this.serverId + "/runCommand"
+          ) {
+            this.runCommand = resp[i].Value;
+          } else if (
+            resp[i].Name ==
+            "/amplify/minecraftserverdashboard/" + this.serverId + "/workingDir"
+          ) {
+            this.workingDir = resp[i].Value;
+          } else if (
+            resp[i].Name ==
+            "/amplify/minecraftserverdashboard/" +
+              this.serverId +
+              "/alarmMetric"
+          ) {
+            this.alarmMetric = resp[i].Value;
+          } else if (
+            resp[i].Name ==
+            "/amplify/minecraftserverdashboard/" +
+              this.serverId +
+              "/alarmThreshold"
+          ) {
+            this.alarmThreshold = resp[i].Value;
           }
         }
-
       }
 
-      this.settingsDialogLoading = false
-
+      this.settingsDialogLoading = false;
     },
-     resetForm () {
-        this.settingsFormHasErrors = false
+    resetForm() {
+      this.settingsFormHasErrors = false;
 
-        this.$refs.alarmMetric.reset();
-        this.$refs.alarmThreshold.reset();
-        this.$refs.runCommand.reset();
-        this.$refs.workingDir.reset();
-      },
-      async submit () {
-        this.settingsFormHasErrors = false
+      this.$refs.alarmMetric.reset();
+      this.$refs.alarmThreshold.reset();
+      this.$refs.runCommand.reset();
+      this.$refs.workingDir.reset();
+    },
+    async submit() {
+      this.settingsFormHasErrors = false;
 
-        this.$refs.alarmMetric.validate();
-        this.$refs.alarmThreshold.validate();
-        this.$refs.runCommand.validate();
-        this.$refs.workingDir.validate();
-        if (this.$refs.alarmMetric.hasError || 
-            this.$refs.alarmThreshold.hasError ||
-            this.$refs.runCommand.hasError ||
-            this.$refs.workingDir.hasError
-            ) {
-            this.settingsFormHasErrors = true
-            return false;
-        }
+      this.$refs.alarmMetric.validate();
+      this.$refs.alarmThreshold.validate();
+      this.$refs.runCommand.validate();
+      this.$refs.workingDir.validate();
+      if (
+        this.$refs.alarmMetric.hasError ||
+        this.$refs.alarmThreshold.hasError ||
+        this.$refs.runCommand.hasError ||
+        this.$refs.workingDir.hasError
+      ) {
+        this.settingsFormHasErrors = true;
+        return false;
+      }
 
-       this.processSettingsForm(true)
-
-      },
-    async triggerAction(action, paramKey="", paramValue="", returnSsmValue = false) {
+      this.processSettingsForm(true);
+    },
+    async triggerAction(
+      action,
+      paramKey,
+      paramValue,
+      returnSsmValue = false
+    ) {
       this.serverStateConfirmation = false;
       this.addUserDialog = false;
       const input = {
         instanceId: this.serverId,
         action: action,
         paramKey: paramKey,
-        paramValue: paramValue
+        paramValue: paramValue,
       };
       const actionResult = await API.graphql({
         query: triggerServerAction,
         variables: { input: input },
       });
 
-      const rsp = JSON.parse(actionResult.data.triggerServerAction);      
+      const rsp = JSON.parse(actionResult.data.triggerServerAction);
 
       if (rsp.statusCode == 200) {
         if (returnSsmValue) {
-          return rsp.body
+          return rsp.body;
         }
         this.infoMsg = "Server action: " + action + " done.";
         this.successAlert = true;
@@ -631,7 +674,6 @@ export default {
         this.errorMsg = rsp.body.err;
         this.errorAlert = true;
       }
-      
     },
     updateCharts() {
       this.$nextTick(() => {
@@ -703,7 +745,7 @@ export default {
     copyPublicIp() {
       let serverIp = document.querySelector("#publicIp");
       serverIp.setAttribute("type", "text");
-      serverIp.value = serverIp.value + ":25565"
+      serverIp.value = serverIp.value + ":25565";
       serverIp.select();
       try {
         document.execCommand("copy");
@@ -714,7 +756,7 @@ export default {
       this.copyDialog = true;
       setTimeout(() => {
         this.copyDialog = false;
-      }, 2000)
+      }, 2000);
     },
   },
 };
