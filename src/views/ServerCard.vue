@@ -540,15 +540,15 @@ export default {
 
         const resp = await this.triggerAction("getintanceinfo", this.serverId);
         console.log(resp)
-        if (resp.code == 200) {
-          this.runCommand = resp.entry.runCommand
+        if (resp.statusCode == 200) {
+          this.runCommand = resp.body.runCommand
         }
-        else if (resp.code == 400) {
+        else if (resp.statusCode == 400) {
           this.alarmMetric = "CPUUtilization";
           this.alarmThreshold = "10";
         }
         else {
-          console.error(resp.entry)
+          console.error(resp.body)
         }
       }
 
