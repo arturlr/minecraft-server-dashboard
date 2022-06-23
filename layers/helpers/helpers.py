@@ -35,24 +35,24 @@ class Dyn:
             logger.error(e.response['Error']['Message'])
             return {'code': 400, 'msg': e.response['Error']['Message'] }
 
-    def SetInstanceAttr(self,instanceId,keys,values,expression):
+    def SetInstanceAttr(self,params):
         try:
 
-            dynExpression = "set runCommand = :rc, workingDir = :wd, alarmMetric = :am, alarmThreshold = :at"
-            valuesMap = "':rc':" + this.runCommand + "':wd':" + this.workingDir + "':am':" + this.alarmMetric + "':at':" + this.alarmThreshol
+            dynExpression = "set runCommand = :rc, workingDir = :wd, alarmMetric = :am, alarmThreshold = :at"               
+            valuesMap = "':rc':" + params["runCommand"]+ "':wd':" + params["workingDir"] + "':am':" + params["alarmMetric"] + "':at':" + params["alarmThreshol"]
         
-            entry = self.GetInstanceInfo(instanceId)
+            entry = self.GetInstanceInfo(params["instanceId"])
 
             if entry['Count'] == 1:
-                logger.info("Updating Instance " + instanceId)
+                logger.info("Updating Instance " + params["instanceId"])
             else: 
-                logger.info("Creating Instance " + instanceId)
+                logger.info("Creating Instance " + params["instanceId"])
 
 
             self.table.update_item(
-                    Key=keys,
-                    UpdateExpression=expression,
-                    ExpressionAttributeValues=values,
+                    Key={ 'instanceId': params["instanceId"] },
+                    UpdateExpression=dynExpression,
+                    ExpressionAttributeValues=valuesMap,
                     ReturnValues="UPDATED_NEW"
                 )
 

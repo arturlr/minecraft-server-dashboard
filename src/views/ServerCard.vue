@@ -296,7 +296,7 @@
               outlined
               small
               class="pa-2"
-              @click="triggerAction('start',{'server': serverId}, true)"
+              @click="triggerAction('start',{ 'instanceId':  serverId }, true)"
             >
               Start
             </v-btn>
@@ -306,7 +306,7 @@
               color="warning"
               outlined
               small
-              @click="triggerAction('stop',{'server': serverId}, true)"
+              @click="triggerAction('stop',{ 'instanceId':  serverId }, true)"
             >
               Stop
             </v-btn>
@@ -317,7 +317,7 @@
               color="warning"
               outlined
               small
-              @click="triggerAction('restart',{'server': serverId}, true)"
+              @click="triggerAction('restart',{ 'instanceId':  serverId }, true)"
             >
               ReStart
             </v-btn>
@@ -529,7 +529,7 @@ export default {
       this.settingsDialogLoading = true;
       
       if (submit) {
-        await this.triggerAction("setintanceinfo", {"rc":this.runCommand,"wd":this.workingDir,"am":this.alarmMetric,"at":this.alarmThreshold,'server': this.serverId })          
+        await this.triggerAction("setintanceinfo", {"rc":this.runCommand,"wd":this.workingDir,"am":this.alarmMetric,"at":this.alarmThreshold,'instanceId': this.serverId })          
         this.settingsDialog = false;
       } else {
         // Default values
@@ -538,7 +538,7 @@ export default {
         this.alarmMetric = "";
         this.alarmThreshold = "";
 
-        const resp = await this.triggerAction("getintanceinfo", {'server': this.serverId});
+        const resp = await this.triggerAction("getintanceinfo", {'instanceId': this.serverId});
         console.log(resp)
       }
 

@@ -90,7 +90,7 @@ Resources:
         - AttributeName: instanceId
           AttributeType: S
       KeySchema:
-        - AttributeName: connectionId
+        - AttributeName: instanceId
           KeyType: HASH
         - AttributeName: region
           KeyType: RANGE
@@ -213,7 +213,7 @@ Resources:
         - SSMParameterReadPolicy:
             ParameterName: "amplify/minecraftserverdashboard*"
         - DynamoDBCrudPolicy:
-            tableName: !Ref InstancesTable
+            TableName: !Ref InstancesTable
       Environment:
         Variables:
           APP_NAME: !Ref ProjectName
@@ -236,7 +236,7 @@ Resources:
         - SSMParameterReadPolicy:
             ParameterName: "amplify/minecraftserverdashboard*"
         - DynamoDBCrudPolicy:
-            tableName: !Ref InstancesTable
+            TableName: !Ref InstancesTable
       Environment:
         Variables:
           APP_NAME: !Ref ProjectName
@@ -259,7 +259,7 @@ Resources:
         - SSMParameterReadPolicy:
             ParameterName: "amplify/minecraftserverdashboard*"
         - DynamoDBCrudPolicy:
-            tableName: !Ref InstancesTable
+            TableName: !Ref InstancesTable
         - Version: '2012-10-17' # Policy Document
           Statement:
             - Effect: Allow
@@ -296,7 +296,7 @@ Resources:
         - SSMParameterReadPolicy:
             ParameterName: "amplify/minecraftserverdashboard*"
         - DynamoDBCrudPolicy:
-            tableName: !Ref InstancesTable
+            TableName: !Ref InstancesTable
         - Version: '2012-10-17' # Policy Document
           Statement:
             - Effect: Allow
@@ -331,7 +331,7 @@ Resources:
         - SSMParameterReadPolicy:
             ParameterName: "amplify/minecraftserverdashboard*"
         - DynamoDBCrudPolicy:
-            tableName: !Ref InstancesTable
+            TableName: !Ref InstancesTable
         - Version: '2012-10-17' # Policy Document
           Statement:
             - Effect: Allow
