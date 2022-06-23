@@ -50,7 +50,7 @@ class Dyn:
 
 
             self.table.update_item(
-                    Key={ 'instanceId': params["instanceId"] },
+                    Key={ 'instanceId': params["instanceId"], 'region': awsRegion },
                     UpdateExpression=dynExpression,
                     ExpressionAttributeValues=valuesMap,
                     ReturnValues="UPDATED_NEW"

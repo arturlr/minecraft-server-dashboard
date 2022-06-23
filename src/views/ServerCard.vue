@@ -581,7 +581,7 @@ export default {
       const input = {
         instanceId: this.serverId,
         action: action,
-        paramDic: paramDict       
+        paramDict: paramDict
       };
       const actionResult = await API.graphql({
         query: triggerServerAction,
