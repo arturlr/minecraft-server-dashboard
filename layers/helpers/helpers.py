@@ -29,24 +29,27 @@ class Dyn:
                     # For future implementation
                     # Key('region').eq(region_name)
             )
-            return {'code': 200, 'entry': response['Items'][0] } 
+            if len(response['Items']) > 0:
+                return {'code': 200, 'entry': response['Items'][0] } 
+            else:
+                return {'code': 400, 'entry': "Instance not found" } 
 
         except ClientError as e:
             logger.error(e.response['Error']['Message'])
-            return {'code': 400, 'entry': e.response['Error']['Message'] }
+            return {'code': 500, 'entry': e.response['Error']['Message'] }
 
-    def SetInstanceAttr(self,params):
+    def SetInstanceAttr(self,instanceId,params):
         try:
 
             dynExpression = "set runCommand = :rc, workingDir = :wd, alarmMetric = :am, alarmThreshold = :at"               
             valuesMap = "':rc':" + params["runCommand"]+ "':wd':" + params["workingDir"] + "':am':" + params["alarmMetric"] + "':at':" + params["alarmThreshol"]
         
-            entry = self.GetInstanceInfo(params["instanceId"])
+            entry = self.GetInstanceInfo(instanceId)
 
             if entry['Count'] == 1:
-                logger.info("Updating Instance " + params["instanceId"])
+                logger.info("Updating Instance " + instanceId)
             else: 
-                logger.info("Creating Instance " + params["instanceId"])
+                logger.info("Creating Instance " + instanceId)
 
 
             resp = self.table.update_item(
@@ -61,7 +64,7 @@ class Dyn:
                         
         except ClientError as e:
             logger.error(e.response['Error']['Message'])
-            return {'code': 400, 'entry': e.response['Error']['Message'] }
+            return {'code': 500, 'entry': e.response['Error']['Message'] }
 
 class Utils:
     def __init__(self):
