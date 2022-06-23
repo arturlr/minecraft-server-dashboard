@@ -296,7 +296,7 @@
               outlined
               small
               class="pa-2"
-              @click="triggerAction('start',JSON.parse({ 'instanceId': '\'' + serverId + '\'' }), true)"
+              @click="triggerAction('start',serverId, true)"
             >
               Start
             </v-btn>
@@ -306,7 +306,7 @@
               color="warning"
               outlined
               small
-              @click="triggerAction('stop',{ 'instanceId':  serverId }, true)"
+              @click="triggerAction('stop',serverId, true)"
             >
               Stop
             </v-btn>
@@ -317,7 +317,7 @@
               color="warning"
               outlined
               small
-              @click="triggerAction('restart',{ 'instanceId':  serverId }, true)"
+              @click="triggerAction('restart',serverId, true)"
             >
               ReStart
             </v-btn>
@@ -529,7 +529,7 @@ export default {
       this.settingsDialogLoading = true;
       
       if (submit) {
-        await this.triggerAction("setintanceinfo", JSON.parse({"rc":'"' + this.runCommand + '"',"wd":'"' + this.workingDir + '"',"am":'"' + this.alarmMetric + '"',"at":'"' + this.alarmThreshold + '"',"instanceId": '"' + this.serverId + '"' }))          
+        await this.triggerAction("setintanceinfo", {rc:this.runCommand,wd:this.workingDir,am:this.alarmMetric,at:this.alarmThreshold,instanceId:this.serverId})        
         this.settingsDialog = false;
       } else {
         // Default values
@@ -538,7 +538,7 @@ export default {
         this.alarmMetric = "";
         this.alarmThreshold = "";
 
-        const resp = await this.triggerAction("getintanceinfo", JSON.parse({"instanceId": '"' + this.serverId + '"'}));
+        const resp = await this.triggerAction("getintanceinfo", this.serverId);
         console.log(resp)
       }
 
@@ -573,15 +573,24 @@ export default {
     },
     async triggerAction(
       action,
-      paramDict,
+      param,
       returnValue = false
     ) {
       this.serverStateConfirmation = false;
       this.addUserDialog = false;
+
+      let jsonParam = null;
+      if (typeof SignUpParams == "string" && param.startsWith('i-')){
+        jsonParam = JSON.parse('{ "instanceId":"' + param + '"}')
+      }
+      else {
+        jsonParam = JSON.stringify(param);
+      }
+
       const input = {
         instanceId: this.serverId,
         action: action,
-        paramDict: paramDict
+        paramDict: jsonParam
       };
       const actionResult = await API.graphql({
         query: triggerServerAction,
