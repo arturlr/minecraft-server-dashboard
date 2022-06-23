@@ -533,12 +533,6 @@ export default {
       let action = null
       let params = []
 
-      // Default values
-      this.runCommand = "";
-      this.workingDir = "";
-      this.alarmMetric = "CPUUtilization";
-      this.alarmThreshold = "10";
-
       if (submit) {
         action = "addparameter";
         await this.triggerAction(action,'/amplify/minecraftserverdashboard/' + this.serverId +'/runCommand',this.runCommand, true);      
@@ -548,12 +542,17 @@ export default {
         this.settingsDialog = false
       }
       else {
+        // Default values
+        this.runCommand = "";
+        this.workingDir = "";
+        this.alarmMetric = "";
+        this.alarmThreshold = "";
         
         action = "getparameters";
         params = 
           "/amplify/minecraftserverdashboard/" + this.serverId + "/runCommand" + "," +
           "/amplify/minecraftserverdashboard/" + this.serverId + "/workingDir" + "," +
-          "/amplify/minecraftserverdashboard/" + this.serverId + "/alarmMe" + "," +
+          "/amplify/minecraftserverdashboard/" + this.serverId + "/alarmMetric" + "," +
           "/amplify/minecraftserverdashboard/" + this.serverId + "/alarmThreshold";
         const resp = await this.triggerAction(action,params,null,true);
         for (let i = 0; i < resp.length; i++ ) { 
