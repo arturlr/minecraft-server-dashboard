@@ -207,7 +207,7 @@
             <v-row>
               <v-col cols="12" sm="6">
                 <v-select
-                  :items="['CPUUtilization', 'NetworkOut']"
+                  :items="['Connections','CPUUtilization','NetworkOut']"
                   label="Metric"
                   :rules="[rules.required]"
                   dense
@@ -219,7 +219,7 @@
                 <v-text-field
                   dense
                   label="Instance idle threshold."
-                  hint="%CPU or NetworkOut bytes (default 25.000 bytes)"
+                  hint="Connections, %CPU or NetworkOut bytes"
                   :rules="[rules.required, rules.onlyNumbers]"
                   maxlength="6"
                   v-model="alarmThreshold"
@@ -296,7 +296,7 @@
               outlined
               small
               class="pa-2"
-              @click="triggerAction('start',{ 'instanceId': '\'' + serverId + '\'' }, true)"
+              @click="triggerAction('start',JSON.parse({ 'instanceId': '\'' + serverId + '\'' }), true)"
             >
               Start
             </v-btn>
@@ -529,7 +529,7 @@ export default {
       this.settingsDialogLoading = true;
       
       if (submit) {
-        await this.triggerAction("setintanceinfo", {"rc":'"' + this.runCommand + '"',"wd":'"' + this.workingDir + '"',"am":'"' + this.alarmMetric + '"',"at":'"' + this.alarmThreshold + '"',"instanceId": '"' + this.serverId + '"' })          
+        await this.triggerAction("setintanceinfo", JSON.parse({"rc":'"' + this.runCommand + '"',"wd":'"' + this.workingDir + '"',"am":'"' + this.alarmMetric + '"',"at":'"' + this.alarmThreshold + '"',"instanceId": '"' + this.serverId + '"' }))          
         this.settingsDialog = false;
       } else {
         // Default values
@@ -538,7 +538,7 @@ export default {
         this.alarmMetric = "";
         this.alarmThreshold = "";
 
-        const resp = await this.triggerAction("getintanceinfo", {"instanceId": '"' + this.serverId + '"'});
+        const resp = await this.triggerAction("getintanceinfo", JSON.parse({"instanceId": '"' + this.serverId + '"'}));
         console.log(resp)
       }
 
@@ -630,7 +630,7 @@ export default {
 
         this.$refs.users.updateSeries([
           {
-            name: "Users",
+            name: "Connections",
             data: this.serversDict[this.serverId].activeUsers
               ? this.serversDict[this.serverId].activeUsers
               : [],
