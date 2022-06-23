@@ -12,6 +12,7 @@ import helpers
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 utl = helpers.Utils()
+dyn = helpers.Dyn()
 
 appValue = os.getenv('TAG_APP_VALUE')
 
@@ -163,6 +164,11 @@ def handler(event, context):
         instanceId = event["arguments"]["input"]["instanceId"]
         action = event["arguments"]["input"]["action"]
 
+        if 'params' in event["arguments"]["input"]:
+            params = event["arguments"]["input"]['params']
+        else:
+            params = None
+
         if 'paramKey' in event["arguments"]["input"]:
             paramKey = event["arguments"]["input"]['paramKey']
         else:
@@ -228,9 +234,20 @@ def handler(event, context):
             resp = {"msg" : "Parameter saved"}
             return _response(200,resp)
 
+        # GET INSTANCE INFO
+        elif action == "getintanceinfo":
+            response = dyn.GetInstanceInfo(instanceId)
+            return _response(response["code"],response["entry"])
+
+        
+        # GET INSTANCE INFO
+        elif action == "setintanceinfo":
+            response = dyn.SetInstanceAttr(instanceId,params)
+            return _response(response["code"],response["entry"])
+
+
         # GET SSM PARAMETERS
         elif action == "getparameters":
-
             response = utl.getSsmParameters(paramKey)
             if response != None:
                 return _response(200,response)

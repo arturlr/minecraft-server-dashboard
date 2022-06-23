@@ -85,7 +85,7 @@ input ServerInfoInput {
 input ServerActionInput {  
   action: String!
   instanceId: String!
-  paramDict: AWSJSON
+  params: AWSJSON
 }
 
 type LoginAudit @model @auth(rules: [{ allow: private }])

@@ -579,18 +579,18 @@ export default {
       this.serverStateConfirmation = false;
       this.addUserDialog = false;
 
-      let jsonParam = null;
+      let jsonParams = null;
       if (typeof SignUpParams == "string" && param.startsWith('i-')){
-        jsonParam = JSON.parse('{ "instanceId":"' + param + '"}')
+        jsonParams = JSON.parse('{ "instanceId":"' + param + '"}')
       }
       else {
-        jsonParam = JSON.stringify(param);
+        jsonParams = JSON.stringify(param);
       }
 
       const input = {
         instanceId: this.serverId,
         action: action,
-        paramDict: jsonParam
+        params: jsonParams
       };
       const actionResult = await API.graphql({
         query: triggerServerAction,

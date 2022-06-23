@@ -29,11 +29,11 @@ class Dyn:
                     # For future implementation
                     # Key('region').eq(region_name)
             )
-            return {'code': 200, 'item': response['Items'][0] } 
+            return {'code': 200, 'entry': response['Items'][0] } 
 
         except ClientError as e:
             logger.error(e.response['Error']['Message'])
-            return {'code': 400, 'msg': e.response['Error']['Message'] }
+            return {'code': 400, 'entry': e.response['Error']['Message'] }
 
     def SetInstanceAttr(self,params):
         try:
@@ -49,19 +49,19 @@ class Dyn:
                 logger.info("Creating Instance " + params["instanceId"])
 
 
-            self.table.update_item(
+            resp = self.table.update_item(
                     Key={ 'instanceId': params["instanceId"], 'region': awsRegion },
                     UpdateExpression=dynExpression,
                     ExpressionAttributeValues=valuesMap,
                     ReturnValues="UPDATED_NEW"
                 )
 
-            return {'code': 200 }
+            return {'code': 200, 'entry': resp }
 
                         
         except ClientError as e:
             logger.error(e.response['Error']['Message'])
-            return {'code': 400, 'msg': e.response['Error']['Message'] }
+            return {'code': 400, 'entry': e.response['Error']['Message'] }
 
 class Utils:
     def __init__(self):
