@@ -28,7 +28,7 @@ eb_client = boto3.client('events')
 cognito_idp = boto3.client('cognito-idp')
 ENCODING = 'utf-8'
 
-appValue = os.getenv('appValue')
+appValue = os.getenv('TAG_APP_VALUE')
 endpoint = os.environ.get('APPSYNC_URL', None)
 userPoolId = os.environ.get('USERPOOL_ID', None)
 

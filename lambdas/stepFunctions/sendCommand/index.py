@@ -14,7 +14,7 @@ logger.setLevel(logging.INFO)
 utl = helpers.Utils()
 
 ssm = boto3.client('ssm')
-appValue = os.getenv('appValue')
+appValue = os.getenv('TAG_APP_VALUE')
 
 def sendCommand(instance, param, docName):
     

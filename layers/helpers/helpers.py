@@ -6,23 +6,78 @@ import json
 import time
 from datetime import datetime, timezone, timedelta
 
+from botocore.exceptions import ClientError
+from boto3.dynamodb.conditions import Key, Attr
+
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
-
-ec2_client = boto3.client('ec2')
-ssm = boto3.client('ssm')
-cw_client = boto3.client('cloudwatch')
-appValue = os.getenv('appValue')
 
 session = boto3.session.Session()
 awsRegion = session.region_name
 
+class Dyn:
+    def __init__(self):
+        logger.info("------- Dyn Class Initialization")
+        dynamodb = boto3.resource('dynamodb', region_name=awsRegion)
+        instancesTable = os.getenv('INSTANCES_TABLE_NAME')
+        self.table = dynamodb.Table(instancesTable)
+
+    def GetInstanceInfo(self,instanceId):
+        try:
+            response = self.table.query(
+                KeyConditionExpression=Key('instanceId').eq(instanceId) 
+                    # For future implementation
+                    # Key('region').eq(region_name)
+            )
+            return {'code': 200, 'item': response['Items'][0] } 
+
+        except ClientError as e:
+            logger.error(e.response['Error']['Message'])
+            return {'code': 400, 'msg': e.response['Error']['Message'] }
+
+    def SetInstanceAttr(self,instanceId,keys,values,expression):
+        try:
+
+            dynExpression = "set runCommand = :rc, workingDir = :wd, alarmMetric = :am, alarmThreshold = :at"
+            valuesMap = "':rc':" + this.runCommand + "':wd':" + this.workingDir + "':am':" + this.alarmMetric + "':at':" + this.alarmThreshol
+        
+            entry = self.GetInstanceInfo(instanceId)
+
+            if entry['Count'] == 1:
+                logger.info("Updating Instance " + instanceId)
+            else: 
+                logger.info("Creating Instance " + instanceId)
+
+
+            self.table.update_item(
+                    Key=keys,
+                    UpdateExpression=expression,
+                    ExpressionAttributeValues=values,
+                    ReturnValues="UPDATED_NEW"
+                )
+
+            return {'code': 200 }
+
+                        
+        except ClientError as e:
+            logger.error(e.response['Error']['Message'])
+            return {'code': 400, 'msg': e.response['Error']['Message'] }
+
 class Utils:
     def __init__(self):
-        logger.info("Utils initialized")
-
+        logger.info("------- Utils Class Initialization")
+        self.ec2_client = boto3.client('ec2')
+        self.ssm = boto3.client('ssm')
+        self.cw_client = boto3.client('cloudwatch')
+        self.appValue = os.getenv('TAG_APP_VALUE')
+        self.dyn = Dyn()
+  
     def updateAlarm(self, instanceId):
         logger.info("updateAlarm: " + instanceId)
+
+        instanceInfo = self.dyn.GetInstanceInfo(instanceId)
+
+        print(instanceInfo)
 
         alarmMetric = self.getSsmParam("/amplify/minecraftserverdashboard/" + instanceId + "/alarmMetric")
         if alarmMetric == None:
@@ -32,7 +87,7 @@ class Utils:
         if alarmThreshold == None:
             alarmThreshold = "10"
 
-        cw_client.put_metric_alarm(
+        self.cw_client.put_metric_alarm(
             AlarmName=instanceId + "-" + "minecraft-server",
             ActionsEnabled=True,
             AlarmActions=["arn:aws:automate:" + awsRegion + ":ec2:stop"],
@@ -56,7 +111,7 @@ class Utils:
         
     def getSsmParam(self, paramKey, isEncrypted=False):
         try:
-            ssmResult = ssm.get_parameter(
+            ssmResult = self.ssm.get_parameter(
                 Name=paramKey,
                 WithDecryption=isEncrypted
             )
@@ -74,7 +129,7 @@ class Utils:
         try:
             resp=[]
             paramArray=paramKeys.split(",")            
-            ssmResult = ssm.get_parameters(
+            ssmResult = self.ssm.get_parameters(
                 Names=paramArray,
                 WithDecryption=isEncrypted
             )           
@@ -95,7 +150,7 @@ class Utils:
 
     def putSsmParam(self, paramKey, paramValue, paramType):
         try:
-            ssmResult = ssm.put_parameter(
+            ssmResult = self.ssm.put_parameter(
                 Name=paramKey,
                 Value=paramValue,
                 Type=paramType,
@@ -110,25 +165,25 @@ class Utils:
 
     def describeInstances(self,name,value):
         if name == 'id':
-            response = ec2_client.describe_instances(
+            response = self.ec2_client.describe_instances(
                     InstanceIds=[value]
                         )
         elif name == 'email':
             filters = [
-                {"Name":"tag:App", "Values":[ appValue ]},
+                {"Name":"tag:App", "Values":[ self.appValue ]},
                 {"Name":"instance-state-name", "Values":["pending","running","stopping","stopped"]}
                 
                 # {"Name":"tag:User", "Values":[ value ]}
             ]
-            response =  ec2_client.describe_instances(
+            response =  self.ec2_client.describe_instances(
                 Filters=filters            
             )
         elif name == 'state':
             filters = [
-                {"Name":"tag:App", "Values":[ appValue ]},
+                {"Name":"tag:App", "Values":[ self.appValue ]},
                 {"Name":"instance-state-name", "Values":[ value ]}
             ]
-            response =  ec2_client.describe_instances(
+            response =  self.ec2_client.describe_instances(
                 Filters=filters            
             )
 
@@ -140,7 +195,7 @@ class Utils:
             return response["Reservations"]
                 
     def describeInstanceStatus(self, instanceId):
-        statusRsp = ec2_client.describe_instance_status(InstanceIds=[instanceId])
+        statusRsp = self.ec2_client.describe_instance_status(InstanceIds=[instanceId])
 
         if (len(statusRsp["InstanceStatuses"])) == 0:
             return { 'instanceStatus': "Fail", 'systemStatus': "Fail" }

@@ -178,7 +178,7 @@
           <v-btn
             color="primary"
             text
-            @click="triggerAction('adduser', 'email', addUserEmail)"
+            @click="triggerAction('adduser', {'email': addUserEmail} )"
           >
             Add
           </v-btn>
@@ -296,7 +296,7 @@
               outlined
               small
               class="pa-2"
-              @click="triggerAction('start',null,null)"
+              @click="triggerAction('start',{'server': serverId}, true)"
             >
               Start
             </v-btn>
@@ -306,7 +306,7 @@
               color="warning"
               outlined
               small
-              @click="triggerAction('stop',null,null)"
+              @click="triggerAction('stop',{'server': serverId}, true)"
             >
               Stop
             </v-btn>
@@ -317,7 +317,7 @@
               color="warning"
               outlined
               small
-              @click="triggerAction('restart',null,null)"
+              @click="triggerAction('restart',{'server': serverId}, true)"
             >
               ReStart
             </v-btn>
@@ -527,35 +527,9 @@ export default {
     async processSettingsForm(submit = false) {
       this.settingsDialog = true;
       this.settingsDialogLoading = true;
-      let action = null;
-      let params = [];
-
+      
       if (submit) {
-        action = "addparameter";
-        await this.triggerAction(
-          action,
-          "/amplify/minecraftserverdashboard/" + this.serverId + "/runCommand",
-          this.runCommand,
-          true
-        );
-        await this.triggerAction(
-          action,
-          "/amplify/minecraftserverdashboard/" + this.serverId + "/workingDir",
-          this.workingDir,
-          true
-        );
-        await this.triggerAction(
-          action,
-          "/amplify/minecraftserverdashboard/" + this.serverId + "/alarmMetric",
-          this.alarmMetric,
-          true
-        );
-        await this.triggerAction(
-          action,
-          "/amplify/minecraftserverdashboard/" + this.serverId + "/alarmThreshold",
-          this.alarmThreshold,
-          true
-        );
+        await this.triggerAction("setintanceinfo", {"rc":this.runCommand,"wd":this.workingDir,"am":this.alarmMetric,"at":this.alarmThreshold,'server': this.serverId })          
         this.settingsDialog = false;
       } else {
         // Default values
@@ -564,51 +538,8 @@ export default {
         this.alarmMetric = "";
         this.alarmThreshold = "";
 
-        action = "getparameters";
-        params =
-          "/amplify/minecraftserverdashboard/" +
-          this.serverId +
-          "/runCommand" +
-          "," +
-          "/amplify/minecraftserverdashboard/" +
-          this.serverId +
-          "/workingDir" +
-          "," +
-          "/amplify/minecraftserverdashboard/" +
-          this.serverId +
-          "/alarmMetric" +
-          "," +
-          "/amplify/minecraftserverdashboard/" +
-          this.serverId +
-          "/alarmThreshold";
-        const resp = await this.triggerAction(action, params, null, true);
-        for (let i = 0; i < resp.length; i++) {
-          if (
-            resp[i].Name ==
-            "/amplify/minecraftserverdashboard/" + this.serverId + "/runCommand"
-          ) {
-            this.runCommand = resp[i].Value;
-          } else if (
-            resp[i].Name ==
-            "/amplify/minecraftserverdashboard/" + this.serverId + "/workingDir"
-          ) {
-            this.workingDir = resp[i].Value;
-          } else if (
-            resp[i].Name ==
-            "/amplify/minecraftserverdashboard/" +
-              this.serverId +
-              "/alarmMetric"
-          ) {
-            this.alarmMetric = resp[i].Value;
-          } else if (
-            resp[i].Name ==
-            "/amplify/minecraftserverdashboard/" +
-              this.serverId +
-              "/alarmThreshold"
-          ) {
-            this.alarmThreshold = resp[i].Value;
-          }
-        }
+        const resp = await this.triggerAction("getintanceinfo", {'server': this.serverId});
+        console.log(resp)
       }
 
       this.settingsDialogLoading = false;
@@ -642,17 +573,15 @@ export default {
     },
     async triggerAction(
       action,
-      paramKey,
-      paramValue,
-      returnSsmValue = false
+      paramDict,
+      returnValue = false
     ) {
       this.serverStateConfirmation = false;
       this.addUserDialog = false;
       const input = {
         instanceId: this.serverId,
         action: action,
-        paramKey: paramKey,
-        paramValue: paramValue,
+        paramDic: paramDict       
       };
       const actionResult = await API.graphql({
         query: triggerServerAction,
@@ -660,15 +589,16 @@ export default {
       });
 
       const rsp = JSON.parse(actionResult.data.triggerServerAction);
+      console.log(rsp)
 
       if (rsp.statusCode == 200) {
-        if (returnSsmValue) {
+        if (returnValue) {
           return rsp.body;
         }
         this.infoMsg = "Server action: " + action + " done.";
         this.successAlert = true;
       } else {
-        if (returnSsmValue) {
+        if (returnValue) {
           return null;
         }
         this.errorMsg = rsp.body.err;

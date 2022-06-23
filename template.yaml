@@ -80,6 +80,24 @@ Resources:
       Value: !Ref AdminEmail
       Description: Email (Gmail) that is going to be identified as the app admin
 
+  InstancesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: region
+          AttributeType: S
+        - AttributeName: instanceId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: connectionId
+          KeyType: HASH
+        - AttributeName: region
+          KeyType: RANGE
+      TimeToLiveSpecification:
+        AttributeName: expiration
+        Enabled: true
+
   HelperLayer:
     Type: AWS::Serverless::LayerVersion
     Properties:
@@ -174,10 +192,11 @@ Resources:
               Resource: "*"
       Environment:
         Variables:
-          aplicationName: !Ref ProjectName
-          appValue: !Ref AppValue
+          APP_NAME: !Ref ProjectName
+          TAG_APP_VALUE: !Ref AppValue
           APPSYNC_URL: '{{resolve:ssm:/amplify/minecraftserverdashboard/appsyncurl:1}}'
           USERPOOL_ID: '{{resolve:ssm:/amplify/minecraftserverdashboard/userpoolid:1}}'
+          INSTANCES_TABLE_NAME: !Ref InstancesTable
 
   ListServers:
     Type: AWS::Serverless::Function 
@@ -193,11 +212,14 @@ Resources:
         - arn:aws:iam::aws:policy/AmazonCognitoReadOnly
         - SSMParameterReadPolicy:
             ParameterName: "amplify/minecraftserverdashboard*"
+        - DynamoDBCrudPolicy:
+            tableName: !Ref InstancesTable
       Environment:
         Variables:
-          aplicationName: !Ref ProjectName
-          appValue: !Ref AppValue
+          APP_NAME: !Ref ProjectName
+          TAG_APP_VALUE: !Ref AppValue
           APPSYNC_URL: '{{resolve:ssm:/amplify/minecraftserverdashboard/appsyncurl:1}}'
+          INSTANCES_TABLE_NAME: !Ref InstancesTable
 
   GetMonthlyCost:
     Type: AWS::Serverless::Function 
@@ -213,11 +235,14 @@ Resources:
         - arn:aws:iam::aws:policy/AmazonCognitoReadOnly
         - SSMParameterReadPolicy:
             ParameterName: "amplify/minecraftserverdashboard*"
+        - DynamoDBCrudPolicy:
+            tableName: !Ref InstancesTable
       Environment:
         Variables:
-          aplicationName: !Ref ProjectName
-          appValue: !Ref AppValue
+          APP_NAME: !Ref ProjectName
+          TAG_APP_VALUE: !Ref AppValue
           APPSYNC_URL: '{{resolve:ssm:/amplify/minecraftserverdashboard/appsyncurl:1}}'
+          INSTANCES_TABLE_NAME: !Ref InstancesTable
 
   TriggerServerAction:
     Type: AWS::Serverless::Function 
@@ -233,6 +258,8 @@ Resources:
             StateMachineName: !GetAtt StateMachine.Name
         - SSMParameterReadPolicy:
             ParameterName: "amplify/minecraftserverdashboard*"
+        - DynamoDBCrudPolicy:
+            tableName: !Ref InstancesTable
         - Version: '2012-10-17' # Policy Document
           Statement:
             - Effect: Allow
@@ -251,9 +278,10 @@ Resources:
       Environment:
         Variables: 
           StepFunctionsArn: !Ref StateMachine
-          aplicationName: !Ref ProjectName
-          appValue: !Ref AppValue
+          APP_NAME: !Ref ProjectName
+          TAG_APP_VALUE: !Ref AppValue
           APPSYNC_URL: '{{resolve:ssm:/amplify/minecraftserverdashboard/appsyncurl:1}}'
+          INSTANCES_TABLE_NAME: !Ref InstancesTable
 
   ChangeServerState:
     Type: AWS::Serverless::Function 
@@ -267,6 +295,8 @@ Resources:
         - arn:aws:iam::aws:policy/AmazonCognitoReadOnly
         - SSMParameterReadPolicy:
             ParameterName: "amplify/minecraftserverdashboard*"
+        - DynamoDBCrudPolicy:
+            tableName: !Ref InstancesTable
         - Version: '2012-10-17' # Policy Document
           Statement:
             - Effect: Allow
@@ -283,10 +313,11 @@ Resources:
               Resource: '*'
       Environment:
         Variables:
-          aplicationName: !Ref ProjectName
-          appValue: !Ref AppValue
+          APP_NAME: !Ref ProjectName
+          TAG_APP_VALUE: !Ref AppValue
           APPSYNC_URL: '{{resolve:ssm:/amplify/minecraftserverdashboard/appsyncurl:1}}'
           USERPOOL_ID: '{{resolve:ssm:/amplify/minecraftserverdashboard/userpoolid:1}}'
+          INSTANCES_TABLE_NAME: !Ref InstancesTable
 
   SendCommand:
     Type: AWS::Serverless::Function 
@@ -299,6 +330,8 @@ Resources:
         - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
         - SSMParameterReadPolicy:
             ParameterName: "amplify/minecraftserverdashboard*"
+        - DynamoDBCrudPolicy:
+            tableName: !Ref InstancesTable
         - Version: '2012-10-17' # Policy Document
           Statement:
             - Effect: Allow
@@ -310,9 +343,10 @@ Resources:
               Resource: '*'
       Environment:
         Variables:
-          aplicationName: !Ref ProjectName
-          appValue: !Ref AppValue
+          APP_NAME: !Ref ProjectName
+          TAG_APP_VALUE: !Ref AppValue
           APPSYNC_URL: '{{resolve:ssm:/amplify/minecraftserverdashboard/appsyncurl:1}}'
+          INSTANCES_TABLE_NAME: !Ref InstancesTable
 
   StateMachine:
     Type: AWS::Serverless::StateMachine

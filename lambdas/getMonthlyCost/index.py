@@ -15,7 +15,7 @@ ce_client = boto3.client('ce')
 cognito_idp = boto3.client('cognito-idp')
 ENCODING = 'utf-8'
 
-appValue = os.getenv('appValue')
+appValue = os.getenv('TAG_APP_VALUE')
 
 def _is_token_valid(token, keys):
     # https://github.com/awslabs/aws-support-tools/tree/master/Cognito/decode-verify-jwt

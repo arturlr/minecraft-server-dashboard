@@ -12,7 +12,8 @@ import helpers
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 utl = helpers.Utils()
-appValue = os.getenv('appValue')
+
+appValue = os.getenv('TAG_APP_VALUE')
 
 ssm = boto3.client('ssm')
 sfn = boto3.client('stepfunctions')
@@ -229,7 +230,7 @@ def handler(event, context):
 
         # GET SSM PARAMETERS
         elif action == "getparameters":
-            
+
             response = utl.getSsmParameters(paramKey)
             if response != None:
                 return _response(200,response)
