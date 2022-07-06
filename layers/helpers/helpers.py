@@ -22,7 +22,7 @@ class Dyn:
         instancesTable = os.getenv('INSTANCES_TABLE_NAME')
         self.table = dynamodb.Table(instancesTable)
 
-    def GetInstanceInfo(self,instanceId):
+    def GetInstanceAttr(self,instanceId):
         try:
             response = self.table.query(
                 KeyConditionExpression=Key('instanceId').eq(instanceId) 
@@ -42,9 +42,9 @@ class Dyn:
         try:
 
             dynExpression = "set runCommand = :rc, workingDir = :wd, alarmMetric = :am, alarmThreshold = :at"               
-            valuesMap = "':rc':" + params["runCommand"]+ "':wd':" + params["workingDir"] + "':am':" + params["alarmMetric"] + "':at':" + params["alarmThreshol"]
+            valuesMap = "':rc':" + params["rc"]+ "':wd':" + params["wd"] + "':am':" + params["am"] + "':at':" + params["at"]
         
-            entry = self.GetInstanceInfo(instanceId)
+            entry = self.GetInstanceAttr(instanceId)
 
             if entry['Count'] == 1:
                 logger.info("Updating Instance " + instanceId)
@@ -73,13 +73,12 @@ class Utils:
         self.ssm = boto3.client('ssm')
         self.cw_client = boto3.client('cloudwatch')
         self.appValue = os.getenv('TAG_APP_VALUE')
-        self.dyn = Dyn()
   
     def updateAlarm(self, instanceId):
         logger.info("updateAlarm: " + instanceId)
+        dyn = Dyn()
 
-        instanceInfo = self.dyn.GetInstanceInfo(instanceId)
-
+        instanceInfo = dyn.GetInstanceAttr(instanceId)
         print(instanceInfo)
 
         alarmMetric = self.getSsmParam("/amplify/minecraftserverdashboard/" + instanceId + "/alarmMetric")

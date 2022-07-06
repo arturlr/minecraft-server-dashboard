@@ -529,7 +529,7 @@ export default {
       this.settingsDialogLoading = true;
       
       if (submit) {
-        await this.triggerAction("setintanceinfo", {rc:this.runCommand,wd:this.workingDir,am:this.alarmMetric,at:this.alarmThreshold})        
+        await this.triggerAction("setinstanceattr", {rc:this.runCommand,wd:this.workingDir,am:this.alarmMetric,at:this.alarmThreshold})        
         this.settingsDialog = false;
       } else {
         // Default values
@@ -538,18 +538,9 @@ export default {
         this.alarmMetric = "";
         this.alarmThreshold = "";
 
-        const resp = await this.triggerAction("getintanceinfo", this.serverId);
-        console.log(resp)
-        if (resp.statusCode == 200) {
-          this.runCommand = resp.body.runCommand
-        }
-        else if (resp.statusCode == 400) {
-          this.alarmMetric = "CPUUtilization";
-          this.alarmThreshold = "10";
-        }
-        else {
-          console.error(resp.body)
-        }
+        const infoResp = await this.triggerAction("getinstanceattr", this.serverId);
+        console.log(infoResp)
+        
       }
 
       this.settingsDialogLoading = false;
@@ -608,7 +599,6 @@ export default {
       });
 
       const rsp = JSON.parse(actionResult.data.triggerServerAction);
-      console.log(rsp)
 
       if (rsp.statusCode == 200) {
         if (returnValue) {

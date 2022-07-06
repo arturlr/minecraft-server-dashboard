@@ -12,6 +12,7 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 utl = helpers.Utils()
+dyn = helpers.Dyn()
 
 ec2_client = boto3.client('ec2')
 appValue = os.getenv('TAG_APP_VALUE')

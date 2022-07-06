@@ -227,6 +227,7 @@ def handler(event, context):
 
         # ADD SSM PARAMETER
         elif action == "addparameter":
+            dynResp = dyn.SetInstanceAttr(instanceId,)
             response = utl.putSsmParam(paramKey,paramValue,'String')
             keyName=paramKey.split('/')
             if (keyName[-1]=="alarmThreshold"):
@@ -235,14 +236,16 @@ def handler(event, context):
             return _response(200,resp)
 
         # GET INSTANCE INFO
-        elif action == "getintanceinfo":
-            response = dyn.GetInstanceInfo(instanceId)
+        elif action == "getinstanceinfo":
+            response = dyn.GetInstanceAttr(instanceId)
+            print(response)
             return _response(response["code"],response["entry"])
 
         
         # GET INSTANCE INFO
-        elif action == "setintanceinfo":
+        elif action == "setinstanceattr":
             response = dyn.SetInstanceAttr(instanceId,params)
+            print(response)
             return _response(response["code"],response["entry"])
 
 
