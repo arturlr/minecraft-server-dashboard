@@ -24,47 +24,67 @@ class Dyn:
 
     def GetInstanceAttr(self,instanceId):
         try:
+            logger.info("GetInstanceAttr: " + instanceId)
             response = self.table.query(
                 KeyConditionExpression=Key('instanceId').eq(instanceId) 
                     # For future implementation
                     # Key('region').eq(region_name)
             )
-            if len(response['Items']) > 0:
-                return {'code': 200, 'entry': response['Items'][0] } 
+            if 'Items' in response and len(response['Items']) > 0:
+                return {'code': 200, 'msg': response['Items'][0] } 
             else:
-                return {'code': 400, 'entry': "Instance not found" } 
+                return {'code': 400, 'msg': "Instance not found" } 
 
         except ClientError as e:
             logger.error(e.response['Error']['Message'])
-            return {'code': 500, 'entry': e.response['Error']['Message'] }
+            return {'code': 500, 'msg': e.response['Error']['Message'] }
 
     def SetInstanceAttr(self,instanceId,params):
         try:
+            logger.info("SetInstanceAttr: " + instanceId)
 
-            dynExpression = "set runCommand = :rc, workingDir = :wd, alarmMetric = :am, alarmThreshold = :at"               
-            valuesMap = "':rc':" + params["rc"]+ "':wd':" + params["wd"] + "':am':" + params["am"] + "':at':" + params["at"]
+            dynExpression = "set "               
+            valuesMap = {}
+
+            if 'rc' in params:
+                dynExpression = dynExpression + "runCommand = :rc,"     
+                valuesMap[':rc'] = params["rc"]
+            if 'wd' in params:
+                dynExpression = dynExpression + "workingDir = :wd,"     
+                valuesMap[':wd'] = params["wd"]
+            if 'am' in params:
+                dynExpression = dynExpression + "alarmMetric = :am,"     
+                valuesMap[':am'] = params["am"]
+            if 'at' in params:
+                dynExpression = dynExpression + "alarmThreshold = :at,"     
+                valuesMap[':at'] = params["at"]
         
             entry = self.GetInstanceAttr(instanceId)
 
-            if entry['Count'] == 1:
+            if entry['code'] == 200:
                 logger.info("Updating Instance " + instanceId)
-            else: 
+            elif entry['code'] == 400:
                 logger.info("Creating Instance " + instanceId)
-
+            else:
+                logger.error("GetInstance failed")
+                return {'code': 500, 'msg': "GetInstance failed" }
 
             resp = self.table.update_item(
-                    Key={ 'instanceId': params["instanceId"], 'region': awsRegion },
-                    UpdateExpression=dynExpression,
+                    Key={ 
+                        'instanceId': instanceId, 
+                        'region': awsRegion 
+                    },
+                    UpdateExpression=dynExpression[:-1],
                     ExpressionAttributeValues=valuesMap,
                     ReturnValues="UPDATED_NEW"
                 )
 
-            return {'code': 200, 'entry': resp }
+            return {'code': 200, 'msg': "Item Saved" }
 
                         
         except ClientError as e:
             logger.error(e.response['Error']['Message'])
-            return {'code': 500, 'entry': e.response['Error']['Message'] }
+            return {'code': 500, 'msg': e.response['Error']['Message'] }
 
 class Utils:
     def __init__(self):
@@ -79,14 +99,15 @@ class Utils:
         dyn = Dyn()
 
         instanceInfo = dyn.GetInstanceAttr(instanceId)
-        print(instanceInfo)
-
-        alarmMetric = self.getSsmParam("/amplify/minecraftserverdashboard/" + instanceId + "/alarmMetric")
-        if alarmMetric == None:
+        
+        if 'alarmMetric' in instanceInfo:
+            alarmMetric = instanceInfo['alarmMetric']
+        else:
             alarmMetric = "CPUUtilization"
 
-        alarmThreshold = self.getSsmParam("/amplify/minecraftserverdashboard/" + instanceId + "/alarmThreshold")
-        if alarmThreshold == None:
+        if 'alarmThreshold' in instanceInfo:
+            alarmThreshold = instanceInfo['alarmThreshold']
+        else:
             alarmThreshold = "10"
 
         self.cw_client.put_metric_alarm(

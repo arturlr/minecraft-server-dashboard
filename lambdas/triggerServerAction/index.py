@@ -216,7 +216,7 @@ def handler(event, context):
         #
         # Action Processing
         #
-        if action == "adduser":
+        if action == "add_user":
             # get only prefix if user provided @ accidently and add the gmail suffix
             gmailAccount = paramValue.split("@")[0] + '@gmail.com'
             resp = _add_user_to_group(instanceId,iss.split("/")[3],gmailAccount)
@@ -226,7 +226,7 @@ def handler(event, context):
                 return _response(500,resp)
 
         # ADD SSM PARAMETER
-        elif action == "addparameter":
+        elif action == "add_parameter":
             dynResp = dyn.SetInstanceAttr(instanceId,)
             response = utl.putSsmParam(paramKey,paramValue,'String')
             keyName=paramKey.split('/')
@@ -236,21 +236,19 @@ def handler(event, context):
             return _response(200,resp)
 
         # GET INSTANCE INFO
-        elif action == "getinstanceinfo":
+        elif action == "get_instance_attr":
             response = dyn.GetInstanceAttr(instanceId)
-            print(response)
-            return _response(response["code"],response["entry"])
+            return _response(response["code"],response["msg"])
 
         
         # GET INSTANCE INFO
-        elif action == "setinstanceattr":
+        elif action == "set_instance_attr":
             response = dyn.SetInstanceAttr(instanceId,params)
-            print(response)
-            return _response(response["code"],response["entry"])
+            return _response(response["code"],response["msg"])
 
 
         # GET SSM PARAMETERS
-        elif action == "getparameters":
+        elif action == "get_parameters":
             response = utl.getSsmParameters(paramKey)
             if response != None:
                 return _response(200,response)
@@ -258,7 +256,7 @@ def handler(event, context):
                 return _response(500,"No parameters")
 
         # GET SSM PARAMETER
-        elif action == "getparameter":
+        elif action == "get_parameter":
             response = utl.getSsmParam(paramKey)
             if response != None:
                 return _response(200,response)

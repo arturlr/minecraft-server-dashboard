@@ -54,7 +54,7 @@
               "StringEquals": "running"
             }
           ],
-          "Next": "StartMinecraft"
+          "Next": "ConfigServer"
         },
         {
           "Variable": "$.isSuccessful",
@@ -64,9 +64,9 @@
       ],
       "Default": "Wait"
     },
-    "StartMinecraft": {
+    "ConfigServer": {
       "Type": "Task",
-      "Resource": "${executeSSM}",
+      "Resource": "${configServer}",
       "End": true
     },
     "Wait": {

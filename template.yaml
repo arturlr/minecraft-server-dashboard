@@ -319,11 +319,11 @@ Resources:
           USERPOOL_ID: '{{resolve:ssm:/amplify/minecraftserverdashboard/userpoolid:1}}'
           INSTANCES_TABLE_NAME: !Ref InstancesTable
 
-  SendCommand:
+  ConfigServer:
     Type: AWS::Serverless::Function 
     Properties:
-      FunctionName: minecraft-server-dashboard-sendCommand
-      CodeUri: ./lambdas/stepFunctions/sendCommand/
+      FunctionName: minecraft-server-dashboard-configServer
+      CodeUri: ./lambdas/stepFunctions/configServer/
       Policies:
         - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
         - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess
@@ -340,13 +340,23 @@ Resources:
                 - ssm:Describe*
                 - ssm:Get*
                 - ssm:SendCommand
+                - ec2:AssociateIamInstanceProfile
+                - ec2:DisassociateIamInstanceProfile
               Resource: '*'
+        - Version: '2012-10-17' # Policy Document
+          Statement:
+            - Effect: Allow
+              Action:
+                - iam:PassRole
+              Resource: !GetAtt Ec2MinecraftDashboardInstanceRole.Arn
       Environment:
         Variables:
           APP_NAME: !Ref ProjectName
           TAG_APP_VALUE: !Ref AppValue
           APPSYNC_URL: '{{resolve:ssm:/amplify/minecraftserverdashboard/appsyncurl:1}}'
           INSTANCES_TABLE_NAME: !Ref InstancesTable
+          EC2_INSTANCE_PROFILE_NAME: !Ref IAMEC2InstanceProfile
+          EC2_INSTANCE_PROFILE_ARN: !GetAtt IAMEC2InstanceProfile.Arn
 
   StateMachine:
     Type: AWS::Serverless::StateMachine
@@ -354,7 +364,7 @@ Resources:
       DefinitionUri: ./lambdas/stepFunctions/step-functions.json
       DefinitionSubstitutions:
         changeServerState: !GetAtt ChangeServerState.Arn
-        executeSSM: !GetAtt SendCommand.Arn
+        configServer: !GetAtt ConfigServer.Arn
       Role: !GetAtt StatesExecutionRole.Arn
       Logging:
         Level: ALL
@@ -412,5 +422,5 @@ Outputs:
       Value: !GetAtt EventResponse.Arn
   ListServersArn:
       Value: !GetAtt ListServers.Arn
-  SendCommandArn:
-      Value: !GetAtt SendCommand.Arn
+  ConfigServerArn:
+      Value: !GetAtt ConfigServer.Arn

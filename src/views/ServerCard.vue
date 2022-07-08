@@ -178,7 +178,7 @@
           <v-btn
             color="primary"
             text
-            @click="triggerAction('adduser', {'email': addUserEmail} )"
+            @click="triggerAction('add_user', {'email': addUserEmail} )"
           >
             Add
           </v-btn>
@@ -233,7 +233,7 @@
                   v-model="runCommand"
                   ref="runCommand"
                   label="Minecraft run command"
-                  :rules="[rules.required]"
+                  :rules="[rules.minLen]"
                 ></v-text-field>
               </v-col>
               <v-col cols="12">
@@ -242,7 +242,7 @@
                   v-model="workingDir"
                   ref="workingDir"
                   label="Minecraft working directory"
-                  :rules="[rules.required]"
+                  :rules="[rules.minLen]"
                 ></v-text-field>
               </v-col>
             </v-row>
@@ -396,9 +396,10 @@ export default {
     return {
       rules: {
         required: (value) => !!value || "Required.",
+        minLen: value => (value && value.length >= 3) || 'Must be greater than 3 characters',
         onlyNumbers: (value) => {
           const pattern = /^[0-9]*$/;
-          return pattern.test(value) || "Threshold must be only 2 numbers.";
+          return pattern.test(value) || "Threshold must be only numbers.";
         },
       },
       serverId: null,
@@ -529,18 +530,39 @@ export default {
       this.settingsDialogLoading = true;
       
       if (submit) {
-        await this.triggerAction("setinstanceattr", {rc:this.runCommand,wd:this.workingDir,am:this.alarmMetric,at:this.alarmThreshold})        
+        let params = { am:this.alarmMetric,at:this.alarmThreshold }
+        if (this.runCommand.length > 3) {
+          params.rc = this.runCommand
+        }
+        if (this.workingDir.length > 3) {
+          params.wd = this.workingDir
+        }
+
+        await this.triggerAction("set_instance_attr", params)        
         this.settingsDialog = false;
       } else {
         // Default values
         this.runCommand = "";
         this.workingDir = "";
-        this.alarmMetric = "";
-        this.alarmThreshold = "";
+        this.alarmMetric = "CPUUtilization";
+        this.alarmThreshold = "10";
 
-        const infoResp = await this.triggerAction("getinstanceattr", this.serverId);
-        console.log(infoResp)
-        
+        const infoResp = await this.triggerAction("get_instance_attr", this.serverId, true);
+
+        if (infoResp) {
+          if ("runCommand" in infoResp){
+            this.runCommand = infoResp.runCommand;
+          }
+          if ("workingDir" in infoResp){
+            this.workingDir = infoResp.workingDir;
+          }
+          if ("alarmMetric" in infoResp){
+            this.alarmMetric = infoResp.alarmMetric;
+          }
+          if ("alarmThreshold" in infoResp){
+            this.alarmThreshold = infoResp.alarmThreshold;
+          }
+        }        
       }
 
       this.settingsDialogLoading = false;
@@ -604,8 +626,8 @@ export default {
         if (returnValue) {
           return rsp.body;
         }
-        this.infoMsg = "Server action: " + action + " done.";
-        this.successAlert = true;
+        //this.infoMsg = "Server action: " + action + " done.";
+        //this.successAlert = true;
       } else {
         if (returnValue) {
           return null;

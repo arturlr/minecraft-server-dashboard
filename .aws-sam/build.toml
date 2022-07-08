@@ -46,14 +46,14 @@ manifest_hash = ""
 packagetype = "Zip"
 functions = ["ChangeServerState"]
 
-[function_build_definitions.21e68fe7-b069-49a2-b96e-9bdf8a97f058]
-codeuri = "/Users/artrodri/github/home/minecraft-server-dashboard/lambdas/stepFunctions/sendCommand"
+[function_build_definitions.185e36ff-9375-483e-b84c-865f7cb950ef]
+codeuri = "/Users/artrodri/github/home/minecraft-server-dashboard/lambdas/stepFunctions/configServer"
 runtime = "python3.8"
 architecture = "x86_64"
 handler = "index.handler"
 manifest_hash = ""
 packagetype = "Zip"
-functions = ["SendCommand"]
+functions = ["ConfigServer"]
 
 [layer_build_definitions]
 [layer_build_definitions.5da99deb-44cc-48d7-acab-8eedca48ae88]
