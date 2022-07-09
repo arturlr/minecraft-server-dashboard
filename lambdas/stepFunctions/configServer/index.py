@@ -60,7 +60,7 @@ def iamProfileTask(instance):
 
     if iamProfile != None:
         logger.info("Disassociating Instance IAM Profile: " + iamProfile['Arn'] )
-        disassociateIamProfile(iamProfile)
+        disassociateIamProfile(iamProfile['AssociationId'])
         while loopCount < 5:
             checkStatusCommand = describeIamProfile(instance,"disassociated")
             time.sleep(10)
@@ -89,7 +89,7 @@ def describeIamProfile(instance, status):
                 ]
             },
         ])
-    print(descResp)
+
     if len(descResp['IamInstanceProfileAssociations']) > 0:        
         for rec in descResp['IamInstanceProfileAssociations']:
             if rec['State'] == status:
@@ -133,6 +133,8 @@ def cwAgentStatusCheck(instance):
         else:
             logger.warning(agentDetailsJson)
             return { "code": 500, "msg": "Detailed information not available"}
+    else:
+        return { "code": 500, "msg": "Failed" }
 
 def cwAgentInstall(instance):
     ssmInstallAgent = ssmExecCommands(instance,"AWS-ConfigureAWSPackage",{"action": ["Install"],"name": ["AmazonCloudWatchAgent"]})
@@ -200,19 +202,21 @@ def ssmExecCommands(instanceId, docName, params):
     while loopCount < 5:
         checkStatusCommand = listCommand(instanceId, command["CommandId"])
         time.sleep(5)
-        if checkStatusCommand["Status"] != "Success" and checkStatusCommand["Status"] != "Failed":
-            loopCount = loopCount + 1
-        else:
-            loopCount = 0
+        if checkStatusCommand["Status"] == "Success":
             break
+        elif checkStatusCommand["Status"] == "Failed":
+            logger.error(checkStatusCommand)
+            return checkStatusCommand
+        else:
+            loopCount = loopCount + 1
 
-    # Something went wrong
-    if loopCount > 0:
+    if loopCount > 5:
+        logger.error("Timeout")
         logger.error(checkStatusCommand)
-        return None
-
-    getStatusDetails = getCommandDetails(instanceId, command["CommandId"])
-    return getStatusDetails
+        return checkStatusCommand
+    else:
+        getStatusDetails = getCommandDetails(instanceId, command["CommandId"])
+        return getStatusDetails
 
 def handler(event, context):
     try:

@@ -302,7 +302,6 @@ def handler(event, context):
             input["networkStats"] = getMetricData(instanceId,'AWS/EC2','NetworkOut','Bytes','Average',dt_4_four_hours_before,dt_now,300)
             input["memStats"] = getMetricData(instanceId,'CWAgent','mem_used_percent','Percent','Average',dt_4_four_hours_before,dt_now,300)
             payload={"query": putServerMetric, 'variables': { "input": input }}
-
         
         response = requests.post(
             endpoint,

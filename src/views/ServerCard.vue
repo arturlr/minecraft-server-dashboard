@@ -675,6 +675,7 @@ export default {
         variables: {},
       }).subscribe({
         next: (eventData) => {
+          console.log(eventData);
           this.$store.dispatch("general/addServerStats", {
             metric: eventData.value.data.onPutServerMetric,
           });

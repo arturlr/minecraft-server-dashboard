@@ -22,10 +22,11 @@ APT=$(which apt)
 YUM=$(which yum)
 
 case $APT in /usr*)
-   sudo apt-get -y install zip 
+   sudo apt-get -y install zip net-tools 
 esac
 
 case $YUM in /usr*)
+
    sudo yum -y install zip 
 esac
 
