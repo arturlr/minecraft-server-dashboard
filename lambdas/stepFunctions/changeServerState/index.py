@@ -38,7 +38,6 @@ def handler(event, context):
                 IsInstanceReady = True
 
             if (state == "stopped"):
-                utl.updateAlarm(instanceId)
                 rsp = ec2_client.start_instances(
                     InstanceIds=[ instanceId ]
                 )

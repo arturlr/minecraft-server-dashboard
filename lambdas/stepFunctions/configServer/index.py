@@ -93,7 +93,7 @@ def describeIamProfile(instance, status):
     if len(descResp['IamInstanceProfileAssociations']) > 0:        
         for rec in descResp['IamInstanceProfileAssociations']:
             if rec['State'] == status:
-               return { "AssociationId": rec['AssociationId'], "Arn": rec['AssociationId']['Arn'] }
+               return { "AssociationId": rec['AssociationId'], "Arn": rec['IamInstanceProfile']['Arn'] }
 
     return None
 

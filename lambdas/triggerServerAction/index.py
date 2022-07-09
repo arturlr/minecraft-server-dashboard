@@ -18,6 +18,7 @@ appValue = os.getenv('TAG_APP_VALUE')
 
 ssm = boto3.client('ssm')
 sfn = boto3.client('stepfunctions')
+cw_client = boto3.client('cloudwatch')
 cognito_idp = boto3.client('cognito-idp')
 
 sftArn = os.getenv('StepFunctionsArn')
@@ -32,7 +33,7 @@ def _response(status_code, body, headers={}):
     else:
         return {"statusCode": status_code, "body": body }
 
-def _is_token_valid(token, keys):
+def is_token_valid(token, keys):
     # https://github.com/awslabs/aws-support-tools/tree/master/Cognito/decode-verify-jwt
     headers = jwt.get_unverified_headers(token)
     kid = headers['kid']
@@ -68,7 +69,7 @@ def _is_token_valid(token, keys):
     # now we can use the claims
     return claims
 
-def _group_exists(instanceId, poolId):
+def group_exists(instanceId, poolId):
     try:
         grpRsp = cognito_idp.get_group(
                 GroupName=instanceId,
@@ -81,7 +82,7 @@ def _group_exists(instanceId, poolId):
         logger.warning("Group does not exist.")
         return False
             
-def _create_group(instanceId, poolId):    
+def create_group(instanceId, poolId):    
     try:
         grpRsp = cognito_idp.create_group(
             GroupName=instanceId,
@@ -96,7 +97,7 @@ def _create_group(instanceId, poolId):
             logger.error(str(e))
             return False
         
-def _add_user_to_group(instanceId,poolId,userEmail):
+def add_user_to_group(instanceId,poolId,userEmail):
         try:
             user = cognito_idp.list_users(
                 UserPoolId=poolId,
@@ -119,6 +120,54 @@ def _add_user_to_group(instanceId,poolId,userEmail):
             logger.info("Exception admin_add_user_to_group")
             logger.warning(str(e))
             return { "err": str(e) } 
+
+
+def updateAlarm(instanceId):
+    logger.info("updateAlarm: " + instanceId)
+    instanceInfo = dyn.GetInstanceAttr(instanceId)
+    # Default values
+    alarmMetric = "CPUUtilization"
+    alarmThreshold = "10"
+
+    print(instanceInfo)
+
+    if instanceInfo != None and instanceInfo['code'] == 200:
+        if 'alarmMetric' in instanceInfo['msg']:
+            alarmMetric = instanceInfo['msg']['alarmMetric']
+            
+        if 'alarmThreshold' in instanceInfo['msg']:
+            alarmThreshold = instanceInfo['msg']['alarmThreshold']
+        
+    elif instanceInfo != None and instanceInfo['code'] == 400:
+        logger.info("Using Default values for Alarming")
+
+    else:
+        logger.error(instanceInfo)
+        return False
+    
+    cw_client.put_metric_alarm(
+            AlarmName=instanceId + "-" + "minecraft-server",
+            ActionsEnabled=True,
+            AlarmActions=["arn:aws:automate:" + awsRegion + ":ec2:stop"],
+            InsufficientDataActions=[],
+            MetricName=alarmMetric,
+            Namespace="AWS/EC2",
+            Statistic="Average",
+            Dimensions=[
+                {
+                'Name': 'InstanceId',
+                'Value': instanceId
+                },
+            ],
+            Period=300,
+            EvaluationPeriods=7,
+            DatapointsToAlarm=7,
+            Threshold=int(alarmThreshold),
+            TreatMissingData="missing",
+            ComparisonOperator="LessThanOrEqualToThreshold"   
+        )
+
+    logger.info("Alarm configured to " + alarmMetric + " and " + alarmThreshold)
             
 
 def handler(event, context):
@@ -135,7 +184,7 @@ def handler(event, context):
         response = f.read()
     keys = json.loads(response.decode('utf-8'))['keys']
 
-    token_claims = _is_token_valid(token,keys)
+    token_claims = is_token_valid(token,keys)
 
     if token_claims == None:
         logger.error("Invalid Token")
@@ -201,15 +250,15 @@ def handler(event, context):
         #
         # Group Checking and Creation
         #
-        cogGrp = _group_exists(instanceId,iss.split("/")[3])
+        cogGrp = group_exists(instanceId,iss.split("/")[3])
         if cogGrp == False:
             # Create Group
             logger.warning("Group " + instanceId + " does not exit. Creating one.")
-            crtGrp = _create_group(instanceId,iss.split("/")[3])
+            crtGrp = create_group(instanceId,iss.split("/")[3])
             if crtGrp:
                 # adding Admin Account to the group
                 logger.info("Group created. Now adding admin user to it.")
-                resp = _add_user_to_group(instanceId,iss.split("/")[3],adminEmail)
+                resp = add_user_to_group(instanceId,iss.split("/")[3],adminEmail)
             else:
                 return _response(401,{"err": 'Cognito group creation failed'})
 
@@ -219,7 +268,7 @@ def handler(event, context):
         if action == "add_user":
             # get only prefix if user provided @ accidently and add the gmail suffix
             gmailAccount = paramValue.split("@")[0] + '@gmail.com'
-            resp = _add_user_to_group(instanceId,iss.split("/")[3],gmailAccount)
+            resp = add_user_to_group(instanceId,iss.split("/")[3],gmailAccount)
             if 'msg' in  resp:
                 return _response(200,resp)
             else:
@@ -229,9 +278,6 @@ def handler(event, context):
         elif action == "add_parameter":
             dynResp = dyn.SetInstanceAttr(instanceId,)
             response = utl.putSsmParam(paramKey,paramValue,'String')
-            keyName=paramKey.split('/')
-            if (keyName[-1]=="alarmThreshold"):
-                utl.updateAlarm(keyName[-1])
             resp = {"msg" : "Parameter saved"}
             return _response(200,resp)
 
@@ -242,8 +288,10 @@ def handler(event, context):
 
         
         # GET INSTANCE INFO
-        elif action == "set_instance_attr":
+        elif action == "set_instance_attr":            
             response = dyn.SetInstanceAttr(instanceId,params)
+            if 'at' in params:
+                updateAlarm(instanceId)
             return _response(response["code"],response["msg"])
 
 
@@ -264,6 +312,8 @@ def handler(event, context):
                 return _response(500,"No parameters")
 
         else:
+            # Updating Alarm
+            updateAlarm(instanceId)
             # Invoking Step-Functions to change EC2 Stage
             sfn_rsp = sfn.start_execution(
                 stateMachineArn=sftArn,

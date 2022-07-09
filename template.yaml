@@ -273,6 +273,7 @@ Resources:
               Action:
                 - cognito-idp:CreateGroup
                 - cognito-idp:AdminAddUserToGroup
+                - cloudwatch:PutMetricAlarm
               Resource: '*'
             
       Environment:
@@ -297,12 +298,6 @@ Resources:
             ParameterName: "amplify/minecraftserverdashboard*"
         - DynamoDBCrudPolicy:
             TableName: !Ref InstancesTable
-        - Version: '2012-10-17' # Policy Document
-          Statement:
-            - Effect: Allow
-              Action:
-                - cloudwatch:PutMetricAlarm
-              Resource: '*'
         - Version: '2012-10-17' # Policy Document
           Statement:
             - Effect: Allow

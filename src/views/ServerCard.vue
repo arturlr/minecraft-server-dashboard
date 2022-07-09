@@ -233,7 +233,6 @@
                   v-model="runCommand"
                   ref="runCommand"
                   label="Minecraft run command"
-                  :rules="[rules.minLen]"
                 ></v-text-field>
               </v-col>
               <v-col cols="12">
@@ -242,7 +241,6 @@
                   v-model="workingDir"
                   ref="workingDir"
                   label="Minecraft working directory"
-                  :rules="[rules.minLen]"
                 ></v-text-field>
               </v-col>
             </v-row>
@@ -397,6 +395,7 @@ export default {
       rules: {
         required: (value) => !!value || "Required.",
         minLen: value => (value && value.length >= 3) || 'Must be greater than 3 characters',
+        maxLen: value => (value && value.length <= 250) || 'Must be less than 250 characters',
         onlyNumbers: (value) => {
           const pattern = /^[0-9]*$/;
           return pattern.test(value) || "Threshold must be only numbers.";
@@ -589,6 +588,7 @@ export default {
         this.$refs.workingDir.hasError
       ) {
         this.settingsFormHasErrors = true;
+        console.error(this.$refs.workingDir.hasError)
         return false;
       }
 

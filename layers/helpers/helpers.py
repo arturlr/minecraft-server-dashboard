@@ -90,47 +90,8 @@ class Utils:
     def __init__(self):
         logger.info("------- Utils Class Initialization")
         self.ec2_client = boto3.client('ec2')
-        self.ssm = boto3.client('ssm')
-        self.cw_client = boto3.client('cloudwatch')
+        self.ssm = boto3.client('ssm')        
         self.appValue = os.getenv('TAG_APP_VALUE')
-  
-    def updateAlarm(self, instanceId):
-        logger.info("updateAlarm: " + instanceId)
-        dyn = Dyn()
-
-        instanceInfo = dyn.GetInstanceAttr(instanceId)
-        
-        if 'alarmMetric' in instanceInfo:
-            alarmMetric = instanceInfo['alarmMetric']
-        else:
-            alarmMetric = "CPUUtilization"
-
-        if 'alarmThreshold' in instanceInfo:
-            alarmThreshold = instanceInfo['alarmThreshold']
-        else:
-            alarmThreshold = "10"
-
-        self.cw_client.put_metric_alarm(
-            AlarmName=instanceId + "-" + "minecraft-server",
-            ActionsEnabled=True,
-            AlarmActions=["arn:aws:automate:" + awsRegion + ":ec2:stop"],
-            InsufficientDataActions=[],
-            MetricName=alarmMetric,
-            Namespace="AWS/EC2",
-            Statistic="Average",
-            Dimensions=[
-                {
-                'Name': 'InstanceId',
-                'Value': instanceId
-                },
-            ],
-            Period=300,
-            EvaluationPeriods=7,
-            DatapointsToAlarm=7,
-            Threshold=int(alarmThreshold),
-            TreatMissingData="missing",
-            ComparisonOperator="LessThanOrEqualToThreshold"   
-    )
         
     def getSsmParam(self, paramKey, isEncrypted=False):
         try:
