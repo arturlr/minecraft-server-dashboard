@@ -157,7 +157,7 @@ def getConnectUsers(instanceId,startTime):
         logger.error("start_query: " + str(e) + " occurred.")
         return "[]"
 
-def getMetricData(instanceId,nameSpace,metricName,unit,statType,startTime,EndTime,period):
+def getMetricData(instanceId,nameSpace,metricName,unit,statType,startTime,endTime,period):
     cdata = []
     four_hours_before=datetime.utcnow() - timedelta(hours=4)
     try:
@@ -171,14 +171,15 @@ def getMetricData(instanceId,nameSpace,metricName,unit,statType,startTime,EndTim
                 }
             ],
             StartTime=startTime,
-            EndTime=EndTime,
+            EndTime=endTime,
             Period=period,
             Statistics=[statType],
             Unit=unit
         )
 
         if len(rsp["Datapoints"]) == 0:
-            logger.warning('No Datapoint for ' + metricName)
+            logger.warning('No Datapoint for namespace:' + nameSpace + ' - metricName: ' + metricName + ' - InstanceId: ' + instanceId)
+            logger.info("startTime: " + startTime.strftime("%Y/%m/%dT%H:%M:%S") + " endTime: " + endTime.strftime("%Y/%m/%dT%H:%M:%S") + " Period: " + str(period))
             return "[]"
         else:
             for rec in rsp["Datapoints"]:
@@ -188,8 +189,7 @@ def getMetricData(instanceId,nameSpace,metricName,unit,statType,startTime,EndTim
                 else:
                     cdata.append({'y': round(rec[statType], 2), 'x': rec["Timestamp"].strftime("%Y/%m/%dT%H:%M:%S")})
 
-            data_points = sorted(cdata, key=lambda k : k['x'])
-            
+            data_points = sorted(cdata, key=lambda k : k['x'])            
             return json.dumps(data_points)
 
     except Exception as e:
@@ -297,7 +297,7 @@ def handler(event, context):
             payload={"query": changeServerState, 'variables': { "input": input }}
 
         if event['detail-type'] == "Scheduled Event":
-            input['activeUsers'] = getMetricData(instanceId,'MinecraftDashboard','UserCount','Count','Sum',dt_4_four_hours_before,dt_now,300)
+            input['activeUsers'] = getMetricData(instanceId,'MinecraftDashboard','UserCount','None','Maximum',dt_4_four_hours_before,dt_now,300)
             input["cpuStats"] = getMetricData(instanceId,'AWS/EC2','CPUUtilization','Percent','Average',dt_4_four_hours_before,dt_now,300)
             input["networkStats"] = getMetricData(instanceId,'AWS/EC2','NetworkOut','Bytes','Average',dt_4_four_hours_before,dt_now,300)
             input["memStats"] = getMetricData(instanceId,'CWAgent','mem_used_percent','Percent','Average',dt_4_four_hours_before,dt_now,300)

@@ -81,7 +81,7 @@
               ></apexchart>
             </v-card>
           </v-col>
-          <div v-if="isMobile">
+          <!-- <div v-if="isMobile">
             <v-card>
               <apexchart
                 ref="lineChart"
@@ -90,8 +90,9 @@
                 :series="chartInit"
               ></apexchart>
             </v-card>
-          </div>
-          <v-col v-else class="d-flex flex-column">
+          </div> 
+          <v-col v-else class="d-flex flex-column"> -->
+          <v-col>
             <v-card>
               <apexchart
                 ref="lineChart"
@@ -464,9 +465,13 @@ export default {
             enabled: true,
           },
         },
-        title: {
-          text: "Users connected",
-          align: "left",
+        title: {          
+          text: "0 Connections",
+          offsetX: 30,
+          style: {
+            fontSize: '18px',
+            cssClass: 'apexcharts-yaxis-title'
+          }
         },
         stroke: {
           curve: "straight",
@@ -477,6 +482,14 @@ export default {
         yaxis: {
           min: 0,
         },
+        xaxis: {
+          type: "datetime",
+          labels: {
+            formatter: function (val, timestamp) {
+              return moment(new Date(timestamp)).format("HH:mm");
+            },
+          },
+        },
         colors: ["#DCE6EC"],
       },
     };
@@ -485,9 +498,11 @@ export default {
     if (this.$route.params) {
       this.serverId = this.$route.params.id;
       this.runCommand = this.serversDict[this.serverId].runCommand;
-      this.workingDir = this.serversDict[this.serverId].workingDir;
-      this.subscribePutServerMetric();
+      this.workingDir = this.serversDict[this.serverId].workingDir;      
     }
+  },
+  mounted() {
+    this.subscribePutServerMetric();
   },
   watch: {
     $route(to) {
@@ -637,7 +652,24 @@ export default {
       }
     },
     updateCharts() {
-      this.$nextTick(() => {
+
+        if (this.serversDict[this.serverId].activeUsers.length > 0) {       
+          this.$refs.users.updateOptions({
+            title: {
+              text: String(this.serversDict[this.serverId].activeUsers[this.serversDict[this.serverId].activeUsers.length - 1].y) + " Connection(s)"
+            }
+          })
+        }
+
+        this.$refs.users.updateSeries([
+          {
+            name: "Connections",
+            data: this.serversDict[this.serverId].activeUsers
+              ? this.serversDict[this.serverId].activeUsers
+              : [],
+          },
+        ]);
+
         this.$refs.lineChart.updateSeries([
           {
             name: "CPU",
@@ -659,15 +691,6 @@ export default {
           },
         ]);
 
-        this.$refs.users.updateSeries([
-          {
-            name: "Connections",
-            data: this.serversDict[this.serverId].activeUsers
-              ? this.serversDict[this.serverId].activeUsers
-              : [],
-          },
-        ]);
-      });
     },
     subscribePutServerMetric() {
       API.graphql({
@@ -675,7 +698,6 @@ export default {
         variables: {},
       }).subscribe({
         next: (eventData) => {
-          console.log(eventData);
           this.$store.dispatch("general/addServerStats", {
             metric: eventData.value.data.onPutServerMetric,
           });

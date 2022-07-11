@@ -163,7 +163,7 @@ def updateAlarm(instanceId):
             EvaluationPeriods=7,
             DatapointsToAlarm=7,
             Threshold=int(alarmThreshold),
-            TreatMissingData="missing",
+            TreatMissingData="breaching",
             ComparisonOperator="LessThanOrEqualToThreshold"   
         )
 
