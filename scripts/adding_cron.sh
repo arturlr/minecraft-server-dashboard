@@ -14,7 +14,7 @@ EOF
 chmod +x ${HOME}/port_count.sh
 
 sudo crontab -l > cron_bkp
-sudo echo "*/3 * * * * sudo ${HOME}/port_count.sh >/dev/null 2>&1" >> cron_bkp
+sudo echo "*/1 * * * * sudo ${HOME}/port_count.sh >/dev/null 2>&1" >> cron_bkp
 sudo crontab cron_bkp
 sudo rm cron_bkp
 

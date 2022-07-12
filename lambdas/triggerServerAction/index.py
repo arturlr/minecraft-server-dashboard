@@ -144,21 +144,32 @@ def updateAlarm(instanceId):
     else:
         logger.error(instanceInfo)
         return False
+
+    dimensions=[]
+    statistic="Average"
+    namespace="CWAgent"
+    dimensions.append({'Name': 'InstanceId','Value': instanceId})
+    if alarmMetric == "CPUUtilization":
+        alarmMetricName = "cpu_usage_active"        
+        dimensions.append({'Name': 'cpu','Value': "cpu-total"})
+    elif alarmMetric == "MbpsOut":
+        alarmMetricName = "net_bytes_sent"
+        statistic="Sum"
+        dimensions.append({'Name': 'interface','Value': "eth0"})
+    elif alarmMetric == "Connections":
+        alarmMetricName = "UserCount"
+        statistic="Maximum"
+        namespace="MinecraftDashboard"
     
     cw_client.put_metric_alarm(
             AlarmName=instanceId + "-" + "minecraft-server",
             ActionsEnabled=True,
             AlarmActions=["arn:aws:automate:" + awsRegion + ":ec2:stop"],
             InsufficientDataActions=[],
-            MetricName=alarmMetric,
-            Namespace="AWS/EC2",
-            Statistic="Average",
-            Dimensions=[
-                {
-                'Name': 'InstanceId',
-                'Value': instanceId
-                },
-            ],
+            MetricName=alarmMetricName,
+            Namespace=namespace,
+            Statistic=statistic,
+            Dimensions=dimensions,
             Period=300,
             EvaluationPeriods=7,
             DatapointsToAlarm=7,

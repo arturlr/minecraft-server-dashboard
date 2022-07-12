@@ -208,7 +208,7 @@
             <v-row>
               <v-col cols="12" sm="6">
                 <v-select
-                  :items="['Connections','CPUUtilization','NetworkOut']"
+                  :items="['Connections','CPUUtilization','MbpsOut']"
                   label="Metric"
                   :rules="[rules.required]"
                   dense
@@ -220,7 +220,7 @@
                 <v-text-field
                   dense
                   label="Instance idle threshold."
-                  hint="Connections, %CPU or NetworkOut bytes"
+                  hint="Connections, %CPU or Mbps"
                   :rules="[rules.required, rules.onlyNumbers]"
                   maxlength="6"
                   v-model="alarmThreshold"
@@ -678,7 +678,7 @@ export default {
               : [],
           },
           {
-            name: "NetworkOut 100K",
+            name: "Mbps Out",
             data: this.serversDict[this.serverId].networkStats
               ? this.serversDict[this.serverId].networkStats
               : [],

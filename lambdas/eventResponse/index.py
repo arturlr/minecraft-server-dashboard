@@ -159,17 +159,18 @@ def getConnectUsers(instanceId,startTime):
 
 def getMetricData(instanceId,nameSpace,metricName,unit,statType,startTime,endTime,period):
     cdata = []
-    four_hours_before=datetime.utcnow() - timedelta(hours=4)
+    dimensions=[]
+    dimensions.append({'Name': 'InstanceId','Value': instanceId})
+    if metricName == "cpu_usage_active":
+        dimensions.append({'Name': 'cpu','Value': "cpu-total"})
+    elif metricName == "net_bytes_sent":
+        dimensions.append({'Name': 'interface','Value': "eth0"})
+
     try:
         rsp = cw_client.get_metric_statistics(
             Namespace=nameSpace,
             MetricName=metricName,
-            Dimensions=[
-                {
-                'Name': 'InstanceId',
-                'Value': instanceId
-                }
-            ],
+            Dimensions=dimensions,
             StartTime=startTime,
             EndTime=endTime,
             Period=period,
@@ -183,9 +184,9 @@ def getMetricData(instanceId,nameSpace,metricName,unit,statType,startTime,endTim
             return "[]"
         else:
             for rec in rsp["Datapoints"]:
-                if metricName == "NetworkOut":
-                    # converting to 100KB
-                    cdata.append({'y': round(rec[statType]/102400, 2), 'x': rec["Timestamp"].strftime("%Y/%m/%dT%H:%M:%S")})
+                if metricName == "net_bytes_sent":
+                    # converting to Gbit per Second - Divide by 60 to convert from 1 minute to 1 second - Divide by 1024/1024*8 to convert Byte in Mbps.
+                    cdata.append({'y': round(rec[statType]/60/1024/1024*8, 2), 'x': rec["Timestamp"].strftime("%Y/%m/%dT%H:%M:%S")})
                 else:
                     cdata.append({'y': round(rec[statType], 2), 'x': rec["Timestamp"].strftime("%Y/%m/%dT%H:%M:%S")})
 
@@ -298,8 +299,10 @@ def handler(event, context):
 
         if event['detail-type'] == "Scheduled Event":
             input['activeUsers'] = getMetricData(instanceId,'MinecraftDashboard','UserCount','None','Maximum',dt_4_four_hours_before,dt_now,300)
-            input["cpuStats"] = getMetricData(instanceId,'AWS/EC2','CPUUtilization','Percent','Average',dt_4_four_hours_before,dt_now,300)
-            input["networkStats"] = getMetricData(instanceId,'AWS/EC2','NetworkOut','Bytes','Average',dt_4_four_hours_before,dt_now,300)
+            # input["cpuStats"] = getMetricData(instanceId,'AWS/EC2','CPUUtilization','Percent','Average',dt_4_four_hours_before,dt_now,300)
+            # input["networkStats"] = getMetricData(instanceId,'AWS/EC2','NetworkOut','Bytes','Average',dt_4_four_hours_before,dt_now,300)
+            input["cpuStats"] = getMetricData(instanceId,'CWAgent','cpu_usage_active','Percent','Average',dt_4_four_hours_before,dt_now,300)
+            input["networkStats"] = getMetricData(instanceId,'CWAgent','net_bytes_sent','Bytes','Sum',dt_4_four_hours_before,dt_now,300)
             input["memStats"] = getMetricData(instanceId,'CWAgent','mem_used_percent','Percent','Average',dt_4_four_hours_before,dt_now,300)
             payload={"query": putServerMetric, 'variables': { "input": input }}
         
