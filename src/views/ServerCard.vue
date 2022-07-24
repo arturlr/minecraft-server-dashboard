@@ -653,7 +653,7 @@ export default {
     },
     updateCharts() {
 
-        if (this.serversDict[this.serverId].activeUsers.length > 0) {       
+        if (this.serversDict[this.serverId].activeUsers && this.serversDict[this.serverId].activeUsers.length > 0) {       
           this.$refs.users.updateOptions({
             title: {
               text: String(this.serversDict[this.serverId].activeUsers[this.serversDict[this.serverId].activeUsers.length - 1].y) + " Connection(s)"

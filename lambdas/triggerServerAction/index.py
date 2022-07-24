@@ -152,10 +152,6 @@ def updateAlarm(instanceId):
     if alarmMetric == "CPUUtilization":
         alarmMetricName = "cpu_usage_active"        
         dimensions.append({'Name': 'cpu','Value': "cpu-total"})
-    elif alarmMetric == "MbpsOut":
-        alarmMetricName = "net_bytes_sent"
-        statistic="Sum"
-        dimensions.append({'Name': 'interface','Value': "eth0"})
     elif alarmMetric == "Connections":
         alarmMetricName = "UserCount"
         statistic="Maximum"
@@ -170,11 +166,11 @@ def updateAlarm(instanceId):
             Namespace=namespace,
             Statistic=statistic,
             Dimensions=dimensions,
-            Period=300,
-            EvaluationPeriods=7,
-            DatapointsToAlarm=7,
+            Period=60,
+            EvaluationPeriods=35,
+            DatapointsToAlarm=30,
             Threshold=int(alarmThreshold),
-            TreatMissingData="breaching",
+            TreatMissingData="missing",
             ComparisonOperator="LessThanOrEqualToThreshold"   
         )
 

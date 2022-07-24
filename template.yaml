@@ -113,7 +113,7 @@ Resources:
     Type: AWS::Events::Rule
     Properties: 
       Description: "ScheduledRule"
-      ScheduleExpression: "rate(2 minutes)"
+      ScheduleExpression: "rate(1 minutes)"
       State: "DISABLED"
       Targets: 
         - 

@@ -6,7 +6,7 @@ if [ ! -f ${HOME}/port_count.sh ]; then
 cat << EOF > ${HOME}/port_count.sh
 #!/bin/bash
 INSTANCE_ID=\$(curl -s http://169.254.169.254/latest/meta-data/instance-id)
-PORT_COUNT=\$(netstat -an | grep ESTABLISHED | grep '\.25565' | wc -l)
+PORT_COUNT=\$(netstat -an | grep ESTABLISHED | grep ':25565' | wc -l)
 REGION=\$(curl -s http://169.254.169.254/latest/meta-data/local-hostname | cut -d . -f 2)
 aws cloudwatch put-metric-data --metric-name UserCount --dimensions InstanceId=\${INSTANCE_ID} --namespace "MinecraftDashboard" --value \${PORT_COUNT} --region \${REGION}
 EOF
