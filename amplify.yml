@@ -15,7 +15,7 @@ frontend:
         - npm run build
     postBuild:
       commands:
-        - yum install jq
+        - yum install -y jq
         - DATE_SUFFIX=$(date +%y%m%d-%H%M)
         - DATE_TICKS=$(date +%s)
         - TICK_SUFFIX=${DATE_TICKS:6:4}
