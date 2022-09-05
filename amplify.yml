@@ -16,14 +16,16 @@ frontend:
     postBuild:
       commands:
         - yum install -y jq
+        - curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+        - unzip awscliv2.zip
+        - sudo ./aws/install
         - DATE_SUFFIX=$(date +%y%m%d-%H%M)
         - DATE_TICKS=$(date +%s)
         - TICK_SUFFIX=${DATE_TICKS:6:4}
         - APP_ID=$(aws amplify list-apps --query 'apps[*].[appId, name]' --output text | awk '/minecraft/ {print $1}')
         - POOL_ID=$(aws ssm get-parameter --name /amplify/minecraftserverdashboard/userpoolid --query Parameter.Value --output text)
         - APP_URL="https://${AWS_BRANCH}.${APP_ID}.amplifyapp.com"
-        - JSON_STRING=$( jq -n --arg url "$APP_URL" '{RefreshTokenValidity:30, TokenValidityUnits:{ RefreshToken:"days" }, SupportedIdentityProviders:[ "Google", "COGNITO" ], CallbackURLs:[ $url ], LogoutURLs:[ $url ], AllowedOAuthFlows:[ "code" ], AllowedOAuthScopes:[ "aws.cognito.signin.user.admin", "phone", "openid", "profile", "email" ], AllowedOAuthFlowsUserPoolClient:false }' )
-        - echo $JSON_STRING > param.json 
+        - jq -n --arg url "$APP_URL" '{RefreshTokenValidity:30, TokenValidityUnits:{ RefreshToken:"days" }, SupportedIdentityProviders:[ "Google", "COGNITO" ], CallbackURLs:[ $url ], LogoutURLs:[ $url ], AllowedOAuthFlows:[ "code" ], AllowedOAuthScopes:[ "aws.cognito.signin.user.admin", "phone", "openid", "profile", "email" ], AllowedOAuthFlowsUserPoolClient:false }' > param.json 
         - COG_CLIENTS=($(aws cognito-idp list-user-pool-clients --user-pool-id ${POOL_ID} --query 'UserPoolClients[].[ClientId]' --output text))
         - COG_DOMAIN=$(aws cognito-idp describe-user-pool --user-pool-id ${POOL_ID} --query UserPool.Domain --output text)
         - AWS_REGION=$(aws cognito-idp describe-user-pool --user-pool-id ${POOL_ID} --query UserPool.Arn --output text | cut -d ':' -f 4)
