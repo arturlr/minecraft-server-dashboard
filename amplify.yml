@@ -18,8 +18,9 @@ frontend:
         - DATE_SUFFIX=$(date +%y%m%d-%H%M)
         - DATE_TICKS=$(date +%s)
         - TICK_SUFFIX=${DATE_TICKS:6:4}
+        - APP_ID=$(aws amplify list-apps --query 'apps[*].[appId, name]' --output text | awk '/minecraft/ {print $1}')
         - POOL_ID=$(aws ssm get-parameter --name /amplify/minecraftserverdashboard/userpoolid --query Parameter.Value --output text)
-        - APP_URL="https://${AWS_BRANCH}.${AMPLIFY_BACKEND_APP_ID}.amplifyapp.com/"
+        - APP_URL="https://${AWS_BRANCH}.${APP_ID}.amplifyapp.com/"
         - COG_CLIENTS=($(aws cognito-idp list-user-pool-clients --user-pool-id ${POOL_ID} --query 'UserPoolClients[].[ClientId]' --output text))
         - COG_DOMAIN=$(aws cognito-idp describe-user-pool --user-pool-id ${POOL_ID} --query UserPool.Domain --output text)
         - AWS_REGION=$(aws cognito-idp describe-user-pool --user-pool-id ${POOL_ID} --query UserPool.Arn --output text | cut -d ':' -f 4)
