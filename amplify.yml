@@ -24,8 +24,7 @@ frontend:
         - COG_CLIENTS=($(aws cognito-idp list-user-pool-clients --user-pool-id ${POOL_ID} --query 'UserPoolClients[].[ClientId]' --output text))
         - COG_DOMAIN=$(aws cognito-idp describe-user-pool --user-pool-id ${POOL_ID} --query UserPool.Domain --output text)
         - AWS_REGION=$(aws cognito-idp describe-user-pool --user-pool-id ${POOL_ID} --query UserPool.Arn --output text | cut -d ':' -f 4)
-        - '# Add Amplify URL to the Cognito clients callback and logout configurations - Bash Array'
-        - aws cognito-idp update-user-pool-client --cli-input-json '{"UserPoolId":"${POOL_ID}", "ClientId":"${COG_CLIENTS[1]}", "RefreshTokenValidity":30, "TokenValidityUnits":{ "RefreshToken":"days" }, "SupportedIdentityProviders":[ "Google", "COGNITO" ], "CallbackURLs":[ "${APP_URL}" ], "LogoutURLs":[ "${APP_URL}" ], "AllowedOAuthFlows":[ "code" ], "AllowedOAuthScopes":[ "aws.cognito.signin.user.admin", "phone", "openid", "profile", "email" ], "AllowedOAuthFlowsUserPoolClient":false }'
+        - '# Add Amplify URL to the Cognito clients callback and logout configurations - Bash Array'      
         - aws cognito-idp update-user-pool-client --cli-input-json '{"UserPoolId":"${POOL_ID}", "ClientId":"${COG_CLIENTS[2]}", "RefreshTokenValidity":30, "TokenValidityUnits":{ "RefreshToken":"days" }, "SupportedIdentityProviders":[ "Google", "COGNITO" ], "CallbackURLs":[ "${APP_URL}" ], "LogoutURLs":[ "${APP_URL}" ], "AllowedOAuthFlows":[ "code" ], "AllowedOAuthScopes":[ "aws.cognito.signin.user.admin", "phone", "openid", "profile", "email" ], "AllowedOAuthFlowsUserPoolClient":false }'
         - '# Making sure that the minecraftdashboard cognito domain is unique'
         - aws cognito-idp delete-user-pool-domain --user-pool-id ${POOL_ID} --domain ${COG_DOMAIN}
