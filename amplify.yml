@@ -21,11 +21,12 @@ frontend:
         - POOL_ID=$(aws ssm get-parameter --name /amplify/minecraftserverdashboard/userpoolid --query Parameter.Value --output text)
         - AMPLIFY_APPID=$(aws amplify list-apps --query 'apps[*].[appId, name]' --output text | awk '/minecraft/ {print $1}')
         - AMPLIFY_APP_URL="https://main.${AMPLIFY_APPID}.amplifyapp.com/"
-        - COG_CLIENTS=$(aws cognito-idp list-user-pool-clients --user-pool-id $POOL_ID --query 'UserPoolClients[].[ClientId]' --output text)
+        - COG_CLIENTS=($(aws cognito-idp list-user-pool-clients --user-pool-id $POOL_ID --query 'UserPoolClients[].[ClientId]' --output text))
         - COG_DOMAIN=$(aws cognito-idp describe-user-pool --user-pool-id $POOL_ID --query UserPool.Domain --output text)
         - AWS_REGION=$(aws cognito-idp describe-user-pool --user-pool-id $POOL_ID --query UserPool.Arn --output text | cut -d ':' -f 4)
-        - '# Add Amplify URL to the Cognito clients callback and logout configurations'
-        - while IFS= read -r line ; do aws cognito-idp update-user-pool-client --user-pool-id $POOL_ID --client-id "${line}" --callback-urls $AMPLIFY_APP_URL --logout-urls $AMPLIFY_APP_URL --supported-identity-providers "COGNITO" "Google" --allowed-o-auth-flows "code" --allowed-o-auth-scopes "aws.cognito.signin.user.admin" "email" "openid" "phone" "profile"; done <<< "$COG_CLIENTS"
+        - '# Add Amplify URL to the Cognito clients callback and logout configurations - Bash Array'
+        - aws cognito-idp update-user-pool-client --user-pool-id $POOL_ID --client-id $COG_CLIENTS[1] --callback-urls $AMPLIFY_APP_URL --logout-urls $AMPLIFY_APP_URL --supported-identity-providers "COGNITO" "Google" --allowed-o-auth-flows "code" --allowed-o-auth-scopes "aws.cognito.signin.user.admin" "email" "openid" "phone" "profile"
+        - aws cognito-idp update-user-pool-client --user-pool-id $POOL_ID --client-id $COG_CLIENTS[2] --callback-urls $AMPLIFY_APP_URL --logout-urls $AMPLIFY_APP_URL --supported-identity-providers "COGNITO" "Google" --allowed-o-auth-flows "code" --allowed-o-auth-scopes "aws.cognito.signin.user.admin" "email" "openid" "phone" "profile"
         - '# Making sure that the minecraftdashboard cognito domain is unique'
         - aws cognito-idp delete-user-pool-domain --user-pool-id $POOL_ID --domain $COG_DOMAIN
         - aws cognito-idp create-user-pool-domain --user-pool-id $POOL_ID --domain minecraftdashboard-$TICK_SUFFIX
