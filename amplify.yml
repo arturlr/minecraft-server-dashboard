@@ -3,13 +3,12 @@ backend:
   phases:
     preBuild:
       commands:
+        - ls amplify/backend/auth/minecraftserverdashbb59cd6eb 
         - yum install -y jq
         - curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
         - unzip awscliv2.zip
-        - ./aws/install
-        - POOL_ID=$(aws ssm get-parameter --name /amplify/minecraftserverdashboard/userpoolid --query Parameter.Value --output text)
-        - APP_ID=$(aws amplify list-apps --query 'apps[*].[appId, name]' --output text | awk '/minecraft/ {print $1}')       
-        - ls amplify/backend/auth/minecraftserverdashbb59cd6eb    
+        - ./aws/install        
+        - APP_ID=$(aws amplify list-apps --query 'apps[*].[appId, name]' --output text | awk '/minecraft/ {print $1}')                  
         - jq --arg hui "minecraftdashboard-${APP_ID:0:5}" '.hostedUIDomainName = $hui' amplify/backend/auth/minecraftserverdashbb59cd6eb/cli-inputs.json > temp_param.json && mv temp_param.json amplify/backend/auth/minecraftserverdashbb59cd6eb/cli-inputs.json        
     build:
       commands:
@@ -25,6 +24,7 @@ frontend:
         - npm run build
     postBuild:
       commands:        
+        - POOL_ID=$(aws ssm get-parameter --name /amplify/minecraftserverdashboard/userpoolid --query Parameter.Value --output text)
         - APP_URL="https://${AWS_BRANCH}.${APP_ID}.amplifyapp.com"
         - jq -n --arg url $APP_URL '{RefreshTokenValidity:30, TokenValidityUnits:{ RefreshToken:"days" }, SupportedIdentityProviders:[ "Google", "COGNITO" ], CallbackURLs:[ $url ], LogoutURLs:[ $url ], AllowedOAuthFlows:[ "code" ], AllowedOAuthScopes:[ "aws.cognito.signin.user.admin", "phone", "openid", "profile", "email" ], AllowedOAuthFlowsUserPoolClient:false }' > param.json 
         - cat param.json
