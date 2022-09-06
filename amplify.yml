@@ -9,8 +9,10 @@ backend:
         - ./aws/install
         - POOL_ID=$(aws ssm get-parameter --name /amplify/minecraftserverdashboard/userpoolid --query Parameter.Value --output text)
         - APP_ID=$(aws amplify list-apps --query 'apps[*].[appId, name]' --output text | awk '/minecraft/ {print $1}')
-        - pwd $$ ls       
-        - jq --arg hui "minecraftdashboard-${APP_ID:0:5}" '.hostedUIDomainName = $hui' ./amplify/backend/auth/minecraftserverdashbb59cd6eb/build/parameters.json > temp_param.json && mv temp_param.json amplify/backend/auth/minecraftserverdashbb59cd6eb/build/parameters.json
+        - pwd && ls       
+        - cd amplify/backend/auth/minecraftserverdashbb59cd6eb/build
+        - jq --arg hui "minecraftdashboard-${APP_ID:0:5}" '.hostedUIDomainName = $hui' parameters.json > temp_param.json && mv temp_param.json parameters.json
+        - cd ../../../../../
     build:
       commands:
         - '# Execute Amplify CLI with the helper script'
