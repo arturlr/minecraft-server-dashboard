@@ -45,3 +45,4 @@ amplifytools.xcconfig
 
 .aws-sam/*
 samconfig.toml
+team-provider-info.json

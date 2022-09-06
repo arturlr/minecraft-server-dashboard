@@ -8,7 +8,8 @@ backend:
         - unzip awscliv2.zip
         - ./aws/install
         - POOL_ID=$(aws ssm get-parameter --name /amplify/minecraftserverdashboard/userpoolid --query Parameter.Value --output text)
-        - APP_ID=$(aws amplify list-apps --query 'apps[*].[appId, name]' --output text | awk '/minecraft/ {print $1}')                  
+        - APP_ID=$(aws amplify list-apps --query 'apps[*].[appId, name]' --output text | awk '/minecraft/ {print $1}')       
+        - ls amplify/backend/auth/minecraftserverdashbb59cd6eb    
         - jq --arg hui "minecraftdashboard-${APP_ID:0:5}" '.hostedUIDomainName = $hui' amplify/backend/auth/minecraftserverdashbb59cd6eb/cli-inputs.json > temp_param.json && mv temp_param.json amplify/backend/auth/minecraftserverdashbb59cd6eb/cli-inputs.json        
     build:
       commands:
