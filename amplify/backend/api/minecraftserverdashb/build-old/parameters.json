@@ -1,0 +1,19 @@
+{
+    "AppSyncApiName": "minecraftserverdashb",
+    "DynamoDBBillingMode": "PAY_PER_REQUEST",
+    "DynamoDBEnableServerSideEncryption": false,
+    "AuthCognitoUserPoolId": {
+        "Fn::GetAtt": [
+            "authminecraftserverdashbb59cd6eb",
+            "Outputs.UserPoolId"
+        ]
+    },
+    "authRoleName": {
+        "Ref": "AuthRoleName"
+    },
+    "unauthRoleName": {
+        "Ref": "UnauthRoleName"
+    },
+    "S3DeploymentBucket": "amplify-minecraftserverdashb-dev-175627-deployment",
+    "S3DeploymentRootKey": "amplify-appsync-files/957992715481e54562684df00e100416bed101e8"
+}

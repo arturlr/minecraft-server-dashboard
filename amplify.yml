@@ -9,7 +9,8 @@ backend:
         - unzip awscliv2.zip
         - ./aws/install        
         - APP_ID=$(aws amplify list-apps --query 'apps[*].[appId, name]' --output text | awk '/minecraft/ {print $1}')                  
-        - jq --arg hui "minecraftdashboard-${APP_ID:0:5}" '.hostedUIDomainName = $hui' amplify/backend/auth/minecraftserverdashbb59cd6eb/cli-inputs.json > temp_param.json && mv temp_param.json amplify/backend/auth/minecraftserverdashbb59cd6eb/cli-inputs.json        
+        - jq --arg hui "minecraftdashboard-${APP_ID:0:5}" '.hostedUIDomainName = $hui' amplify/backend/auth/minecraftserverdashbb59cd6eb/cli-inputs.json > temp_param.json && mv temp_param.json amplify/backend/auth/minecraftserverdashbb59cd6eb/cli-inputs.json
+        - cat amplify/backend/auth/minecraftserverdashbb59cd6eb/cli-inputs.json
     build:
       commands:
         - '# Execute Amplify CLI with the helper script'

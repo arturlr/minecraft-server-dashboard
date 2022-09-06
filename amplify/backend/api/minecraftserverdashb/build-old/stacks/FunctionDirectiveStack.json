@@ -1,0 +1,625 @@
+{
+  "Description": "An auto-generated nested stack for the @function directive.",
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Conditions": {
+    "HasEnvironmentParameter": {
+      "Fn::Not": [
+        {
+          "Fn::Equals": [
+            {
+              "Ref": "referencetotransformerrootstackenv10C5A902Ref"
+            },
+            "NONE"
+          ]
+        }
+      ]
+    }
+  },
+  "Resources": {
+    "MinecraftServerDashboardListServersLambdaDataSourceServiceRoleA0CED112": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Statement": [
+            {
+              "Action": "sts:AssumeRole",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "appsync.amazonaws.com"
+              }
+            }
+          ],
+          "Version": "2012-10-17"
+        }
+      }
+    },
+    "MinecraftServerDashboardListServersLambdaDataSourceServiceRoleDefaultPolicyAA41D105": {
+      "Type": "AWS::IAM::Policy",
+      "Properties": {
+        "PolicyDocument": {
+          "Statement": [
+            {
+              "Action": "lambda:InvokeFunction",
+              "Effect": "Allow",
+              "Resource": {
+                "Fn::If": [
+                  "HasEnvironmentParameter",
+                  {
+                    "Fn::Sub": [
+                      "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:minecraft-server-dashboard-listServers",
+                      {}
+                    ]
+                  },
+                  {
+                    "Fn::Sub": "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:minecraft-server-dashboard-listServers"
+                  }
+                ]
+              }
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "PolicyName": "MinecraftServerDashboardListServersLambdaDataSourceServiceRoleDefaultPolicyAA41D105",
+        "Roles": [
+          {
+            "Ref": "MinecraftServerDashboardListServersLambdaDataSourceServiceRoleA0CED112"
+          }
+        ]
+      }
+    },
+    "MinecraftServerDashboardListServersLambdaDataSource": {
+      "Type": "AWS::AppSync::DataSource",
+      "Properties": {
+        "ApiId": {
+          "Ref": "referencetotransformerrootstackGraphQLAPI20497F53ApiId"
+        },
+        "Name": "MinecraftServerDashboardListServersLambdaDataSource",
+        "Type": "AWS_LAMBDA",
+        "LambdaConfig": {
+          "LambdaFunctionArn": {
+            "Fn::If": [
+              "HasEnvironmentParameter",
+              {
+                "Fn::Sub": [
+                  "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:minecraft-server-dashboard-listServers",
+                  {}
+                ]
+              },
+              {
+                "Fn::Sub": "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:minecraft-server-dashboard-listServers"
+              }
+            ]
+          }
+        },
+        "ServiceRoleArn": {
+          "Fn::GetAtt": [
+            "MinecraftServerDashboardListServersLambdaDataSourceServiceRoleA0CED112",
+            "Arn"
+          ]
+        }
+      }
+    },
+    "InvokeMinecraftServerDashboardListServersLambdaDataSourceInvokeMinecraftServerDashboardListServersLambdaDataSourceAppSyncFunction7F395A93": {
+      "Type": "AWS::AppSync::FunctionConfiguration",
+      "Properties": {
+        "ApiId": {
+          "Ref": "referencetotransformerrootstackGraphQLAPI20497F53ApiId"
+        },
+        "DataSourceName": {
+          "Fn::GetAtt": [
+            "MinecraftServerDashboardListServersLambdaDataSource",
+            "Name"
+          ]
+        },
+        "FunctionVersion": "2018-05-29",
+        "Name": "InvokeMinecraftServerDashboardListServersLambdaDataSource",
+        "RequestMappingTemplateS3Location": {
+          "Fn::Join": [
+            "",
+            [
+              "s3://",
+              {
+                "Ref": "referencetotransformerrootstackS3DeploymentBucket7592718ARef"
+              },
+              "/",
+              {
+                "Ref": "referencetotransformerrootstackS3DeploymentRootKeyA71EA735Ref"
+              },
+              "/resolvers/InvokeMinecraftServerDashboardListServersLambdaDataSource.req.vtl"
+            ]
+          ]
+        },
+        "ResponseMappingTemplateS3Location": {
+          "Fn::Join": [
+            "",
+            [
+              "s3://",
+              {
+                "Ref": "referencetotransformerrootstackS3DeploymentBucket7592718ARef"
+              },
+              "/",
+              {
+                "Ref": "referencetotransformerrootstackS3DeploymentRootKeyA71EA735Ref"
+              },
+              "/resolvers/InvokeMinecraftServerDashboardListServersLambdaDataSource.res.vtl"
+            ]
+          ]
+        }
+      },
+      "DependsOn": [
+        "MinecraftServerDashboardListServersLambdaDataSource"
+      ]
+    },
+    "QuerylistServersResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "Properties": {
+        "ApiId": {
+          "Ref": "referencetotransformerrootstackGraphQLAPI20497F53ApiId"
+        },
+        "FieldName": "listServers",
+        "TypeName": "Query",
+        "Kind": "PIPELINE",
+        "PipelineConfig": {
+          "Functions": [
+            {
+              "Fn::GetAtt": [
+                "InvokeMinecraftServerDashboardListServersLambdaDataSourceInvokeMinecraftServerDashboardListServersLambdaDataSourceAppSyncFunction7F395A93",
+                "FunctionId"
+              ]
+            }
+          ]
+        },
+        "RequestMappingTemplate": {
+          "Fn::Join": [
+            "",
+            [
+              "## [Start] Stash resolver specific context.. **\n$util.qr($ctx.stash.put(\"typeName\", \"Query\"))\n$util.qr($ctx.stash.put(\"fieldName\", \"listServers\"))\n$util.qr($ctx.stash.put(\"authRole\", \"arn:aws:sts::",
+              {
+                "Ref": "AWS::AccountId"
+              },
+              ":assumed-role/",
+              {
+                "Ref": "referencetotransformerrootstackauthRoleNameFB872D50Ref"
+              },
+              "/CognitoIdentityCredentials\"))\n$util.qr($ctx.stash.put(\"unauthRole\", \"arn:aws:sts::",
+              {
+                "Ref": "AWS::AccountId"
+              },
+              ":assumed-role/",
+              {
+                "Ref": "referencetotransformerrootstackunauthRoleName49F3C1FERef"
+              },
+              "/CognitoIdentityCredentials\"))\n{}\n## [End] Stash resolver specific context.. **"
+            ]
+          ]
+        },
+        "ResponseMappingTemplateS3Location": {
+          "Fn::Join": [
+            "",
+            [
+              "s3://",
+              {
+                "Ref": "referencetotransformerrootstackS3DeploymentBucket7592718ARef"
+              },
+              "/",
+              {
+                "Ref": "referencetotransformerrootstackS3DeploymentRootKeyA71EA735Ref"
+              },
+              "/resolvers/Query.listServers.res.vtl"
+            ]
+          ]
+        }
+      }
+    },
+    "MinecraftServerDashboardGetMonthlyCostLambdaDataSourceServiceRole9331D0B4": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Statement": [
+            {
+              "Action": "sts:AssumeRole",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "appsync.amazonaws.com"
+              }
+            }
+          ],
+          "Version": "2012-10-17"
+        }
+      }
+    },
+    "MinecraftServerDashboardGetMonthlyCostLambdaDataSourceServiceRoleDefaultPolicyC088B89C": {
+      "Type": "AWS::IAM::Policy",
+      "Properties": {
+        "PolicyDocument": {
+          "Statement": [
+            {
+              "Action": "lambda:InvokeFunction",
+              "Effect": "Allow",
+              "Resource": {
+                "Fn::If": [
+                  "HasEnvironmentParameter",
+                  {
+                    "Fn::Sub": [
+                      "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:minecraft-server-dashboard-getMonthlyCost",
+                      {}
+                    ]
+                  },
+                  {
+                    "Fn::Sub": "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:minecraft-server-dashboard-getMonthlyCost"
+                  }
+                ]
+              }
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "PolicyName": "MinecraftServerDashboardGetMonthlyCostLambdaDataSourceServiceRoleDefaultPolicyC088B89C",
+        "Roles": [
+          {
+            "Ref": "MinecraftServerDashboardGetMonthlyCostLambdaDataSourceServiceRole9331D0B4"
+          }
+        ]
+      }
+    },
+    "MinecraftServerDashboardGetMonthlyCostLambdaDataSource": {
+      "Type": "AWS::AppSync::DataSource",
+      "Properties": {
+        "ApiId": {
+          "Ref": "referencetotransformerrootstackGraphQLAPI20497F53ApiId"
+        },
+        "Name": "MinecraftServerDashboardGetMonthlyCostLambdaDataSource",
+        "Type": "AWS_LAMBDA",
+        "LambdaConfig": {
+          "LambdaFunctionArn": {
+            "Fn::If": [
+              "HasEnvironmentParameter",
+              {
+                "Fn::Sub": [
+                  "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:minecraft-server-dashboard-getMonthlyCost",
+                  {}
+                ]
+              },
+              {
+                "Fn::Sub": "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:minecraft-server-dashboard-getMonthlyCost"
+              }
+            ]
+          }
+        },
+        "ServiceRoleArn": {
+          "Fn::GetAtt": [
+            "MinecraftServerDashboardGetMonthlyCostLambdaDataSourceServiceRole9331D0B4",
+            "Arn"
+          ]
+        }
+      }
+    },
+    "InvokeMinecraftServerDashboardGetMonthlyCostLambdaDataSourceInvokeMinecraftServerDashboardGetMonthlyCostLambdaDataSourceAppSyncFunctionB7CA80CA": {
+      "Type": "AWS::AppSync::FunctionConfiguration",
+      "Properties": {
+        "ApiId": {
+          "Ref": "referencetotransformerrootstackGraphQLAPI20497F53ApiId"
+        },
+        "DataSourceName": {
+          "Fn::GetAtt": [
+            "MinecraftServerDashboardGetMonthlyCostLambdaDataSource",
+            "Name"
+          ]
+        },
+        "FunctionVersion": "2018-05-29",
+        "Name": "InvokeMinecraftServerDashboardGetMonthlyCostLambdaDataSource",
+        "RequestMappingTemplateS3Location": {
+          "Fn::Join": [
+            "",
+            [
+              "s3://",
+              {
+                "Ref": "referencetotransformerrootstackS3DeploymentBucket7592718ARef"
+              },
+              "/",
+              {
+                "Ref": "referencetotransformerrootstackS3DeploymentRootKeyA71EA735Ref"
+              },
+              "/resolvers/InvokeMinecraftServerDashboardGetMonthlyCostLambdaDataSource.req.vtl"
+            ]
+          ]
+        },
+        "ResponseMappingTemplateS3Location": {
+          "Fn::Join": [
+            "",
+            [
+              "s3://",
+              {
+                "Ref": "referencetotransformerrootstackS3DeploymentBucket7592718ARef"
+              },
+              "/",
+              {
+                "Ref": "referencetotransformerrootstackS3DeploymentRootKeyA71EA735Ref"
+              },
+              "/resolvers/InvokeMinecraftServerDashboardGetMonthlyCostLambdaDataSource.res.vtl"
+            ]
+          ]
+        }
+      },
+      "DependsOn": [
+        "MinecraftServerDashboardGetMonthlyCostLambdaDataSource"
+      ]
+    },
+    "QuerygetMonthlyCostResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "Properties": {
+        "ApiId": {
+          "Ref": "referencetotransformerrootstackGraphQLAPI20497F53ApiId"
+        },
+        "FieldName": "getMonthlyCost",
+        "TypeName": "Query",
+        "Kind": "PIPELINE",
+        "PipelineConfig": {
+          "Functions": [
+            {
+              "Fn::GetAtt": [
+                "InvokeMinecraftServerDashboardGetMonthlyCostLambdaDataSourceInvokeMinecraftServerDashboardGetMonthlyCostLambdaDataSourceAppSyncFunctionB7CA80CA",
+                "FunctionId"
+              ]
+            }
+          ]
+        },
+        "RequestMappingTemplate": {
+          "Fn::Join": [
+            "",
+            [
+              "## [Start] Stash resolver specific context.. **\n$util.qr($ctx.stash.put(\"typeName\", \"Query\"))\n$util.qr($ctx.stash.put(\"fieldName\", \"getMonthlyCost\"))\n$util.qr($ctx.stash.put(\"authRole\", \"arn:aws:sts::",
+              {
+                "Ref": "AWS::AccountId"
+              },
+              ":assumed-role/",
+              {
+                "Ref": "referencetotransformerrootstackauthRoleNameFB872D50Ref"
+              },
+              "/CognitoIdentityCredentials\"))\n$util.qr($ctx.stash.put(\"unauthRole\", \"arn:aws:sts::",
+              {
+                "Ref": "AWS::AccountId"
+              },
+              ":assumed-role/",
+              {
+                "Ref": "referencetotransformerrootstackunauthRoleName49F3C1FERef"
+              },
+              "/CognitoIdentityCredentials\"))\n{}\n## [End] Stash resolver specific context.. **"
+            ]
+          ]
+        },
+        "ResponseMappingTemplateS3Location": {
+          "Fn::Join": [
+            "",
+            [
+              "s3://",
+              {
+                "Ref": "referencetotransformerrootstackS3DeploymentBucket7592718ARef"
+              },
+              "/",
+              {
+                "Ref": "referencetotransformerrootstackS3DeploymentRootKeyA71EA735Ref"
+              },
+              "/resolvers/Query.getMonthlyCost.res.vtl"
+            ]
+          ]
+        }
+      }
+    },
+    "MinecraftServerDashboardTriggerServerActionLambdaDataSourceServiceRole6553F665": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Statement": [
+            {
+              "Action": "sts:AssumeRole",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "appsync.amazonaws.com"
+              }
+            }
+          ],
+          "Version": "2012-10-17"
+        }
+      }
+    },
+    "MinecraftServerDashboardTriggerServerActionLambdaDataSourceServiceRoleDefaultPolicy8CBF532B": {
+      "Type": "AWS::IAM::Policy",
+      "Properties": {
+        "PolicyDocument": {
+          "Statement": [
+            {
+              "Action": "lambda:InvokeFunction",
+              "Effect": "Allow",
+              "Resource": {
+                "Fn::If": [
+                  "HasEnvironmentParameter",
+                  {
+                    "Fn::Sub": [
+                      "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:minecraft-server-dashboard-triggerServerAction",
+                      {}
+                    ]
+                  },
+                  {
+                    "Fn::Sub": "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:minecraft-server-dashboard-triggerServerAction"
+                  }
+                ]
+              }
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "PolicyName": "MinecraftServerDashboardTriggerServerActionLambdaDataSourceServiceRoleDefaultPolicy8CBF532B",
+        "Roles": [
+          {
+            "Ref": "MinecraftServerDashboardTriggerServerActionLambdaDataSourceServiceRole6553F665"
+          }
+        ]
+      }
+    },
+    "MinecraftServerDashboardTriggerServerActionLambdaDataSource": {
+      "Type": "AWS::AppSync::DataSource",
+      "Properties": {
+        "ApiId": {
+          "Ref": "referencetotransformerrootstackGraphQLAPI20497F53ApiId"
+        },
+        "Name": "MinecraftServerDashboardTriggerServerActionLambdaDataSource",
+        "Type": "AWS_LAMBDA",
+        "LambdaConfig": {
+          "LambdaFunctionArn": {
+            "Fn::If": [
+              "HasEnvironmentParameter",
+              {
+                "Fn::Sub": [
+                  "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:minecraft-server-dashboard-triggerServerAction",
+                  {}
+                ]
+              },
+              {
+                "Fn::Sub": "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:minecraft-server-dashboard-triggerServerAction"
+              }
+            ]
+          }
+        },
+        "ServiceRoleArn": {
+          "Fn::GetAtt": [
+            "MinecraftServerDashboardTriggerServerActionLambdaDataSourceServiceRole6553F665",
+            "Arn"
+          ]
+        }
+      }
+    },
+    "InvokeMinecraftServerDashboardTriggerServerActionLambdaDataSourceInvokeMinecraftServerDashboardTriggerServerActionLambdaDataSourceAppSyncFunction400849A5": {
+      "Type": "AWS::AppSync::FunctionConfiguration",
+      "Properties": {
+        "ApiId": {
+          "Ref": "referencetotransformerrootstackGraphQLAPI20497F53ApiId"
+        },
+        "DataSourceName": {
+          "Fn::GetAtt": [
+            "MinecraftServerDashboardTriggerServerActionLambdaDataSource",
+            "Name"
+          ]
+        },
+        "FunctionVersion": "2018-05-29",
+        "Name": "InvokeMinecraftServerDashboardTriggerServerActionLambdaDataSource",
+        "RequestMappingTemplateS3Location": {
+          "Fn::Join": [
+            "",
+            [
+              "s3://",
+              {
+                "Ref": "referencetotransformerrootstackS3DeploymentBucket7592718ARef"
+              },
+              "/",
+              {
+                "Ref": "referencetotransformerrootstackS3DeploymentRootKeyA71EA735Ref"
+              },
+              "/resolvers/InvokeMinecraftServerDashboardTriggerServerActionLambdaDataSource.req.vtl"
+            ]
+          ]
+        },
+        "ResponseMappingTemplateS3Location": {
+          "Fn::Join": [
+            "",
+            [
+              "s3://",
+              {
+                "Ref": "referencetotransformerrootstackS3DeploymentBucket7592718ARef"
+              },
+              "/",
+              {
+                "Ref": "referencetotransformerrootstackS3DeploymentRootKeyA71EA735Ref"
+              },
+              "/resolvers/InvokeMinecraftServerDashboardTriggerServerActionLambdaDataSource.res.vtl"
+            ]
+          ]
+        }
+      },
+      "DependsOn": [
+        "MinecraftServerDashboardTriggerServerActionLambdaDataSource"
+      ]
+    },
+    "MutationtriggerServerActionResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "Properties": {
+        "ApiId": {
+          "Ref": "referencetotransformerrootstackGraphQLAPI20497F53ApiId"
+        },
+        "FieldName": "triggerServerAction",
+        "TypeName": "Mutation",
+        "Kind": "PIPELINE",
+        "PipelineConfig": {
+          "Functions": [
+            {
+              "Fn::GetAtt": [
+                "InvokeMinecraftServerDashboardTriggerServerActionLambdaDataSourceInvokeMinecraftServerDashboardTriggerServerActionLambdaDataSourceAppSyncFunction400849A5",
+                "FunctionId"
+              ]
+            }
+          ]
+        },
+        "RequestMappingTemplate": {
+          "Fn::Join": [
+            "",
+            [
+              "## [Start] Stash resolver specific context.. **\n$util.qr($ctx.stash.put(\"typeName\", \"Mutation\"))\n$util.qr($ctx.stash.put(\"fieldName\", \"triggerServerAction\"))\n$util.qr($ctx.stash.put(\"authRole\", \"arn:aws:sts::",
+              {
+                "Ref": "AWS::AccountId"
+              },
+              ":assumed-role/",
+              {
+                "Ref": "referencetotransformerrootstackauthRoleNameFB872D50Ref"
+              },
+              "/CognitoIdentityCredentials\"))\n$util.qr($ctx.stash.put(\"unauthRole\", \"arn:aws:sts::",
+              {
+                "Ref": "AWS::AccountId"
+              },
+              ":assumed-role/",
+              {
+                "Ref": "referencetotransformerrootstackunauthRoleName49F3C1FERef"
+              },
+              "/CognitoIdentityCredentials\"))\n{}\n## [End] Stash resolver specific context.. **"
+            ]
+          ]
+        },
+        "ResponseMappingTemplateS3Location": {
+          "Fn::Join": [
+            "",
+            [
+              "s3://",
+              {
+                "Ref": "referencetotransformerrootstackS3DeploymentBucket7592718ARef"
+              },
+              "/",
+              {
+                "Ref": "referencetotransformerrootstackS3DeploymentRootKeyA71EA735Ref"
+              },
+              "/resolvers/Mutation.triggerServerAction.res.vtl"
+            ]
+          ]
+        }
+      }
+    }
+  },
+  "Parameters": {
+    "referencetotransformerrootstackenv10C5A902Ref": {
+      "Type": "String"
+    },
+    "referencetotransformerrootstackGraphQLAPI20497F53ApiId": {
+      "Type": "String"
+    },
+    "referencetotransformerrootstackS3DeploymentBucket7592718ARef": {
+      "Type": "String"
+    },
+    "referencetotransformerrootstackS3DeploymentRootKeyA71EA735Ref": {
+      "Type": "String"
+    },
+    "referencetotransformerrootstackauthRoleNameFB872D50Ref": {
+      "Type": "String"
+    },
+    "referencetotransformerrootstackunauthRoleName49F3C1FERef": {
+      "Type": "String"
+    }
+  }
+}
