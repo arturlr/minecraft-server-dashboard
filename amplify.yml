@@ -27,12 +27,12 @@ frontend:
         - APP_URL="https://${AWS_BRANCH}.${APP_ID}.amplifyapp.com"
         - jq -n --arg url $APP_URL '{RefreshTokenValidity:30, TokenValidityUnits:{ RefreshToken:"days" }, SupportedIdentityProviders:[ "Google", "COGNITO" ], CallbackURLs:[ $url ], LogoutURLs:[ $url ], AllowedOAuthFlows:[ "code" ], AllowedOAuthScopes:[ "aws.cognito.signin.user.admin", "phone", "openid", "profile", "email" ], AllowedOAuthFlowsUserPoolClient:false }' > param.json 
         - cat param.json
-        - COG_CLIENTS=($(aws cognito-idp list-user-pool-clients --user-pool-id ${POOL_ID} --query 'UserPoolClients[].[ClientId]' --output text))
-        - echo $COG_CLIENTS[1]
+        - COG_CLIENTS=$(aws cognito-idp list-user-pool-clients --user-pool-id ${POOL_ID} --query 'UserPoolClients[].[ClientId]' --output text)
+        - echo $COG_CLIENTS
         - COG_DOMAIN=$(aws cognito-idp describe-user-pool --user-pool-id ${POOL_ID} --query UserPool.Domain --output text)
         - AWS_REGION=$(aws cognito-idp describe-user-pool --user-pool-id ${POOL_ID} --query UserPool.Arn --output text | cut -d ':' -f 4)
-        - '# Add Amplify URL to the Cognito clients callback and logout configurations - Bash Array'      
-        - aws cognito-idp update-user-pool-client --user-pool-id ${POOL_ID} --client-id $COG_CLIENTS[1] --cli-input-json file://param.json
+        - '# Add Amplify URL to the Cognito clients callback and logout configurations'
+        - while IFS= read -r line ; do aws cognito-idp update-user-pool-client --user-pool-id ${POOL_ID} --client-id $line --cli-input-json file://param.json; done <<< "$COG_CLIENTS"
         - '# Making sure that the minecraftdashboard cognito domain is unique'
         - aws cognito-idp delete-user-pool-domain --user-pool-id ${POOL_ID} --domain ${COG_DOMAIN}
         - aws cognito-idp create-user-pool-domain --user-pool-id ${POOL_ID} --domain minecraftdashboard-${TICK_SUFFIX}
