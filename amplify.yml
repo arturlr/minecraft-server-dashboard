@@ -9,18 +9,11 @@ backend:
         - ./aws/install
         - POOL_ID=$(aws ssm get-parameter --name /amplify/minecraftserverdashboard/userpoolid --query Parameter.Value --output text)
         - APP_ID=$(aws amplify list-apps --query 'apps[*].[appId, name]' --output text | awk '/minecraft/ {print $1}')
+        - jq --arg hui "minecraftdasboard-${APP_ID:0:5}" '.hostedUIDomainName = $hui' amplify/backend/auth/minecraftserverdashbb59cd6eb/build/parameters.json > temp_param.json && mv temp_param.json amplify/backend/auth/minecraftserverdashbb59cd6eb/build/parameters.json
     build:
       commands:
         - '# Execute Amplify CLI with the helper script'
         - amplifyPush --simple
-    postBuild:
-      commands:        
-        - COG_DOMAIN=$(aws cognito-idp describe-user-pool --user-pool-id ${POOL_ID} --query UserPool.Domain --output text)
-        - AWS_REGION=$(aws cognito-idp describe-user-pool --user-pool-id ${POOL_ID} --query UserPool.Arn --output text | cut -d ':' -f 4)
-        - '# Making sure that the minecraftdashboard cognito domain is unique by adding the first 5 digits of the app id'
-        - aws cognito-idp delete-user-pool-domain --user-pool-id ${POOL_ID} --domain ${COG_DOMAIN}
-        - aws cognito-idp create-user-pool-domain --user-pool-id ${POOL_ID} --domain minecraftdashboard-${APP_ID:0:5}
-        - echo "Cognito Domain - minecraftdashboard-${APP_ID:0:5}.auth.${AWS_REGION}.amazoncognito.com"
 frontend:
   phases:
     preBuild:
