@@ -1,3 +1,4 @@
+# Deployment Guide
 ## Requirements
 Before you deploy, you must have the following in place:
 *  [AWS Account](https://aws.amazon.com/account/) 
@@ -6,9 +7,30 @@ Before you deploy, you must have the following in place:
 *  [AWS SAM](https://aws.amazon.com/serverless/sam/) 
 
 
-## Step 1: Social sing-in (OAuth)
+## Step 1: Setup the Auth Provider (Google)
 
-If your don't have a Google OAuth client and secret key, please, follow this [instructions](https://docs.amplify.aws/lib/auth/social/q/platform/js/#oauth-and-federation-overview) in how to setup Google Sign-in until you take note of *Your client ID* and *Your Client Secret*. You will need them for the next section. 
+If your don't have a Google OAuth client and secret key, please, follow these instructions:
+
+1.	Go to [Google developer console](https://console.developers.google.com)
+2.  Click select a project
+	![alt text](https://docs.amplify.aws/images/cognitoHostedUI/google1.png)
+3.  Click SELECT A PROJECT and then NEW PROJECT
+   ![alt text](https://docs.amplify.aws/images/cognitoHostedUI/google2.png)
+4.  Type in project name and click CREATE
+	![alt text](https://docs.amplify.aws/images/cognitoHostedUI/google3.png)
+5.  Once the project is created, from the left Navigation menu, select APIs & Services, then select Credentials
+	![alt text](https://docs.amplify.aws/images/cognitoHostedUI/google4.png)
+6.  Click CONFIGURE CONSENT SCREEN
+	![alt text](https://docs.amplify.aws/images/cognitoHostedUI/google5.png)
+7.  Click CREATE
+	![alt text](https://docs.amplify.aws/images/cognitoHostedUI/google6.png)
+8.  Type in App Information and Developer contact information which are required field and click SAVE AND CONTINUE three times (OAuth consent screen -> Scopes -> Test Users) to finish setting up consent screen.
+9. Back to Credentials tab, Create your OAuth2.0 credentials by choosing OAuth client ID from the Create credentials drop-down list.
+	![alt text](https://docs.amplify.aws/images/cognitoHostedUI/google7.png)
+10. Choose Web application as Application type and name your OAuth Client.
+11. Click Create.
+12. Take note of Your **client ID** and Your **Client Secret**. You will need them for the next section.
+13. Choose OK.
 
  
 ## Step 2: Front-end deployment
@@ -45,6 +67,8 @@ The follow screenshots shows how simple this step is:
 
 
 ## Step 3: Back-end deployment
+
+Make sure you execute the commands below using bash under an IAM user who has permission on your AWS Account. More information at: [AWS CLI Configuration basics](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-quickstart.html)
 
 In this step we create the various AWS Lambda Functions that interact with AppSync and the fetches the information from the EC2 Server, the AWS Step-Functions that coordinates the instance start/stop, the AWS Systems Manager Parameter that holds the Amazon Cloudwatch agent configuration, the Amazon DynamoDb used to store the instance alarm's configuration and Minecraft initialization commands and the IAM Role that is associated with the instance at the instance start.
 
@@ -109,3 +133,19 @@ Successfully created/updated stack - minecraft-dasboard-backend in AWS_REGION_OF
 ```
 
 ## Step 4: Allowing Amazon Cognito authenticate into Google Federation
+
+1. Go to the AWS Console and select the Cognito User Pool at the region the applicatoin was deployed and select the one that starts with **minecraftdasboard**.
+2. Select the tab **App Integration** and copy the cognito domain URL.
+   ![alt text](../images/cognito-domain.png)
+3. Go to [Google developer console](https://console.developers.google.com)
+
+4. On the left navigation bar, choose Credentials.
+
+5. Select the client you created in the first step and click the edit button.
+
+6. Paste your user pool domain into **Authorized Javascript origins**.
+
+7. Paste your user pool domain with the /oauth2/idpresponse endpoint into **Authorized Redirect URIs**.
+   ![alt text](https://docs.amplify.aws/images/cognitoHostedUI/google8.png)
+
+

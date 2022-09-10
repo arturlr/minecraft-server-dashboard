@@ -18,6 +18,10 @@ Details about the solution can be found at the [DIY Minecraft Dashboad](https://
 
 To deploy this solution into your AWS Account please follow our [Deployment Guide](docs/deployment_guide.md)
 
+## User Guide
+
+Information in how to use and configure the solution at the [User Guide]((docs/user_guide.md))
+
 ## Security
 
 See [CONTRIBUTING](CONTRIBUTING.md) for more information.
