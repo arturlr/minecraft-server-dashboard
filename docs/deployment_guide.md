@@ -134,7 +134,7 @@ Successfully created/updated stack - minecraft-dasboard-backend in AWS_REGION_OF
 
 ## Step 4: Allowing Amazon Cognito authenticate into Google Federation
 
-1. Go to the AWS Console and select the Cognito User Pool at the region the applicatoin was deployed and select the one that starts with **minecraftdasboard**.
+1. Go to the AWS Console and select the Cognito User Pool at the region the application was deployed and select the one that starts with **minecraftdasboard**.
 2. Select the tab **App Integration** and copy the cognito domain URL.
    ![alt text](../images/cognito-domain.png)
 3. Go to [Google developer console](https://console.developers.google.com)
@@ -148,4 +148,11 @@ Successfully created/updated stack - minecraft-dasboard-backend in AWS_REGION_OF
 7. Paste your user pool domain with the /oauth2/idpresponse endpoint into **Authorized Redirect URIs**.
    ![alt text](https://docs.amplify.aws/images/cognitoHostedUI/google8.png)
 
+
+## Step 5: Launching your application
+
+1. Go to the AWS Console and select AWS Amplify at the region the application was deployed and select the **minecraftdasboard** app.
+2. Click on **Domain management** at the left pannel.
+3. Copy the URL and paste in a browser. Start using the application. You can also share it with your firends.
+4. Optionally, if you own a DNS domain you can create a customized domain for your Amplify App. It will require you to change the Amazon Cognito clients configuration to add the new URL for CallBack and signOut. 
 
