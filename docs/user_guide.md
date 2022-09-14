@@ -8,7 +8,7 @@ Important points for you to know when you are creating you EC2 Instance Minecraf
 
 - Make sure you are using an AMI that contains the AWS Systems Manager Agent (SSM Agent) preinstalled. Amazon Machine Images (AMIs) managed by AWS all have it by default.
   
-- By default the solution creates and assigns a security group that only gives access to port 25565 to the world. If you need ssh to the instance make sure you authorize only your IP address or leverage SSM Session Manager.
+- When creating the instance, make sure that your security group only gives access to port 25565 to the world. If you need ssh to the instance don't forget to only authorize only your IP address or leverage SSM Session Manager.
   ![alt text](../images/security-group.png)
 
 - The solution creates and automatically associates the EC2AWSMinecraftProfile Role to the EC2 Instance . If you have attached any other role, it will be replaced. In other words, let this server only be a Minecraft server.

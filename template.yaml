@@ -161,7 +161,7 @@ Resources:
         - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
         - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess
         - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
-        - arn:aws:iam::aws:policy/AWSCloudTrailReadOnlyAccess
+        - arn:aws:iam::aws:policy/AWSCloudTrail_ReadOnlyAccess
         - arn:aws:iam::aws:policy/AmazonCognitoReadOnly
         - SSMParameterReadPolicy:
             ParameterName: "amplify/minecraftserverdashboard*"
@@ -208,7 +208,7 @@ Resources:
         - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
         - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess
         - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
-        - arn:aws:iam::aws:policy/AWSCloudTrailReadOnlyAccess
+        - arn:aws:iam::aws:policy/AWSCloudTrail_ReadOnlyAccess
         - arn:aws:iam::aws:policy/AmazonCognitoReadOnly
         - SSMParameterReadPolicy:
             ParameterName: "amplify/minecraftserverdashboard*"
@@ -231,7 +231,7 @@ Resources:
         - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
         - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess
         - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
-        - arn:aws:iam::aws:policy/AWSCloudTrailReadOnlyAccess
+        - arn:aws:iam::aws:policy/AWSCloudTrail_ReadOnlyAccess
         - arn:aws:iam::aws:policy/AmazonCognitoReadOnly
         - SSMParameterReadPolicy:
             ParameterName: "amplify/minecraftserverdashboard*"
