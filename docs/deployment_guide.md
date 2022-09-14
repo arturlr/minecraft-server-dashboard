@@ -89,6 +89,10 @@ The first step is to clone the repo.
 ```bash
 git clone git@github.com:arturlr/minecraft-server-dashboard.git 
 ```
+or
+```bash
+git clone https://github.com/arturlr/minecraft-server-dashboard.git
+```
 
 The AWS Lambdas have some libraries dependencies. The following commands instructs SAM to build all the dependencies:
 
