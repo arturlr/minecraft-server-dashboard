@@ -79,7 +79,7 @@ To deploy the solution you need to select an Amplify Role. click at **Create new
 
 ## Step 3: Back-end deployment
 
-Make sure you execute the commands below using bash under an IAM user who has permission on your AWS Account. More information at: [AWS CLI Configuration basics](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-quickstart.html)
+For this step you will need a machine with bash shell, AWS CLI, Python and AWS SAM. You can use your equipment, a EC2 instance, a Clpud 9 instance. Execute the commands below using the bash under an IAM user who has permission on your AWS Account. More information at: [AWS CLI Configuration basics](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-quickstart.html)
 
 In this step we create the various AWS Lambda Functions that interact with AppSync and the fetches the information from the EC2 Server, the AWS Step-Functions that coordinates the instance start/stop, the AWS Systems Manager Parameter that holds the Amazon Cloudwatch agent configuration, the Amazon DynamoDb used to store the instance alarm's configuration and Minecraft initialization commands and the IAM Role that is associated with the instance at the instance start.
 
