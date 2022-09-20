@@ -4,6 +4,8 @@ import logging
 import os
 import json
 import time
+from jose import jwk, jwt
+from jose.utils import base64url_decode
 from datetime import datetime, timezone, timedelta
 
 from botocore.exceptions import ClientError
@@ -92,6 +94,43 @@ class Utils:
         self.ec2_client = boto3.client('ec2')
         self.ssm = boto3.client('ssm')        
         self.appValue = os.getenv('TAG_APP_VALUE')
+        self.ec2InstanceProfileArn = os.getenv('EC2_INSTANCE_PROFILE_ARN')
+
+    def is_token_valid(token, keys):
+        # https://github.com/awslabs/aws-support-tools/tree/master/Cognito/decode-verify-jwt
+        headers = jwt.get_unverified_headers(token)
+        kid = headers['kid']
+        # search for the kid in the downloaded public keys
+        key_index = -1
+        for i in range(len(keys)):
+            if kid == keys[i]['kid']:
+                key_index = i
+                break
+        if key_index == -1:
+            logger.error('Public key not found in jwks.json')
+            return None
+        # construct the public key
+        public_key = jwk.construct(keys[key_index])
+        # get the last two sections of the token,
+        # message and signature (encoded in base64)
+        message, encoded_signature = str(token).rsplit('.', 1)
+        # decode the signature
+        decoded_signature = base64url_decode(encoded_signature.encode('utf-8'))
+        # verify the signature
+        if not public_key.verify(message.encode("utf8"), decoded_signature):
+            logger.error('Signature verification failed')
+            return None
+        logger.info('Signature successfully verified')
+        # since we passed the verification, we can now safely
+        # use the unverified claims
+        claims = jwt.get_unverified_claims(token)
+        
+        # additionally we can verify the token expiration
+        if time.time() > claims['exp']:
+            logger.error('Token is expired')
+            return None
+        # now we can use the claims
+        return claims
         
     def getSsmParam(self, paramKey, isEncrypted=False):
         try:
@@ -177,8 +216,29 @@ class Utils:
             return []
         else:
             return response["Reservations"]
+
+    def describeIamProfile(self, instance, status):
+        descResp = self.ec2_client.describe_iam_instance_profile_associations(
+            Filters=[
+                {
+                    'Name': 'instance-id',
+                    'Values': [
+                        instance
+                    ]
+                },
+            ])
+
+        if len(descResp['IamInstanceProfileAssociations']) > 0:        
+            for rec in descResp['IamInstanceProfileAssociations']:
+                if rec['State'] == status:
+                    return { "AssociationId": rec['AssociationId'], "Arn": rec['IamInstanceProfile']['Arn'] }
+
+        return None
                 
     def describeInstanceStatus(self, instanceId):
+        iamStatus = 'Fail'
+        initStatus = 'Fail'
+
         statusRsp = self.ec2_client.describe_instance_status(InstanceIds=[instanceId])
 
         if (len(statusRsp["InstanceStatuses"])) == 0:
@@ -186,5 +246,12 @@ class Utils:
         
         instanceStatus = statusRsp["InstanceStatuses"][0]["InstanceStatus"]["Status"]
         systemStatus = statusRsp["InstanceStatuses"][0]["SystemStatus"]["Status"]
-            
-        return { 'instanceStatus': instanceStatus, 'systemStatus': systemStatus }
+
+        if instanceStatus == 'ok' and  systemStatus == 'ok':
+            initStatus = 'ok'
+        
+        iamProfile = self.describeIamProfile(instanceId,"associated")
+        if iamProfile != None and iamProfile['Arn'] == self.ec2InstanceProfileArn:
+            iamStatus = 'ok'
+        
+        return { 'initStatus': initStatus, 'iamStatus': iamStatus }

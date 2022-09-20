@@ -23,6 +23,8 @@ export async function createServersList(
         servers_dict[servers_list[i].id].diskSize = servers_list[i].diskSize
         servers_dict[servers_list[i].id].vCpus = servers_list[i].vCpus
         servers_dict[servers_list[i].id].state = servers_list[i].state
+        servers_dict[servers_list[i].id].initStatus = servers_list[i].initStatus
+        servers_dict[servers_list[i].id].iamStatus = servers_list[i].iamStatus
         servers_dict[servers_list[i].id].publicIp = servers_list[i].publicIp
         servers_dict[servers_list[i].id].launchTime = servers_list[i].launchTime
         servers_dict[servers_list[i].id].runningMinutes = servers_list[i].runningMinutes

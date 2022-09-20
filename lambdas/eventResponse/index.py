@@ -289,8 +289,8 @@ def handler(event, context):
             input["name"] = instanceName
             input["type"] = instance["Instances"][0]["InstanceType"]
             input["state"] = instance["Instances"][0]["State"]["Name"].lower()
-            input["systemStatus"] = ec2Status["systemStatus"].lower()
-            input["instanceStatus"] = ec2Status["instanceStatus"].lower()
+            input["initStatus"] = ec2Status["initStatus"].lower()
+            input["iamStatus"] = ec2Status["iamStatus"].lower()
             input["launchTime"] = pstLaunchTime.strftime("%m/%d/%Y - %H:%M:%S")
             input["publicIp"] = publicIp
             input["runningMinutes"] = ""

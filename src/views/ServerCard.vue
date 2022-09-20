@@ -5,6 +5,21 @@
         {{ serverName }}
       </v-card-title>
       <v-card-subtitle class="text-caption">{{ serverId }} </v-card-subtitle>
+      <div>
+        <v-card-text>
+          Your server does not have the correct IAM role and permissions to execute. Please click on the button below to fix it. 
+        </v-card-text>
+        <v-card-actions>
+          <v-btn        
+          color="error"
+          outlined
+          small
+          @click="triggerAction('config_iam',serverId, false)"
+        >
+          Fix it
+        </v-btn>
+        </v-card-actions>
+      </div>
       <v-card-text>
         <v-row>
           <v-chip-group column>

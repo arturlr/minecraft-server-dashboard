@@ -47,8 +47,8 @@ Resources:
               "diskSize": $util.toJson($context.arguments.input.diskSize),
               "launchTime": $util.toJson($context.arguments.input.launchTime),
               "publicIp": $util.toJson($context.arguments.input.publicIp),
-              "instanceStatus": $util.toJson($context.arguments.input.instanceStatus),
-              "systemStatus": $util.toJson($context.arguments.input.systemStatus),
+              "initStatus": $util.toJson($context.arguments.input.instanceStatus),
+              "iamStatus": $util.toJson($context.arguments.input.systemStatus),
               "runningMinutes": $util.toJson($context.arguments.input.runningMinutes),
               "groupMembers": $util.toJson($context.arguments.input.groupMembers)
           }

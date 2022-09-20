@@ -17,8 +17,6 @@ dyn = helpers.Dyn()
 ssm = boto3.client('ssm')
 ec2 = boto3.client('ec2')
 appValue = os.getenv('TAG_APP_VALUE')
-ec2InstanceProfileName = os.getenv('EC2_INSTANCE_PROFILE_NAME')
-ec2InstanceProfileArn = os.getenv('EC2_INSTANCE_PROFILE_ARN')
 
 def minecraftInit(instance):
 
@@ -49,67 +47,6 @@ def minecraftInit(instance):
     else:
         logger.warning("RunCommand or Working Directories are not defined")
         return False
-
-def iamProfileTask(instance):
-    loopCount = 0
-
-    iamProfile = describeIamProfile(instance,"associated")
-    if iamProfile != None and iamProfile['Arn'] == ec2InstanceProfileArn:
-        logger.info("Instance IAM Profile is already: " + iamProfile['Arn'] )
-        return True
-
-    if iamProfile != None:
-        logger.info("Disassociating Instance IAM Profile: " + iamProfile['Arn'] )
-        disassociateIamProfile(iamProfile['AssociationId'])
-        while loopCount < 5:
-            checkStatusCommand = describeIamProfile(instance,"disassociated")
-            time.sleep(10)
-            if checkStatusCommand != None:
-                loopCount = loopCount + 1
-            else:
-                attachIamProfile(instance)
-                break
-        
-    else:
-        logger.info("Attaching Minecraft Instance IAM Profile")
-        attachIamProfile(instance)
-        return True
-        
-    if loopCount > 5:
-        logger.warn("Profile timeout during disassociating")
-        return False
-
-def describeIamProfile(instance, status):
-    descResp = ec2.describe_iam_instance_profile_associations(
-        Filters=[
-            {
-                'Name': 'instance-id',
-                'Values': [
-                    instance
-                ]
-            },
-        ])
-
-    if len(descResp['IamInstanceProfileAssociations']) > 0:        
-        for rec in descResp['IamInstanceProfileAssociations']:
-            if rec['State'] == status:
-               return { "AssociationId": rec['AssociationId'], "Arn": rec['IamInstanceProfile']['Arn'] }
-
-    return None
-
-def disassociateIamProfile(id):
-     ec2.disassociate_iam_instance_profile(
-        AssociationId=id
-     )
-
-def attachIamProfile(instance):        
-    # Associating the IAM Profile to the Instance
-    ec2.associate_iam_instance_profile(
-        IamInstanceProfile={
-            'Name': ec2InstanceProfileName
-        },
-        InstanceId=instance
-    )
 
 def cwAgentStatusCheck(instance):
     ssmAgentStatus = ssmExecCommands(instance,"AmazonCloudWatch-ManageAgent",{"action": ["status"],"mode": ["ec2"]})
@@ -165,7 +102,6 @@ def sendCommand(instance, param, docName):
     logger.info("sendCommand " + instance + " - " + ssm_rsp["Command"]["Status"])
     return { "CommandId": ssm_rsp["Command"]["CommandId"], "Status": ssm_rsp["Command"]["Status"] }
 
-
 def listCommand(instance, commandId):
 
     ssm_rsp = ssm.list_commands(
@@ -175,7 +111,6 @@ def listCommand(instance, commandId):
 
     logger.info("listCommand " + instance + " - " + ssm_rsp["Commands"][0]["Status"])
     return { "Status": ssm_rsp["Commands"][0]["Status"] }
-
 
 def getCommandDetails(instance, commandId):
 
@@ -190,7 +125,6 @@ def getCommandDetails(instance, commandId):
        
     logger.info("getCommandDetails " + instance + " - " + ssm_rsp["CommandInvocations"][0]["Status"])
     return { "Status": ssm_rsp["CommandInvocations"][0]["Status"], "pluginsDetails": pluginsDetails }
-
 
 def ssmExecCommands(instanceId, docName, params):
     logger.info("ssmExecCommands " + instanceId + " - " + docName)
@@ -222,8 +156,6 @@ def handler(event, context):
     try:
         instanceId = event["instanceId"]
 
-        # attach the IAM Profile to the EC2 Instance
-        iamProfileTask(instanceId)
         # Execute minecraft initialization
         minecraftInit(instanceId)
 

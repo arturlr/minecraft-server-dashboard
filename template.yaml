@@ -197,6 +197,8 @@ Resources:
           APPSYNC_URL: '{{resolve:ssm:/amplify/minecraftserverdashboard/appsyncurl:1}}'
           USERPOOL_ID: '{{resolve:ssm:/amplify/minecraftserverdashboard/userpoolid:1}}'
           INSTANCES_TABLE_NAME: !Ref InstancesTable
+          EC2_INSTANCE_PROFILE_NAME: !Ref IAMEC2InstanceProfile
+          EC2_INSTANCE_PROFILE_ARN: !GetAtt IAMEC2InstanceProfile.Arn
 
   ListServers:
     Type: AWS::Serverless::Function 
@@ -220,6 +222,8 @@ Resources:
           TAG_APP_VALUE: !Ref AppValue
           APPSYNC_URL: '{{resolve:ssm:/amplify/minecraftserverdashboard/appsyncurl:1}}'
           INSTANCES_TABLE_NAME: !Ref InstancesTable
+          EC2_INSTANCE_PROFILE_NAME: !Ref IAMEC2InstanceProfile
+          EC2_INSTANCE_PROFILE_ARN: !GetAtt IAMEC2InstanceProfile.Arn
 
   GetMonthlyCost:
     Type: AWS::Serverless::Function 
@@ -283,6 +287,9 @@ Resources:
           TAG_APP_VALUE: !Ref AppValue
           APPSYNC_URL: '{{resolve:ssm:/amplify/minecraftserverdashboard/appsyncurl:1}}'
           INSTANCES_TABLE_NAME: !Ref InstancesTable
+          EC2_INSTANCE_PROFILE_NAME: !Ref IAMEC2InstanceProfile
+          EC2_INSTANCE_PROFILE_ARN: !GetAtt IAMEC2InstanceProfile.Arn
+          CONFIG_SERVER_LAMBDA_NAME: !Ref ConfigServer
 
   ChangeServerState:
     Type: AWS::Serverless::Function 
@@ -350,8 +357,7 @@ Resources:
           TAG_APP_VALUE: !Ref AppValue
           APPSYNC_URL: '{{resolve:ssm:/amplify/minecraftserverdashboard/appsyncurl:1}}'
           INSTANCES_TABLE_NAME: !Ref InstancesTable
-          EC2_INSTANCE_PROFILE_NAME: !Ref IAMEC2InstanceProfile
-          EC2_INSTANCE_PROFILE_ARN: !GetAtt IAMEC2InstanceProfile.Arn
+          
 
   StateMachine:
     Type: AWS::Serverless::StateMachine

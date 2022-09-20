@@ -59,8 +59,8 @@ type ServerInfo @aws_iam @aws_cognito_user_pools {
   diskSize: Int
   launchTime: String
   publicIp: String
-  instanceStatus: String
-  systemStatus: String
+  initStatus: String
+  iamStatus: String
   runningMinutes: String
   groupMembers: AWSJSON
 }
@@ -76,8 +76,8 @@ input ServerInfoInput {
   diskSize: Int
   launchTime: String
   publicIp: String
-  instanceStatus: String
-  systemStatus: String
+  initStatus: String
+  iamStatus: String
   runningMinutes: String
   groupMembers: AWSJSON
 }

@@ -4,8 +4,7 @@ import os
 import json
 import urllib.request
 import time
-from jose import jwk, jwt
-from jose.utils import base64url_decode
+
 from datetime import date, datetime, timezone, timedelta
 import helpers
 import pytz
@@ -27,43 +26,7 @@ ENCODING = 'utf-8'
 
 appValue = os.getenv('TAG_APP_VALUE')
 
-def _is_token_valid(token, keys):
-    # https://github.com/awslabs/aws-support-tools/tree/master/Cognito/decode-verify-jwt
-    headers = jwt.get_unverified_headers(token)
-    kid = headers['kid']
-    # search for the kid in the downloaded public keys
-    key_index = -1
-    for i in range(len(keys)):
-        if kid == keys[i]['kid']:
-            key_index = i
-            break
-    if key_index == -1:
-        logger.error('Public key not found in jwks.json')
-        return None
-    # construct the public key
-    public_key = jwk.construct(keys[key_index])
-    # get the last two sections of the token,
-    # message and signature (encoded in base64)
-    message, encoded_signature = str(token).rsplit('.', 1)
-    # decode the signature
-    decoded_signature = base64url_decode(encoded_signature.encode('utf-8'))
-    # verify the signature
-    if not public_key.verify(message.encode("utf8"), decoded_signature):
-        logger.error('Signature verification failed')
-        return None
-    logger.info('Signature successfully verified')
-    # since we passed the verification, we can now safely
-    # use the unverified claims
-    claims = jwt.get_unverified_claims(token)
-    
-    # additionally we can verify the token expiration
-    if time.time() > claims['exp']:
-        logger.error('Token is expired')
-        return None
-    # now we can use the claims
-    return claims
-
-def _group_exists(instanceId, poolId):
+def group_exists(instanceId, poolId):
     try:
         grpRsp = cognito_idp.get_group(
                 GroupName=instanceId,
@@ -170,7 +133,7 @@ def handler(event, context):
         response = f.read()
     keys = json.loads(response.decode('utf-8'))['keys']
 
-    token_claims = _is_token_valid(token,keys)
+    token_claims = utl.is_token_valid(token,keys)
 
     if token_claims == None:
         logger.error("Invalid Token")
@@ -228,7 +191,7 @@ def handler(event, context):
 
         groupMembers = []
 
-        cogGrp = _group_exists(instanceId,iss.split("/")[3])
+        cogGrp = group_exists(instanceId,iss.split("/")[3])
         if cogGrp:
             response = cognito_idp.list_users_in_group(
                 UserPoolId=iss.split("/")[3],

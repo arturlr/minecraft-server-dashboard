@@ -4,8 +4,6 @@ import logging
 import os
 import json
 import time
-from jose import jwk, jwt
-from jose.utils import base64url_decode
 from datetime import datetime, timezone
 import helpers
 
@@ -15,9 +13,14 @@ utl = helpers.Utils()
 dyn = helpers.Dyn()
 
 appValue = os.getenv('TAG_APP_VALUE')
+ec2InstanceProfileName = os.getenv('EC2_INSTANCE_PROFILE_NAME')
+ec2InstanceProfileArn = os.getenv('EC2_INSTANCE_PROFILE_ARN')
+configServerLambdaName = os.getenv('CONFIG_SERVER_LAMBDA_NAME')
 
 ssm = boto3.client('ssm')
 sfn = boto3.client('stepfunctions')
+ec2 = boto3.client('ec2')
+lambda_client = boto3.client('lambda')
 cw_client = boto3.client('cloudwatch')
 cognito_idp = boto3.client('cognito-idp')
 
@@ -27,47 +30,48 @@ awsRegion = botoSession.region_name
 
 adminEmail = utl.getSsmParam('/amplify/minecraftserverdashboard/adminemail')
 
-def _response(status_code, body, headers={}):
-    if bool(headers): # Return True if dictionary is not empty # use json.dumps for body when using with API GW
-        return {"statusCode": status_code, "body": body, "headers": headers}
-    else:
-        return {"statusCode": status_code, "body": body }
+def iamProfileTask(instance):
+    loopCount = 0
 
-def is_token_valid(token, keys):
-    # https://github.com/awslabs/aws-support-tools/tree/master/Cognito/decode-verify-jwt
-    headers = jwt.get_unverified_headers(token)
-    kid = headers['kid']
-    # search for the kid in the downloaded public keys
-    key_index = -1
-    for i in range(len(keys)):
-        if kid == keys[i]['kid']:
-            key_index = i
-            break
-    if key_index == -1:
-        logger.error('Public key not found in jwks.json')
-        return None
-    # construct the public key
-    public_key = jwk.construct(keys[key_index])
-    # get the last two sections of the token,
-    # message and signature (encoded in base64)
-    message, encoded_signature = str(token).rsplit('.', 1)
-    # decode the signature
-    decoded_signature = base64url_decode(encoded_signature.encode('utf-8'))
-    # verify the signature
-    if not public_key.verify(message.encode("utf8"), decoded_signature):
-        logger.error('Signature verification failed')
-        return None
-    logger.info('Signature successfully verified')
-    # since we passed the verification, we can now safely
-    # use the unverified claims
-    claims = jwt.get_unverified_claims(token)
-    
-    # additionally we can verify the token expiration
-    if time.time() > claims['exp']:
-        logger.error('Token is expired')
-        return None
-    # now we can use the claims
-    return claims
+    iamProfile = utl.describeIamProfile(instance,"associated")
+    if iamProfile != None and iamProfile['Arn'] == ec2InstanceProfileArn:
+        logger.info("Instance IAM Profile is already: " + iamProfile['Arn'] )
+        return True
+
+    if iamProfile != None:
+        logger.info("Disassociating Instance IAM Profile: " + iamProfile['Arn'] )
+        disassociateIamProfile(iamProfile['AssociationId'])
+        while loopCount < 5:
+            checkStatusCommand = utl.describeIamProfile(instance,"disassociated")
+            time.sleep(10)
+            if checkStatusCommand != None:
+                loopCount = loopCount + 1
+            else:
+                attachIamProfile(instance)
+                break
+        
+    else:
+        logger.info("Attaching IAM role to the Minecraft Instance")
+        attachIamProfile(instance)
+        return { "msg": "Attached IAM role to the Minecraft Instance"}
+        
+    if loopCount > 5:
+        logger.warn("Profile timeout during disassociating")
+        return { "err": "Profile timeout during disassociating"}
+
+def disassociateIamProfile(id):
+     ec2.disassociate_iam_instance_profile(
+        AssociationId=id
+     )
+
+def attachIamProfile(instance):        
+    # Associating the IAM Profile to the Instance
+    ec2.associate_iam_instance_profile(
+        IamInstanceProfile={
+            'Name': ec2InstanceProfileName
+        },
+        InstanceId=instance
+    )
 
 def group_exists(instanceId, poolId):
     try:
@@ -120,7 +124,6 @@ def add_user_to_group(instanceId,poolId,userEmail):
             logger.info("Exception admin_add_user_to_group")
             logger.warning(str(e))
             return { "err": str(e) } 
-
 
 def updateAlarm(instanceId):
     logger.info("updateAlarm: " + instanceId)
@@ -176,12 +179,11 @@ def updateAlarm(instanceId):
 
     logger.info("Alarm configured to " + alarmMetric + " and " + alarmThreshold)
             
-
 def handler(event, context):
     if not 'identity' in event:
         logger.error("No Identity found")
         resp = {"err": "No Identity found" }
-        return _response(401,resp)
+        return utl.response(401,resp)
 
     iss = event["identity"]["claims"]["iss"] 
     token = event["request"]["headers"]["authorization"] 
@@ -191,12 +193,12 @@ def handler(event, context):
         response = f.read()
     keys = json.loads(response.decode('utf-8'))['keys']
 
-    token_claims = is_token_valid(token,keys)
+    token_claims = utl.is_token_valid(token,keys)
 
     if token_claims == None:
         logger.error("Invalid Token")
         resp = {"err": "Invalid Token" }
-        return _response(401,resp)        
+        return utl.response(401,resp)        
 
     if 'cognito:username' in token_claims:
         userName=token_claims["cognito:username"]
@@ -252,7 +254,7 @@ def handler(event, context):
         
         if authorized == False:
             resp = {"err": 'User not authorized'}
-            return _response(401,resp)
+            return utl.response(401,resp)
 
         #
         # Group Checking and Creation
@@ -267,7 +269,7 @@ def handler(event, context):
                 logger.info("Group created. Now adding admin user to it.")
                 resp = add_user_to_group(instanceId,iss.split("/")[3],adminEmail)
             else:
-                return _response(401,{"err": 'Cognito group creation failed'})
+                return utl.response(401,{"err": 'Cognito group creation failed'})
 
         #
         # Action Processing
@@ -277,21 +279,37 @@ def handler(event, context):
             gmailAccount = paramValue.split("@")[0] + '@gmail.com'
             resp = add_user_to_group(instanceId,iss.split("/")[3],gmailAccount)
             if 'msg' in  resp:
-                return _response(200,resp)
+                return utl.response(200,resp)
             else:
-                return _response(500,resp)
+                return utl.response(500,resp)
+
+        if action == "config_iam":
+            # attach the IAM Profile to the EC2 Instance
+            resp = iamProfileTask(instanceId)
+            # Execute Config Server Lambda to configure EC2 SSM
+            if 'msg' in  resp:
+                params['instanceId'] = instanceId 
+                response = lambda_client.invoke(
+                FunctionName=str(configServerLambdaName),
+                InvocationType='Event',
+                Payload=json.dumps(params)
+            )
+                return utl.response(200,resp)
+            else:
+                return utl.response(500,resp)
+            
 
         # ADD SSM PARAMETER
         elif action == "add_parameter":
             dynResp = dyn.SetInstanceAttr(instanceId,)
             response = utl.putSsmParam(paramKey,paramValue,'String')
             resp = {"msg" : "Parameter saved"}
-            return _response(200,resp)
+            return utl.response(200,resp)
 
         # GET INSTANCE INFO
         elif action == "get_instance_attr":
             response = dyn.GetInstanceAttr(instanceId)
-            return _response(response["code"],response["msg"])
+            return utl.response(response["code"],response["msg"])
 
         
         # GET INSTANCE INFO
@@ -299,24 +317,24 @@ def handler(event, context):
             response = dyn.SetInstanceAttr(instanceId,params)
             if 'at' in params:
                 updateAlarm(instanceId)
-            return _response(response["code"],response["msg"])
+            return utl.response(response["code"],response["msg"])
 
 
         # GET SSM PARAMETERS
         elif action == "get_parameters":
             response = utl.getSsmParameters(paramKey)
             if response != None:
-                return _response(200,response)
+                return utl.response(200,response)
             else:
-                return _response(500,"No parameters")
+                return utl.response(500,"No parameters")
 
         # GET SSM PARAMETER
         elif action == "get_parameter":
             response = utl.getSsmParam(paramKey)
             if response != None:
-                return _response(200,response)
+                return utl.response(200,response)
             else:
-                return _response(500,"No parameters")
+                return utl.response(500,"No parameters")
 
         else:
             # Updating Alarm
@@ -328,10 +346,10 @@ def handler(event, context):
             )
             resp = {"msg" : sfn_rsp["executionArn"]}
 
-            return _response(200,resp)
+            return utl.response(200,resp)
             
     except Exception as e:
         resp = {"err": str(e)}
         logger.error(str(e))
-        return _response(500,resp)
+        return utl.response(500,resp)
             
