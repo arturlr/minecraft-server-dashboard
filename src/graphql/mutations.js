@@ -25,8 +25,8 @@ export const changeServerState = /* GraphQL */ `
       diskSize
       launchTime
       publicIp
-      instanceStatus
-      systemStatus
+      initStatus
+      iamStatus
       runningMinutes
       groupMembers
     }

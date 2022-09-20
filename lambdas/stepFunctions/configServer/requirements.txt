@@ -1,1 +1,2 @@
 jsonpath-ng
+boto3

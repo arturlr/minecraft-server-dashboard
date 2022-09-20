@@ -5,21 +5,21 @@
         {{ serverName }}
       </v-card-title>
       <v-card-subtitle class="text-caption">{{ serverId }} </v-card-subtitle>
-      <div>
-        <v-card-text>
-          Your server does not have the correct IAM role and permissions to execute. Please click on the button below to fix it. 
-        </v-card-text>
-        <v-card-actions>
-          <v-btn        
-          color="error"
-          outlined
-          small
-          @click="triggerAction('config_iam',serverId, false)"
-        >
-          Fix it
-        </v-btn>
-        </v-card-actions>
-      </div>
+        <v-alert
+        dense
+        type="error"
+      >
+        <v-row align="center">
+          <v-col class="grow">
+            This server does not have the correct IAM role and permissions to execute. {{ serversDict[serverId].iamStatus }}
+          </v-col>
+          <v-col class="shrink">
+            <v-btn
+            @click="triggerAction('config_iam',serverId, false)"
+            >Fix it</v-btn>
+          </v-col>
+        </v-row>
+      </v-alert>
       <v-card-text>
         <v-row>
           <v-chip-group column>

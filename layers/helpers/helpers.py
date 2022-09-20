@@ -4,10 +4,9 @@ import logging
 import os
 import json
 import time
+from datetime import datetime, timezone, timedelta
 from jose import jwk, jwt
 from jose.utils import base64url_decode
-from datetime import datetime, timezone, timedelta
-
 from botocore.exceptions import ClientError
 from boto3.dynamodb.conditions import Key, Attr
 
@@ -96,41 +95,11 @@ class Utils:
         self.appValue = os.getenv('TAG_APP_VALUE')
         self.ec2InstanceProfileArn = os.getenv('EC2_INSTANCE_PROFILE_ARN')
 
-    def is_token_valid(token, keys):
-        # https://github.com/awslabs/aws-support-tools/tree/master/Cognito/decode-verify-jwt
-        headers = jwt.get_unverified_headers(token)
-        kid = headers['kid']
-        # search for the kid in the downloaded public keys
-        key_index = -1
-        for i in range(len(keys)):
-            if kid == keys[i]['kid']:
-                key_index = i
-                break
-        if key_index == -1:
-            logger.error('Public key not found in jwks.json')
-            return None
-        # construct the public key
-        public_key = jwk.construct(keys[key_index])
-        # get the last two sections of the token,
-        # message and signature (encoded in base64)
-        message, encoded_signature = str(token).rsplit('.', 1)
-        # decode the signature
-        decoded_signature = base64url_decode(encoded_signature.encode('utf-8'))
-        # verify the signature
-        if not public_key.verify(message.encode("utf8"), decoded_signature):
-            logger.error('Signature verification failed')
-            return None
-        logger.info('Signature successfully verified')
-        # since we passed the verification, we can now safely
-        # use the unverified claims
-        claims = jwt.get_unverified_claims(token)
-        
-        # additionally we can verify the token expiration
-        if time.time() > claims['exp']:
-            logger.error('Token is expired')
-            return None
-        # now we can use the claims
-        return claims
+    def response(status_code, body, headers={}):
+        if bool(headers): # Return True if dictionary is not empty # use json.dumps for body when using with API GW
+            return {"statusCode": status_code, "body": body, "headers": headers}
+        else:
+            return {"statusCode": status_code, "body": body }
         
     def getSsmParam(self, paramKey, isEncrypted=False):
         try:
@@ -242,12 +211,13 @@ class Utils:
         statusRsp = self.ec2_client.describe_instance_status(InstanceIds=[instanceId])
 
         if (len(statusRsp["InstanceStatuses"])) == 0:
-            return { 'instanceStatus': "Fail", 'systemStatus': "Fail" }
-        
-        instanceStatus = statusRsp["InstanceStatuses"][0]["InstanceStatus"]["Status"]
-        systemStatus = statusRsp["InstanceStatuses"][0]["SystemStatus"]["Status"]
+            instanceStatus =  "Fail" 
+            systemStatus = "Fail" 
+        else:
+            instanceStatus = statusRsp["InstanceStatuses"][0]["InstanceStatus"]["Status"]
+            systemStatus = statusRsp["InstanceStatuses"][0]["SystemStatus"]["Status"]
 
-        if instanceStatus == 'ok' and  systemStatus == 'ok':
+        if instanceStatus == 'ok' and systemStatus == 'ok':
             initStatus = 'ok'
         
         iamProfile = self.describeIamProfile(instanceId,"associated")

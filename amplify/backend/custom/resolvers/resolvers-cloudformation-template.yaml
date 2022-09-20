@@ -12,7 +12,6 @@ Parameters:
     Description: >-
       Input parameter describing GraphQLAPIEndpointOutput attribute for
       api/minecraftserverdashb resource
-
 Resources:
   ChangeServerStateDataSource:
     Type: AWS::AppSync::DataSource
@@ -47,8 +46,8 @@ Resources:
               "diskSize": $util.toJson($context.arguments.input.diskSize),
               "launchTime": $util.toJson($context.arguments.input.launchTime),
               "publicIp": $util.toJson($context.arguments.input.publicIp),
-              "initStatus": $util.toJson($context.arguments.input.instanceStatus),
-              "iamStatus": $util.toJson($context.arguments.input.systemStatus),
+              "initStatus": $util.toJson($context.arguments.input.initStatus),
+              "iamStatus": $util.toJson($context.arguments.input.iamStatus),
               "runningMinutes": $util.toJson($context.arguments.input.runningMinutes),
               "groupMembers": $util.toJson($context.arguments.input.groupMembers)
           }
@@ -85,16 +84,18 @@ Resources:
           }
         }
       ResponseMappingTemplate: $utils.toJson($ctx.result)
-   
 Outputs:
-  ChangeServerStateDataSourceOutput: 
-    Value: !Ref ChangeServerStateDataSource
-  ChangeServerStateResolverOutput: 
-    Value: !Ref ChangeServerStateResolver
-  PutServerMetricDataSourceOutput: 
-    Value: !Ref PutServerMetricDataSource
-  PutServerMetricStateResolverOutput: 
-    Value: !Ref PutServerMetricStateResolver
-
+  ChangeServerStateDataSourceOutput:
+    Value:
+      Ref: ChangeServerStateDataSource
+  ChangeServerStateResolverOutput:
+    Value:
+      Ref: ChangeServerStateResolver
+  PutServerMetricDataSourceOutput:
+    Value:
+      Ref: PutServerMetricDataSource
+  PutServerMetricStateResolverOutput:
+    Value:
+      Ref: PutServerMetricStateResolver
 Description: >-
   {"createdOn":"Mac","createdBy":"Amplify","createdWith":"8.0.1","stackType":"custom-customCloudformation","metadata":{}}

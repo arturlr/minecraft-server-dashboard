@@ -14,8 +14,8 @@ export const listServers = /* GraphQL */ `
       diskSize
       launchTime
       publicIp
-      instanceStatus
-      systemStatus
+      initStatus
+      iamStatus
       runningMinutes
       groupMembers
     }
