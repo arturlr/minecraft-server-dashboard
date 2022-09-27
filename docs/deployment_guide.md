@@ -48,12 +48,23 @@ The follow screenshots shows how simple this step is:
    
    ![alt text](../images/amplify-console-01.png)
 
-2. To deploy the solution you need to select an Amplify Role. click at **Create new role** button. It will open a new tab in your browser with a pre-defined role configuration for an Amplify IAM Role. Accept all the default options until the IAM role is created and move to the next step. 
+2. To deploy the solution you need to select an Amplify Role. You will be seeing a screen similar to the image below
+
+   2.1. click on **Create new role button**. It will open a new tab in your browser with a pre-defined role configuration for an Amplify IAM Role. Accept all the default options until the IAM role is created, and move to the next step.
+
+   2.2. Now you just created the IAM Role you need to select it. In the field **Select service role** select the role name just created, if the role is not avalable click on the refresh icon and then select the IAM Role.
+
+To deploy the solution you need to select an Amplify Role. click at **Create new role** button. It will open a new tab in your browser with a pre-defined role configuration for an Amplify IAM Role. Accept all the default options until the IAM role is created and move to the next step
    
    ![alt text](../images/amplify-console-02.png)
 
-3. The Deploy App configuration should now have the IAM Role as the picture below. If not click on the refresh icon and select the IAM Role. Next step is to configure the **Enviroment variable** with the *Google Client ID* and *Google Client Secret* that will be used for authentication. This is how Amplify passes this configuration along to Amazon Cognito. **USE THE VALUES YOU OBTAINED IN STEP 1**
-   
+3. The Deploy App configuration should now have the IAM Role as the picture below. If not click on the refresh icon and select the IAM Role. Next step is to configure the **Enviroment variables**:
+     
+    a. **AMPLIFY_GOOGLE_CLIENT_ID** with the *Google Client ID YOU OBTAINED IN STEP 1*
+
+    b. **AMPLIFY_GOOGLE_CLIENT_SECRET** with *Google Client Secret YOU OBTAINED IN STEP 1*
+
+    This is how Amplify passes this configuration along to Amazon Cognito.    
    ![alt text](../images/amplify-console-03.png)
    ![alt text](../images/amplify-console-04.png)
 
@@ -77,6 +88,10 @@ The backend relies on resources that needed to be created during the front-end d
 The first step is to clone the repo. 
 ```bash
 git clone git@github.com:arturlr/minecraft-server-dashboard.git 
+```
+or
+```bash
+git clone https://github.com/arturlr/minecraft-server-dashboard.git
 ```
 
 The AWS Lambdas have some libraries dependencies. The following commands instructs SAM to build all the dependencies:
