@@ -34,7 +34,7 @@ def handler(event, context):
         if action == "start":
             instanceStatus = utl.describeInstanceStatus(instanceId)
             IsInstanceReady = False
-            if instanceStatus["instanceStatus"] == "ok" and instanceStatus["systemStatus"] == "ok":
+            if instanceStatus["initStatus"] == "ok":
                 IsInstanceReady = True
 
             if (state == "stopped"):

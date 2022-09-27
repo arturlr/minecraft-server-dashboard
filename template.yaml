@@ -268,6 +268,19 @@ Resources:
           Statement:
             - Effect: Allow
               Action:
+                - ec2:AssociateIamInstanceProfile
+                - ec2:DisassociateIamInstanceProfile
+              Resource: '*'
+        - Version: '2012-10-17' # Policy Document
+          Statement:
+            - Effect: Allow
+              Action:
+                - iam:PassRole
+              Resource: !GetAtt Ec2MinecraftDashboardInstanceRole.Arn
+        - Version: '2012-10-17' # Policy Document
+          Statement:
+            - Effect: Allow
+              Action:
                 - ssm:PutParameter
                 - ssm:GetParameters          
               Resource: !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/amplify/minecraftserverdashboard*

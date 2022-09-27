@@ -73,11 +73,10 @@ def iamProfileTask(instance):
 
     iamProfile = utl.describeIamProfile(instance,"associated")
     if iamProfile != None and iamProfile['Arn'] == ec2InstanceProfileArn:
-        logger.info("Instance IAM Profile is already: " + iamProfile['Arn'] )
+        logger.info("Instance IAM Profile is already valid: " + iamProfile['Arn'] )
         return True
 
     if iamProfile != None:
-        logger.info("Disassociating Instance IAM Profile: " + iamProfile['Arn'] )
         disassociateIamProfile(iamProfile['AssociationId'])
         while loopCount < 5:
             checkStatusCommand = utl.describeIamProfile(instance,"disassociated")
@@ -90,26 +89,34 @@ def iamProfileTask(instance):
         
     else:
         logger.info("Attaching IAM role to the Minecraft Instance")
-        attachIamProfile(instance)
-        return { "msg": "Attached IAM role to the Minecraft Instance" }
+        resp = attachIamProfile(instance)
+        return resp
         
     if loopCount > 5:
         logger.warn("Profile timeout during disassociating")
-        return { "err": "Profile timeout during disassociating" }
+        return False
 
 def disassociateIamProfile(id):
-     ec2.disassociate_iam_instance_profile(
+    logger.info("disassociateIamProfile: " + id)
+    ec2.disassociate_iam_instance_profile(
         AssociationId=id
      )
 
-def attachIamProfile(instance):        
-    # Associating the IAM Profile to the Instance
-    ec2.associate_iam_instance_profile(
-        IamInstanceProfile={
-            'Name': ec2InstanceProfileName
-        },
-        InstanceId=instance
-    )
+def attachIamProfile(instance):      
+    try:  
+        # Associating the IAM Profile to the Instance
+        logger.info("attachIamProfile: " + ec2InstanceProfileName)
+        ec2.associate_iam_instance_profile(
+            IamInstanceProfile={
+                'Name': ec2InstanceProfileName
+            },
+            InstanceId=instance
+        )
+        return True
+
+    except Exception as e:
+        logger.error('Something went wrong at attachIamProfile: ' + str(e))
+        return False
 
 def group_exists(instanceId, poolId):
     try:
@@ -209,7 +216,7 @@ def updateAlarm(instanceId):
             Dimensions=dimensions,
             Period=60,
             EvaluationPeriods=35,
-            DatapointsToAlarm=30,
+            DatapointsToAlarm=35,
             Threshold=int(alarmThreshold),
             TreatMissingData="missing",
             ComparisonOperator="LessThanOrEqualToThreshold"   
@@ -325,16 +332,12 @@ def handler(event, context):
             # attach the IAM Profile to the EC2 Instance
             resp = iamProfileTask(instanceId)
             # Execute Config Server Lambda to configure EC2 SSM
-            if 'msg' in resp:
-                params['instanceId'] = instanceId 
-                response = lambda_client.invoke(
-                FunctionName=str(configServerLambdaName),
-                InvocationType='Event',
-                Payload=json.dumps(params)
-            )
-                return utl.response(200,response["msg"])
+            if resp == True:
+                msg = { "msg" : "Successfuly attached IAM role to the Minecraft Instance" }
+                return utl.response(200,msg)
             else:
-                return utl.response(500,response["err"])
+                error = { "err" :"Attaching IAM role failed" }
+                return utl.response(500,error)
             
 
         # ADD SSM PARAMETER

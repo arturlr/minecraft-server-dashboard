@@ -24,6 +24,7 @@ type ServerMetric  @aws_iam @aws_cognito_user_pools {
   networkStats: AWSJSON
   memStats: AWSJSON
   activeUsers: AWSJSON
+  alertMsg: String
 }
 
 input ServerMetricInput {
@@ -32,6 +33,7 @@ input ServerMetricInput {
   networkStats: AWSJSON
   memStats: AWSJSON
   activeUsers: AWSJSON
+  alertMsg: String
 }
 
 type MonthlyCost @aws_iam @aws_cognito_user_pools {

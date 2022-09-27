@@ -2,7 +2,7 @@
 
 ## Setting up the Minecraft Server
 
-First and foremost. There are plenty of tutorials in how you can get a Minecraft server installed into an Amazon EC2 instance. THIS IS NOT THE SCOPE of this post. 
+First and foremost. There are plenty of tutorials in how you can get a Minecraft server installed into an Amazon EC2 instance and won't be convered in this document. 
 
 Important points for you to know when you are creating you EC2 Instance Minecraft Server:
 
@@ -17,11 +17,11 @@ Important points for you to know when you are creating you EC2 Instance Minecraf
 
 - Every time the server is initialized using the Dashboard an AWS Cloudwatch Alarm is configured. By default, it stops the server if the CPU utilization is below 10% for 30 datapoints (1 min) within 35 minutes. This should be changed in the server configuration UI as there is a risk of the instance never being stopped if the threshold does not correspond to a value that indicates the server is idle.
 
-- The Minecraft Dashboard solution identifies any Amazon EC2 instance that contains the tag App: minecraft that runs in the same region the application was deployed. I also encourage you to define the tag Name, as Dashboard automatically displays it.
+- The Minecraft Dashboard solution identifies any Amazon EC2 instance that contains the tag App: minecraft that runs in the same region the application was deployed. I also encourage you to define the tag Name, as the Dashboard automatically displays it.
   
   ![alt text](../images/manage-tags.png)
 
-- Always start the server from the Dashboard by clicking at the power icon. This process verifies and implements many of the items described above.
+- Always start the server from the Dashboard by clicking at the power icon. This process verifies and configures the server to access all AWS resorces it needs.
 
 
 ## Granting user permission to start the server

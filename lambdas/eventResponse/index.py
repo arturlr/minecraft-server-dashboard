@@ -24,6 +24,7 @@ appsync = boto3.client('appsync')
 ec2_client = boto3.client('ec2')
 cw_logs = boto3.client('logs')
 cw_client = boto3.client('cloudwatch')
+
 eb_client = boto3.client('events')
 cognito_idp = boto3.client('cognito-idp')
 ENCODING = 'utf-8'
@@ -82,8 +83,8 @@ changeServerState = """
       diskSize
       launchTime
       publicIp
-      instanceStatus
-      systemStatus
+      initStatus
+      iamStatus
       runningMinutes
       groupMembers
     }
@@ -103,6 +104,29 @@ def _group_exists(instanceId, poolId):
         logger.warning("Group does not exist.")
         return False
 
+def getAlert(instanceId):
+    try:
+        alarm = cw_client.describe_alarms_for_metric(
+            MetricName='cpu_usage_active',
+            Namespace='CWAgent',
+            Period=60,
+            Dimensions=[
+                {'Name': 'InstanceId','Value': instanceId},
+                {'Name': 'cpu','Value': "cpu-total"}
+            ]
+        )
+        if len(alarm["MetricAlarms"]) == 0:
+            logger.warning('No Datapoint for cpu_usage_active alarm:' + instanceId)
+            return ''
+
+        # logger.info(alarm["MetricAlarms"][0]["StateValue"])
+        # logger.info(alarm["MetricAlarms"][0]["StateReason"])
+        # logger.info(alarm["MetricAlarms"][0]["DatapointsToAlarm"])
+        return str(alarm["MetricAlarms"][0]["StateValue"])
+    except Exception as e:
+        logger.error(str(e))
+        return ''
+    
 def getConnectUsers(instanceId,startTime):
     try:
         queryRsp = cw_logs.start_query(
@@ -304,6 +328,7 @@ def handler(event, context):
             input["cpuStats"] = getMetricData(instanceId,'CWAgent','cpu_usage_active','Percent','Average',dt_4_four_hours_before,dt_now,300)
             input["networkStats"] = getMetricData(instanceId,'CWAgent','net_bytes_sent','Bytes','Sum',dt_4_four_hours_before,dt_now,300)
             input["memStats"] = getMetricData(instanceId,'CWAgent','mem_used_percent','Percent','Average',dt_4_four_hours_before,dt_now,300)
+            input["alertMsg"] = getAlert(instanceId)
             payload={"query": putServerMetric, 'variables': { "input": input }}
         
         response = requests.post(

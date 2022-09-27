@@ -20,7 +20,7 @@ To deploy this solution into your AWS Account please follow our [Deployment Guid
 
 ## User Guide
 
-Information in how to use and configure the solution at the [User Guide]((docs/user_guide.md))
+Information in how to use and configure the solution at the [User Guide](docs/user_guide.md)
 
 ## Security
 

@@ -5,8 +5,6 @@ import os
 import json
 import time
 from datetime import datetime, timezone, timedelta
-from jose import jwk, jwt
-from jose.utils import base64url_decode
 from botocore.exceptions import ClientError
 from boto3.dynamodb.conditions import Key, Attr
 
@@ -95,7 +93,7 @@ class Utils:
         self.appValue = os.getenv('TAG_APP_VALUE')
         self.ec2InstanceProfileArn = os.getenv('EC2_INSTANCE_PROFILE_ARN')
 
-    def response(status_code, body, headers={}):
+    def response(self, status_code, body, headers={}):
         if bool(headers): # Return True if dictionary is not empty # use json.dumps for body when using with API GW
             return {"statusCode": status_code, "body": body, "headers": headers}
         else:

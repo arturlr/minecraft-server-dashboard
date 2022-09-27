@@ -1,21 +1,37 @@
 <template>
   <div>
     <v-card class="my-8 pa-2">
+      <v-alert
+      v-model="metricAlert"
+      shaped
+      prominent
+      :type="metricAlertType"
+      dismissible
+    >
+     {{ metricMsg }}
+    </v-alert>
       <v-card-title class="text-h6">
         {{ serverName }}
       </v-card-title>
       <v-card-subtitle class="text-caption">{{ serverId }} </v-card-subtitle>
         <v-alert
+        v-if="serversDict[serverId].iamStatus == 'fail'"
         dense
         type="error"
       >
         <v-row align="center">
           <v-col class="grow">
-            This server does not have the correct IAM role and permissions to execute. {{ serversDict[serverId].iamStatus }}
+            This server does not have the correct IAM role and permissions to execute.
           </v-col>
+          <v-progress-circular
+            v-if="fixButtonProgess"
+            :width="3"
+            color="black"
+            indeterminate
+          ></v-progress-circular>
           <v-col class="shrink">
             <v-btn
-            @click="triggerAction('config_iam',serverId, false)"
+            @click="triggerAction('config_iam',serverId, true);fixButtonProgess=true"
             >Fix it</v-btn>
           </v-col>
         </v-row>
@@ -23,6 +39,13 @@
       <v-card-text>
         <v-row>
           <v-chip-group column>
+            <!-- <v-chip 
+            v-if="serversDict[serverId].initStatus === 'fail' && serversDict[serverId].state === 'running'"
+            color="orange" label outlined>
+            <v-icon left> hourglass_empty </v-icon>
+              initializing...
+            </v-chip> -->
+
             <v-chip color="gray" label outlined>
               <v-icon left> developer_board </v-icon>
               {{ serversDict[serverId].vCpus }} vCPU
@@ -174,6 +197,8 @@
               label="Email address"
               v-model="addUserEmail"
               suffix="@gmail.com"
+              ref="addUserEmail"
+              :rules="[rules.alphanumeric]"
             ></v-text-field>
           </v-row>
           <v-row>
@@ -303,8 +328,10 @@
             <v-list-item-subtitle>Confirm actions: </v-list-item-subtitle>
           </v-list-item-content>
         </v-list-item>
-        <v-card-actions>
-          <div v-if="serversDict[serverId].state == 'stopped'">
+        <v-card-actions
+        v-if="serversDict[serverId].iamStatus === 'ok'"
+        >
+          <div v-if="serversDict[serverId].state === 'stopped'">
             <v-btn
               color="success"
               outlined
@@ -348,6 +375,11 @@
             Cancel
           </v-btn>
         </v-card-actions>
+        <v-card-text
+        v-else
+        >
+        You need to Fix the role to be able to perform any action!
+        </v-card-text>
       </v-card>
     </v-dialog>
 
@@ -412,6 +444,10 @@ export default {
         required: (value) => !!value || "Required.",
         minLen: value => (value && value.length >= 3) || 'Must be greater than 3 characters',
         maxLen: value => (value && value.length <= 250) || 'Must be less than 250 characters',
+        alphanumeric: (value) => {
+          const alphaPattern = /^[a-zA-Z0-9_.-]*$/;
+          return alphaPattern.test(value) || "Only alphanumeric or dot, underscore and dash are allowed.";
+        },
         onlyNumbers: (value) => {
           const pattern = /^[0-9]*$/;
           return pattern.test(value) || "Threshold must be only numbers.";
@@ -424,6 +460,9 @@ export default {
       network: [],
       errorAlert: false,
       errorMsg: "",
+      metricAlert: false,
+      metricAlertType: 'info',
+      metricMsg: null,
       settingsDialog: false,
       settingsDialogLoading: false,
       runCommand: null,
@@ -432,6 +471,7 @@ export default {
       infoMsg: null,
       addUserEmail: null,
       addUserDialog: false,
+      fixButtonProgess: false,
       alarmMetric: null,
       alarmThreshold: 25,
       settingsFormHasErrors: false,
@@ -522,7 +562,7 @@ export default {
   watch: {
     $route(to) {
       this.serverId = to.params.id;
-      this.updateCharts();
+      this.updateMetrics();
     },
   },
   computed: {
@@ -629,6 +669,16 @@ export default {
       param,
       returnValue = false
     ) {
+
+      if (action == 'add_user') {
+        this.$refs.addUserEmail.validate();
+        if (this.$refs.addUserEmail.hasError) {
+          this.errorAlert = true
+          this.errorMsg = "Only provide your google username"
+          return false
+        }
+
+      }
       this.serverStateConfirmation = false;
       this.addUserDialog = false;
 
@@ -652,6 +702,21 @@ export default {
 
       const rsp = JSON.parse(actionResult.data.triggerServerAction);
 
+      // resetting flags
+      if (action == 'config_iam') {
+        this.fixButtonProgess = false;
+        if (rsp.statusCode == 200) {
+          this.serversDict[this.serverId].iamStatus = 'ok'
+        }
+      }
+
+      if (action == 'start') {
+        this.fixButtonProgess = false;
+        if (rsp.statusCode == 200) {
+          this.serversDict[this.serverId].state = "starting"
+        }
+      }
+
       if (rsp.statusCode == 200) {
         if (returnValue) {
           return rsp.body;
@@ -666,7 +731,7 @@ export default {
         this.errorAlert = true;
       }
     },
-    updateCharts() {
+    updateMetrics() {
 
         if (this.serversDict[this.serverId].activeUsers && this.serversDict[this.serverId].activeUsers.length > 0) {       
           this.$refs.users.updateOptions({
@@ -674,6 +739,15 @@ export default {
               text: String(this.serversDict[this.serverId].activeUsers[this.serversDict[this.serverId].activeUsers.length - 1].y) + " Connection(s)"
             }
           })
+        }
+
+        if (this.serversDict[this.serverId].alertMsg && this.serversDict[this.serverId].alertMsg.length > 0) {       
+          this.metricAlert = true;
+          this.metricMsg = this.serversDict[this.serverId].alertMsg
+        }
+        else {
+          this.metricAlert = false;
+          this.metricMsg = null
         }
 
         this.$refs.users.updateSeries([
@@ -716,7 +790,7 @@ export default {
           this.$store.dispatch("general/addServerStats", {
             metric: eventData.value.data.onPutServerMetric,
           });
-          this.updateCharts();
+          this.updateMetrics();
         },
       });
     },

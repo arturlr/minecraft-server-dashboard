@@ -156,3 +156,5 @@ Successfully created/updated stack - minecraft-dasboard-backend in AWS_REGION_OF
 3. Copy the URL and paste in a browser. Start using the application. You can also share it with your firends.
 4. Optionally, if you own a DNS domain you can create a customized domain for your Amplify App. It will require you to change the Amazon Cognito clients configuration to add the new URL for CallBack and signOut. 
 
+
+Now that you finished the applicationn deployment, please read the [user guide](user_guide.md)

@@ -9,6 +9,7 @@ export const putServerMetric = /* GraphQL */ `
       networkStats
       memStats
       activeUsers
+      alertMsg
     }
   }
 `;
