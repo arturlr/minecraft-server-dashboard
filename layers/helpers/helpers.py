@@ -32,7 +32,8 @@ class Dyn:
             if 'Items' in response and len(response['Items']) > 0:
                 return {'code': 200, 'msg': response['Items'][0] } 
             else:
-                return {'code': 400, 'msg': "Instance not found" } 
+                logger.warning("GetInstanceAttr: Instance not found in the App Database")
+                return {'code': 400, 'msg': "Instance not found in the App Database" } 
 
         except ClientError as e:
             logger.error(e.response['Error']['Message'])

@@ -63,6 +63,9 @@ def cwAgentStatusCheck(instance):
             agentDetailsJson = json.loads(agentDetails)
             if agentDetailsJson["status"] == "running": 
                 logger.warning("Agent is already running. Version :" + agentDetailsJson["version"])
+                # AmazonCloudWatch Agent configuration  
+                ssmAgentConfig = ssmExecCommands(instance,"AmazonCloudWatch-ManageAgent",{"action": ["configure"],"mode": ["ec2"],"optionalConfigurationLocation": ["/amplify/minecraftserverdashboard/amazoncloudwatch-linux"],"optionalConfigurationSource": ["ssm"],"optionalRestart": ["yes"]})
+                logger.info(ssmAgentConfig)
                 return { "code": 200, "msg": "Agent is already running. Version :" + agentDetailsJson["version"] }
             else:
                 logger.info("Agent Status: " + agentDetailsJson["status"] + " - configuration Status: " + agentDetailsJson["configstatus"])

@@ -177,8 +177,6 @@ def updateAlarm(instanceId):
     alarmMetric = "CPUUtilization"
     alarmThreshold = "10"
 
-    print(instanceInfo)
-
     if instanceInfo != None and instanceInfo['code'] == 200:
         if 'alarmMetric' in instanceInfo['msg']:
             alarmMetric = instanceInfo['msg']['alarmMetric']
@@ -341,8 +339,7 @@ def handler(event, context):
             
 
         # ADD SSM PARAMETER
-        elif action == "add_parameter":
-            dynResp = dyn.SetInstanceAttr(instanceId,)
+        elif action == "add_parameter":            
             response = utl.putSsmParam(paramKey,paramValue,'String')
             resp = {"msg" : "Parameter saved"}
             return utl.response(200,resp)
@@ -379,7 +376,9 @@ def handler(event, context):
 
         else:
             # Updating Alarm
-            updateAlarm(instanceId)
+            if action == "start": 
+                updateAlarm(instanceId)
+
             # Invoking Step-Functions to change EC2 Stage
             sfn_rsp = sfn.start_execution(
                 stateMachineArn=sftArn,
