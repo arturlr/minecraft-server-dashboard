@@ -15,7 +15,7 @@
       </v-card-title>
       <v-card-subtitle class="text-caption">{{ serverId }} </v-card-subtitle>
         <v-alert
-        v-if="serversDict[serverId].iamStatus == 'fail'"
+        v-if="!iamServerCompliant"
         dense
         type="error"
       >
@@ -23,14 +23,15 @@
           <v-col class="grow">
             This server does not have the correct IAM role and permissions to execute.
           </v-col>
-          <v-progress-circular
+          <v-progress-circular            
             v-if="fixButtonProgess"
             :width="3"
             color="black"
-            indeterminate
+            indeterminate            
           ></v-progress-circular>
           <v-col class="shrink">
             <v-btn
+            :disabled="fixButtonProgess"
             @click="triggerAction('config_iam',serverId, true);fixButtonProgess=true"
             >Fix it</v-btn>
           </v-col>
@@ -569,6 +570,14 @@ export default {
     ...mapState({
       serversDict: (state) => state.general.serversDict,
     }),
+    iamServerCompliant() {
+      if (this.serversDict[this.serverId].iamStatus === 'ok') {
+        return true
+      }
+      else {
+        return false
+      }
+    },
     groupMembers() {
       if (
         this.serversDict[this.serverId].groupMembers &&
@@ -707,6 +716,9 @@ export default {
         this.fixButtonProgess = false;
         if (rsp.statusCode == 200) {
           this.serversDict[this.serverId].iamStatus = 'ok'
+        }
+        else {
+          console.log(rsp)
         }
       }
 

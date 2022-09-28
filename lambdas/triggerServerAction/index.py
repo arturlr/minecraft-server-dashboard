@@ -78,24 +78,22 @@ def iamProfileTask(instance):
 
     if iamProfile != None:
         disassociateIamProfile(iamProfile['AssociationId'])
-        while loopCount < 5:
+        while True:
             checkStatusCommand = utl.describeIamProfile(instance,"disassociated")
             time.sleep(10)
             if checkStatusCommand != None:
-                loopCount = loopCount + 1
+                loopCount = loopCount + 1                
             else:
-                attachIamProfile(instance)
                 break
-        
-    else:
-        logger.info("Attaching IAM role to the Minecraft Instance")
-        resp = attachIamProfile(instance)
-        return resp
-        
-    if loopCount > 5:
-        logger.warn("Profile timeout during disassociating")
-        return False
 
+            if loopCount >= 5:
+                logger.warn("Profile timeout during disassociating")
+                return False
+
+    logger.info("Attaching IAM role to the Minecraft Instance")
+    resp = attachIamProfile(instance)
+    return resp
+        
 def disassociateIamProfile(id):
     logger.info("disassociateIamProfile: " + id)
     ec2.disassociate_iam_instance_profile(
@@ -329,8 +327,9 @@ def handler(event, context):
         if action == "config_iam":
             # attach the IAM Profile to the EC2 Instance
             resp = iamProfileTask(instanceId)
+            print(resp)
             # Execute Config Server Lambda to configure EC2 SSM
-            if resp == True:
+            if resp:
                 msg = { "msg" : "Successfuly attached IAM role to the Minecraft Instance" }
                 return utl.response(200,msg)
             else:
