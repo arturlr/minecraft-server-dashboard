@@ -28,7 +28,7 @@ frontend:
       commands:        
         - POOL_ID=$(aws ssm get-parameter --name /amplify/minecraftserverdashboard/userpoolid --query Parameter.Value --output text)
         - APP_URL="https://${AWS_BRANCH}.${APP_ID}.amplifyapp.com/"
-        - jq -n --arg url $APP_URL '{RefreshTokenValidity:30, TokenValidityUnits:{ RefreshToken:"days" }, SupportedIdentityProviders:[ "Google", "COGNITO" ], CallbackURLs:[ $url ], LogoutURLs:[ $url ], AllowedOAuthFlows:[ "code" ], AllowedOAuthScopes:[ "aws.cognito.signin.user.admin", "phone", "openid", "profile", "email" ], AllowedOAuthFlowsUserPoolClient:false }' > param.json 
+        - jq -n --arg url $APP_URL '{RefreshTokenValidity:30, TokenValidityUnits:{ RefreshToken:"days" }, SupportedIdentityProviders:[ "Google", "COGNITO" ], CallbackURLs:[ $url ], LogoutURLs:[ $url ], AllowedOAuthFlows:[ "code" ], AllowedOAuthScopes:[ "aws.cognito.signin.user.admin", "phone", "openid", "profile", "email" ], AllowedOAuthFlowsUserPoolClient:true }' > param.json 
         - cat param.json
         - COG_CLIENTS=$(aws cognito-idp list-user-pool-clients --user-pool-id ${POOL_ID} --query 'UserPoolClients[].[ClientId]' --output text)
         - echo $COG_CLIENTS       

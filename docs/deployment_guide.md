@@ -32,6 +32,11 @@ If your don't have a Google OAuth client and secret key, please, follow these in
 12. Take note of Your **client ID** and Your **Client Secret**. You will need them for the next section.
 13. Choose OK.
 
+Before installing Amplify we need to create the IAM Role that gives us the permissions needed to implement this solution. Run the following line of code:
+
+```bash
+aws cloudformation deploy --template-file cfn-amplifyRole.yaml --stack-name amplifyconsole-commit2act-backend-role --capabilities CAPABILITY_NAMED_IAM
+```
  
 ## Step 2: Front-end deployment
 
@@ -48,17 +53,39 @@ The follow screenshots shows how simple this step is:
    
    ![alt text](../images/amplify-console-01.png)
 
-2. To deploy the solution you need to select an Amplify Role. You will be seeing a screen similar to the image below
+2. To deploy the solution you need to create an Amplify Role with the proper policies. You will be seeing a screen similar to the image below
 
-   2.1. click on **Create new role button**. It will open a new tab in your browser with a pre-defined role configuration for an Amplify IAM Role. Accept all the default options until the IAM role is created, and move to the next step.
+   2.1. click on **Create new role button**. It will open a new tab in your browser with a pre-defined role configuration for an Amplify IAM Role.
 
-   2.2. Now you just created the IAM Role you need to select it. In the field **Select service role** select the role name just created, if the role is not avalable click on the refresh icon and then select the IAM Role.
+   2.2. After creating the role, still at the AWS IAM console, search for the role name you created for amplify and select the role. Once you have the role selected, go to **Add permissions** -> **Create a in-line policy**. Click at the *JSON* tab and paste the JSON IAM policy below. Click at *Review policy*, give the policy a name (e.g. minecraft-amplify-policy) and then click create policy. The policy will be automatically attached to the role.
+
+   ```json
+   {
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "ssmTag",
+            "Effect": "Allow",
+            "Action": "ssm:AddTagsToResource",
+            "Resource": "arn:aws:ssm:*:*:parameter/amplify/*"
+        },
+        {
+            "Sid": "CognitoUpdate",
+            "Effect": "Allow",
+            "Action": "cognito-idp:UpdateUserPoolClient",
+            "Resource": "arn:aws:cognito-idp:*:*:userpool/*"
+        }
+    ]
+   }
+   ```
+
+   2.3. Now you just created the IAM Role you need to select it. In the field **Select service role** select the role name just created, if the role is not avalable click on the refresh icon and then select the IAM Role.
 
 To deploy the solution you need to select an Amplify Role. click at **Create new role** button. It will open a new tab in your browser with a pre-defined role configuration for an Amplify IAM Role. Accept all the default options until the IAM role is created and move to the next step
    
    ![alt text](../images/amplify-console-02.png)
 
-3. The Deploy App configuration should now have the IAM Role as the picture below. If not click on the refresh icon and select the IAM Role. Next step is to configure the **Enviroment variables**:
+1. The Deploy App configuration should now have the IAM Role as the picture below. If not click on the refresh icon and select the IAM Role. Next step is to configure the **Enviroment variables**:
      
     a. **AMPLIFY_GOOGLE_CLIENT_ID** with the *Google Client ID YOU OBTAINED IN STEP 1*
 
@@ -69,11 +96,11 @@ To deploy the solution you need to select an Amplify Role. click at **Create new
    ![alt text](../images/amplify-console-04.png)
 
 
-4. After you have all the configuration done for the deployment, Amplify will fork the Github repo, create the app in Amplify and kicks-off the application deployment.
+2. After you have all the configuration done for the deployment, Amplify will fork the Github repo, create the app in Amplify and kicks-off the application deployment.
    
    ![alt text](../images/amplify-console-06.png)
 
-5. The deployment will take a few minutes. The green icons of the CI/CD deployment process indicates that the solution deploy successfuly. The Dashboard URL below of the image of a window with the Amazon icon on it. It wont work yet as we still have some configuraton to do.
+3. The deployment will take a few minutes. The green icons of the CI/CD deployment process indicates that the solution deploy successfuly. The Dashboard URL below of the image of a window with the Amazon icon on it. It wont work yet as we still have some configuraton to do.
    ![alt text](../images/amplify-console-07.png)
 
 
@@ -94,10 +121,10 @@ or
 git clone https://github.com/arturlr/minecraft-server-dashboard.git
 ```
 
-The AWS Lambdas have some libraries dependencies. The following commands instructs SAM to build all the dependencies:
+The AWS Lambdas have some libraries dependencies. The following commands instructs SAM to build all the dependencies using a local container. The command below requires you to have docker running. If you prefer to compile the code on your own machine you can only run *sam build**
 
 ```bash
-sam build
+sam build --use-container --build-image amazon/aws-sam-cli-build-image-python3.8
 ```
 
 After executing it, you will know that it succeeded when finishing with the message below:
