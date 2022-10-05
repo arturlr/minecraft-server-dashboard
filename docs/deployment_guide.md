@@ -31,12 +31,6 @@ If your don't have a Google OAuth client and secret key, please, follow these in
 11. Click Create.
 12. Take note of Your **client ID** and Your **Client Secret**. You will need them for the next section.
 13. Choose OK.
-
-Before installing Amplify we need to create the IAM Role that gives us the permissions needed to implement this solution. Run the following line of code:
-
-```bash
-aws cloudformation deploy --template-file cfn-amplifyRole.yaml --stack-name amplifyconsole-commit2act-backend-role --capabilities CAPABILITY_NAMED_IAM
-```
  
 ## Step 2: Front-end deployment
 
@@ -121,7 +115,7 @@ or
 git clone https://github.com/arturlr/minecraft-server-dashboard.git
 ```
 
-The AWS Lambdas have some libraries dependencies. The following commands instructs SAM to build all the dependencies using a local container. The command below requires you to have docker running. If you prefer to compile the code on your own machine you can only run *sam build**
+The AWS Lambdas have some libraries dependencies. The following commands instructs SAM to build all the dependencies using a local container. The command below requires you to have docker running. If you prefer to compile the code on your own machine you can only run *sam build*
 
 ```bash
 sam build --use-container --build-image amazon/aws-sam-cli-build-image-python3.8
@@ -136,7 +130,7 @@ Built Artifacts  : .aws-sam/build
 Built Template   : .aws-sam/build/template.yaml
 ```
 
-To deploy the solution you execute the command below. It will guide you 
+To deploy the solution you execute the command below. It will guide you by asking deployment information.
 
 ```bash
 sam deploy --guided
