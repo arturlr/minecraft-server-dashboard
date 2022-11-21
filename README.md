@@ -2,7 +2,7 @@
 
 This solution builds a real-time Minecraft Server dashboard using AWS Amplify and AWS Appsync to manage  Minecraft Servers deployed on Amazon Elastic Compute Cloud (EC2). 
 
-Details about the solution can be found at the [DIY Minecraft Dashboad](https://medium.com/@arturlr_49315/diy-minecraft-dashboard-to-manage-your-kids-games-5753273a1fed) blog post.
+Details about the solution can be found at the [DIY Minecraft Dashboad](https://medium.com/@arturlr/diy-minecraft-dashboard-to-manage-your-kids-games-a2d84e828f82) blog post.
 
 ## Stack
 
