@@ -27,11 +27,12 @@ def getNicInformation(instance):
             TimeoutSeconds=30,
             Parameters={
                 'commands':[
-                     "NIC=$(ifconfig -a | grep UP,BROADCAST | awk '{print substr($1, 1, length($1)-1)}');aws ssm put-parameter --name '/" + appName + "/" + instance + "/nic' --type 'String' --value $NIC"
+                     "NIC=$(ifconfig -a | grep UP,BROADCAST | awk '{print substr($1, 1, length($1)-1)}');aws ssm put-parameter --name '/amplify/minecraftserverdashboard/" + instance + "/nic' --type 'String' --value $NIC"
                 ]
             },
         )    
-    logger.info(ssm_rsp)   
+    resp = checkExecutionLoop(instance,ssm_rsp["Command"]["CommandId"])
+    logger.info(resp)   
 
 def minecraftInit(instance):
     logger.info(instance + " - minecraftInit")
@@ -43,8 +44,8 @@ def minecraftInit(instance):
         return False
     
     if 'runCommand' in instanceInfo['msg'] and 'workingDir' in instanceInfo['msg']:                    
-        #script = os.path.join(instanceInfo['msg']['workingDir'],instanceInfo['msg']['runCommand'])
-        script = instanceInfo['msg']['runCommand']     
+        script = os.path.join(instanceInfo['msg']['workingDir'],instanceInfo['msg']['runCommand'])
+        #script = instanceInfo['msg']['runCommand']     
 
         ssm_rsp = ssm.send_command(
             InstanceIds=[instance],
@@ -80,14 +81,15 @@ def cwAgentStatusCheck(instance):
         if len(agentDetails) > 5:
             agentDetailsJson = json.loads(agentDetails)
             if agentDetailsJson["status"] == "running": 
-                logger.warning("Agent is already running. Version :" + agentDetailsJson["version"])
+                logger.info("Agent is already running. Version :" + agentDetailsJson["version"])
                 # AmazonCloudWatch Agent configuration  
+                logger.info("Configuring agent")
                 ssmAgentConfig = ssmExecCommands(instance,"AmazonCloudWatch-ManageAgent",{"action": ["configure"],"mode": ["ec2"],"optionalConfigurationLocation": ["/amplify/minecraftserverdashboard/amazoncloudwatch-linux"],"optionalConfigurationSource": ["ssm"],"optionalRestart": ["yes"]})
                 logger.info(ssmAgentConfig)
                 return { "code": 200, "msg": "Agent is already running. Version :" + agentDetailsJson["version"] }
             else:
                 logger.info("Agent Status: " + agentDetailsJson["status"] + " - configuration Status: " + agentDetailsJson["configstatus"])
-                return { "code": 400, "msg": "Agent is already running. Version :" + agentDetailsJson["version"] }
+                return { "code": 400, "msg":"Agent Status: " + agentDetailsJson["status"] + " - configuration Status: " + agentDetailsJson["configstatus"] }
         else:
             logger.warning(agentDetailsJson)
             return { "code": 500, "msg": "Detailed information not available"}
@@ -98,14 +100,17 @@ def cwAgentInstall(instance):
     ssmInstallAgent = ssmExecCommands(instance,"AWS-ConfigureAWSPackage",{"action": ["Install"],"name": ["AmazonCloudWatchAgent"]})
     #logger.info(ssmInstallAgent)
 
-    # AmazonCloudWatch Agent installation 
-    jpexpr = parse("$.pluginsDetails[?(@.Name[:] == 'configurePackage')].Output")
-    for i in jpexpr.find(ssmInstallAgent):
-        agentDetails = i.value
-        logger.info(agentDetails)
-    # AmazonCloudWatch Agent configuration  
-    ssmAgentConfig = ssmExecCommands(instance,"AmazonCloudWatch-ManageAgent",{"action": ["configure"],"mode": ["ec2"],"optionalConfigurationLocation": ["/amplify/minecraftserverdashboard/amazoncloudwatch-linux"],"optionalConfigurationSource": ["ssm"],"optionalRestart": ["yes"]})
-    logger.info(ssmAgentConfig)
+    # Checking Agent Status if Success. Failed messages occurs when the CloudWatch Agent is not installed. 
+    if ssmInstallAgent["Status"] == "Success":
+        # AmazonCloudWatch Agent installation 
+        jpexpr = parse("$.pluginsDetails[?(@.Name[:] == 'configurePackage')].Output")
+        for i in jpexpr.find(ssmInstallAgent):
+            agentDetails = i.value
+            logger.info(agentDetails)
+        # AmazonCloudWatch Agent configuration 
+        logger.info("Configuring agent") 
+        ssmAgentConfig = ssmExecCommands(instance,"AmazonCloudWatch-ManageAgent",{"action": ["configure"],"mode": ["ec2"],"optionalConfigurationLocation": ["/amplify/minecraftserverdashboard/amazoncloudwatch-linux"],"optionalConfigurationSource": ["ssm"],"optionalRestart": ["yes"]})
+        logger.info(ssmAgentConfig)
 
 def scriptExec(instance):
     ssmRunScript = ssmExecCommands(instance,"AWS-RunRemoteScript",{"sourceType": ["GitHub"],"sourceInfo": ["{\"owner\":\"arturlr\", \"repository\": \"minecraft-server-dashboard\", \"path\": \"scripts/adding_cron.sh\", \"getOptions\": \"branch:dev\" }"],"commandLine": ["bash adding_cron.sh"]})
@@ -119,7 +124,7 @@ def sendCommand(instance, param, docName):
                 Parameters=param
             )
 
-    logger.info("sendCommand " + instance + " - " + ssm_rsp["Command"]["Status"])
+    # logger.info("sendCommand " + instance + " - " + ssm_rsp["Command"]["Status"])
     return { "CommandId": ssm_rsp["Command"]["CommandId"], "Status": ssm_rsp["Command"]["Status"] }
 
 def listCommand(instance, commandId):
@@ -144,31 +149,38 @@ def getCommandDetails(instance, commandId):
     logger.info("getCommandDetails " + instance + " - " + ssm_rsp["CommandInvocations"][0]["Status"])
     return { "Status": ssm_rsp["CommandInvocations"][0]["Status"], "pluginsDetails": pluginsDetails }
 
+def checkExecutionLoop(instanceId, commandId, sleepTime=5):
+
+    loopCount = 0
+    
+    while True:
+        checkStatusCommand = listCommand(instanceId, commandId)
+        logger.info(instanceId + " - " + commandId + " - " + checkStatusCommand["Status"])
+        if checkStatusCommand["Status"] == "Success":
+            getStatusDetails = getCommandDetails(instanceId, commandId)
+            return getStatusDetails
+        elif checkStatusCommand["Status"] == "Failed":
+            return "Failed"
+        elif loopCount > 5:
+            logger.error("Timeout - Cancelling the Command")
+            logger.error(checkStatusCommand)
+            ssm.cancel_command(
+                CommandId=commandId,
+                InstanceIds=[instanceId]
+            )
+            return "Cancelled"
+        else:
+            loopCount = loopCount + 1
+            time.sleep(sleepTime)
+
+
 def ssmExecCommands(instanceId, docName, params):
     logger.info("ssmExecCommands " + instanceId + " - " + docName)
 
-    loopCount = 0
-
     command = sendCommand(instanceId, params, docName)
-    
-    while loopCount < 5:
-        checkStatusCommand = listCommand(instanceId, command["CommandId"])
-        time.sleep(5)
-        if checkStatusCommand["Status"] == "Success":
-            break
-        elif checkStatusCommand["Status"] == "Failed":
-            logger.error(checkStatusCommand)
-            return checkStatusCommand
-        else:
-            loopCount = loopCount + 1
+    response = checkExecutionLoop(instanceId,command["CommandId"])
 
-    if loopCount > 5:
-        logger.error("Timeout")
-        logger.error(checkStatusCommand)
-        return checkStatusCommand
-    else:
-        getStatusDetails = getCommandDetails(instanceId, command["CommandId"])
-        return getStatusDetails
+    return response
 
 def handler(event, context):
     try:

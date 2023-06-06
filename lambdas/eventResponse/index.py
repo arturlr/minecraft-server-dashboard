@@ -188,7 +188,7 @@ def getMetricData(instanceId,nameSpace,metricName,unit,statType,startTime,endTim
     if metricName == "cpu_usage_active":
         dimensions.append({'Name': 'cpu','Value': "cpu-total"})
     elif metricName == "net_bytes_sent":
-        nic = utl.getSsmParam("/" + appName + "/" + instanceId + "/nic")
+        nic = utl.getSsmParam("/amplify/minecraftserverdashboard/" + instanceId + "/nic")
         if nic != None:        
             dimensions.append({'Name': 'interface','Value': nic})
 

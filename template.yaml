@@ -58,10 +58,8 @@ Resources:
                   - 'ssm:DescribeParameters'
                   - 'ssm:PutParameter'
                   - 'ssm:GetParameter'
-                Resource: 
-                  !Sub 
-                    - "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter${parameterName}*"
-                    - parameterName: !Ref ProjectName
+                Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/amplify/minecraft*"
+
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
         - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy
@@ -113,7 +111,7 @@ Resources:
       Description: MinecraftDashboardHelper
       ContentUri: ./layers/helpers/
       CompatibleRuntimes:
-        - python3.8
+        - python3.10
       RetentionPolicy: Delete
     Metadata:
       BuildMethod: makefile
@@ -348,6 +346,7 @@ Resources:
     Properties:
       FunctionName: minecraft-server-dashboard-configServer
       CodeUri: ./lambdas/configServer/
+      Timeout: 300
       Policies:
         - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
         - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess
@@ -364,6 +363,7 @@ Resources:
                 - ssm:Describe*
                 - ssm:Get*
                 - ssm:SendCommand
+                - ssm:CancelCommand
                 - ec2:AssociateIamInstanceProfile
                 - ec2:DisassociateIamInstanceProfile
               Resource: '*'
