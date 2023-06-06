@@ -1,11 +1,7 @@
-import urllib
 import boto3
 import logging
 import os
-import json
-import time
 from base64 import b64encode
-from datetime import datetime, timezone, timedelta
 import helpers
 
 logger = logging.getLogger()

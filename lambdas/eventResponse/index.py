@@ -1,4 +1,3 @@
-import urllib
 import boto3
 import logging
 import os
@@ -30,6 +29,7 @@ cognito_idp = boto3.client('cognito-idp')
 ENCODING = 'utf-8'
 
 appValue = os.getenv('TAG_APP_VALUE')
+appName = os.getenv('APP_NAME') 
 endpoint = os.environ.get('APPSYNC_URL', None)
 userPoolId = os.environ.get('USERPOOL_ID', None)
 
@@ -188,7 +188,9 @@ def getMetricData(instanceId,nameSpace,metricName,unit,statType,startTime,endTim
     if metricName == "cpu_usage_active":
         dimensions.append({'Name': 'cpu','Value': "cpu-total"})
     elif metricName == "net_bytes_sent":
-        dimensions.append({'Name': 'interface','Value': "eth0"})
+        nic = utl.getSsmParam("/" + appName + "/" + instanceId + "/nic")
+        if nic != None:        
+            dimensions.append({'Name': 'interface','Value': nic})
 
     try:
         rsp = cw_client.get_metric_statistics(

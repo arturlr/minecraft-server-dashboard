@@ -1,10 +1,6 @@
-import urllib
 import boto3
 import logging
 import os
-import json
-import time
-from datetime import datetime, timezone, timedelta
 from botocore.exceptions import ClientError
 from boto3.dynamodb.conditions import Key, Attr
 

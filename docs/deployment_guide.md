@@ -118,7 +118,7 @@ git clone https://github.com/arturlr/minecraft-server-dashboard.git
 The AWS Lambdas have some libraries dependencies. The following commands instructs SAM to build all the dependencies using a local container. The command below requires you to have docker running. If you prefer to compile the code on your own machine you can only run *sam build*
 
 ```bash
-sam build --use-container --build-image amazon/aws-sam-cli-build-image-python3.8
+sam build --use-container --build-image public.ecr.aws/sam/build-python3.10
 ```
 
 After executing it, you will know that it succeeded when finishing with the message below:

@@ -4,7 +4,6 @@ import logging
 import os
 import json
 import time
-from datetime import datetime, timezone
 from jose import jwk, jwt
 from jose.utils import base64url_decode
 import helpers
@@ -295,6 +294,7 @@ def handler(event, context):
         
         if authorized == False:
             resp = {"err": 'User not authorized'}
+            logger.error(invokerEmail + " is not authorized as Admin")
             return utl.response(401,resp)
 
         #
@@ -322,6 +322,7 @@ def handler(event, context):
             if 'msg' in  resp:
                 return utl.response(200,resp)
             else:
+                logger.error(invokerEmail + " is not authorized to add_user")
                 return utl.response(500,resp)
 
         if action == "config_iam":
@@ -334,6 +335,7 @@ def handler(event, context):
                 return utl.response(200,msg)
             else:
                 error = { "err" :"Attaching IAM role failed" }
+                logger.error("Attaching IAM role failed")
                 return utl.response(500,error)
             
 
@@ -363,6 +365,7 @@ def handler(event, context):
             if response != None:
                 return utl.response(200,response)
             else:
+                logger.error("get_parameters failed")
                 return utl.response(500,"No parameters")
 
         # GET SSM PARAMETER
@@ -371,6 +374,7 @@ def handler(event, context):
             if response != None:
                 return utl.response(200,response)
             else:
+                logger.error("get_parameter failed")
                 return utl.response(500,"No parameters")
 
         else:

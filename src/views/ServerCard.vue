@@ -837,7 +837,7 @@ export default {
       } catch (err) {
         console.error("Oops, unable to copy");
       }
-      serverIp.setAttribute("type", "hidden");
+      //serverIp.setAttribute("type", "hidden");
       this.copyDialog = true;
       setTimeout(() => {
         this.copyDialog = false;

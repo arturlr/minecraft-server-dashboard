@@ -21,7 +21,7 @@ Globals:
     AutoPublishAlias: live
     Handler: index.handler
     MemorySize: 256
-    Runtime: python3.8
+    Runtime: python3.10
     Timeout: 120
     Tracing: Active
     Layers: 
@@ -53,6 +53,15 @@ Resources:
                   - 'cloudwatch:List*'
                   - 'cloudwatch:Get*'
                 Resource: '*'
+              - Effect: Allow
+                Action: 
+                  - 'ssm:DescribeParameters'
+                  - 'ssm:PutParameter'
+                  - 'ssm:GetParameter'
+                Resource: 
+                  !Sub 
+                    - "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter${parameterName}*"
+                    - parameterName: !Ref ProjectName
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
         - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy
@@ -308,7 +317,7 @@ Resources:
     Type: AWS::Serverless::Function 
     Properties:
       FunctionName: minecraft-server-dashboard-changeServerState
-      CodeUri: ./lambdas/stepFunctions/changeServerState/
+      CodeUri: ./lambdas/changeServerState/
       Policies:
         - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
         - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess
@@ -338,7 +347,7 @@ Resources:
     Type: AWS::Serverless::Function 
     Properties:
       FunctionName: minecraft-server-dashboard-configServer
-      CodeUri: ./lambdas/stepFunctions/configServer/
+      CodeUri: ./lambdas/configServer/
       Policies:
         - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
         - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess
@@ -375,7 +384,7 @@ Resources:
   StateMachine:
     Type: AWS::Serverless::StateMachine
     Properties:
-      DefinitionUri: ./lambdas/stepFunctions/step-functions.json
+      DefinitionUri: ./step-functions.json
       DefinitionSubstitutions:
         changeServerState: !GetAtt ChangeServerState.Arn
         configServer: !GetAtt ConfigServer.Arn

@@ -1,4 +1,3 @@
-import urllib
 import boto3
 import logging
 import os
@@ -17,38 +16,57 @@ dyn = helpers.Dyn()
 ssm = boto3.client('ssm')
 ec2 = boto3.client('ec2')
 appValue = os.getenv('TAG_APP_VALUE')
+appName = os.getenv('APP_NAME') 
+
+def getNicInformation(instance):
+    logger.info(instance + "- getNicInformation")
+
+    ssm_rsp = ssm.send_command(
+            InstanceIds=[instance],
+            DocumentName='AWS-RunShellScript',
+            TimeoutSeconds=30,
+            Parameters={
+                'commands':[
+                     "NIC=$(ifconfig -a | grep UP,BROADCAST | awk '{print substr($1, 1, length($1)-1)}');aws ssm put-parameter --name '/" + appName + "/" + instance + "/nic' --type 'String' --value $NIC"
+                ]
+            },
+        )    
+    logger.info(ssm_rsp)   
 
 def minecraftInit(instance):
-
+    logger.info(instance + " - minecraftInit")
     instanceInfo = dyn.GetInstanceAttr(instance)
-        
-    if 'runCommand' in instanceInfo:
-        runCommand = instanceInfo['runCommand']
-    else:
-        runCommand = None
+    logger.info(instanceInfo)
 
-    if 'workingDir' in instanceInfo:
-        workingDir = instanceInfo['workingDir']
-    else:
-        workingDir = None
+    if instanceInfo['code'] != 200:
+        logger.warning("Instance data does not exist")
+        return False
+    
+    if 'runCommand' in instanceInfo['msg'] and 'workingDir' in instanceInfo['msg']:                    
+        #script = os.path.join(instanceInfo['msg']['workingDir'],instanceInfo['msg']['runCommand'])
+        script = instanceInfo['msg']['runCommand']     
 
-    if runCommand != None or workingDir != None:
         ssm_rsp = ssm.send_command(
             InstanceIds=[instance],
             DocumentName='AWS-RunShellScript',
             TimeoutSeconds=30,
             Parameters={
-                'commands': [runCommand],
-                'workingDirectory': [workingDir]
-            }
-        )
-        logger.info(ssm_rsp)
-        return True
+                'commands':[
+                     script
+                ],                 
+                'workingDirectory':[
+                    instanceInfo['msg']['workingDir']
+                ],
+            },
+        )    
+        logger.info(ssm_rsp)                    
+
     else:
         logger.warning("RunCommand or Working Directories are not defined")
         return False
 
 def cwAgentStatusCheck(instance):
+    logger.info(instance + " - cwAgentStatusCheck")
     ssmAgentStatus = ssmExecCommands(instance,"AmazonCloudWatch-ManageAgent",{"action": ["status"],"mode": ["ec2"]})
     #logger.info(ssmAgentStatus)
 
@@ -93,8 +111,7 @@ def scriptExec(instance):
     ssmRunScript = ssmExecCommands(instance,"AWS-RunRemoteScript",{"sourceType": ["GitHub"],"sourceInfo": ["{\"owner\":\"arturlr\", \"repository\": \"minecraft-server-dashboard\", \"path\": \"scripts/adding_cron.sh\", \"getOptions\": \"branch:dev\" }"],"commandLine": ["bash adding_cron.sh"]})
     logger.info(ssmRunScript)
 
-def sendCommand(instance, param, docName):
-    
+def sendCommand(instance, param, docName):    
     ssm_rsp = ssm.send_command(
                 InstanceIds=[instance],
                 DocumentName=docName,
@@ -106,7 +123,6 @@ def sendCommand(instance, param, docName):
     return { "CommandId": ssm_rsp["Command"]["CommandId"], "Status": ssm_rsp["Command"]["Status"] }
 
 def listCommand(instance, commandId):
-
     ssm_rsp = ssm.list_commands(
             CommandId=commandId,
             InstanceId=instance,
@@ -116,7 +132,6 @@ def listCommand(instance, commandId):
     return { "Status": ssm_rsp["Commands"][0]["Status"] }
 
 def getCommandDetails(instance, commandId):
-
     ssm_rsp = ssm.list_command_invocations(
             CommandId=commandId,
             InstanceId=instance,
@@ -161,6 +176,9 @@ def handler(event, context):
 
         # Execute minecraft initialization
         minecraftInit(instanceId)
+
+        # Nic Value
+        getNicInformation(instanceId)
 
         ## CloudWatch Agent Steps 
         cwAgentStatus = cwAgentStatusCheck(instanceId)
