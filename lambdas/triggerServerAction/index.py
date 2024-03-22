@@ -29,7 +29,7 @@ sftArn = os.getenv('StepFunctionsArn')
 botoSession = boto3.session.Session()
 awsRegion = botoSession.region_name
 
-adminEmail = utl.getSsmParam('/amplify/minecraftserverdashboard/adminemail')
+adminEmail = utl.getSsmParam('/minecraftserverdashboard/adminemail')
 
 def is_token_valid(token, keys):
     # https://github.com/awslabs/aws-support-tools/tree/master/Cognito/decode-verify-jwt

@@ -1,21 +1,10 @@
-AWSTemplateFormatVersion: '2010-09-09'
+AWSTemplateFormatVersion: "2010-09-09"
 Transform: AWS::Serverless-2016-10-31
 Description: >
-    "MineDash Backend \n"
+  Minecraft Server Dasboard
 
-Parameters:  
+  Root stack for managing resources
 
-  ProjectName:
-    Type: String
-    Default: minecraft-dashboard
-  AppValue:
-    Type: String
-    Default: minecraft
-  AdminEmail:
-    Type: String
-    Description: Email (Gmail) that is going to be identified as the app admin
-    AllowedPattern: '[^@]+@[^@]+\.[^@]+'
-    
 Globals:
   Function:
     AutoPublishAlias: live
@@ -23,14 +12,27 @@ Globals:
     MemorySize: 256
     Runtime: python3.10
     Timeout: 120
-    Tracing: Active
-    Layers: 
-      - !Ref HelperLayer
+    Tracing: Active    
+  
+Parameters:
+  ProjectName:
+    Type: String
+    Default: minecraft-dashboard
+  EnvironmentName:
+    Type: String
+    Default: dev
+    Description: A description to identify environment (e.g. dev, prod)
+  AppValue:
+    Type: String
+    Default: minecraft
+  AdminEmail:
+    Type: String
+    Description: Email (Gmail) that is going to be identified as the app admin
+    AllowedPattern: '[^@]+@[^@]+\.[^@]+'
 
 Resources:
-
   Ec2MinecraftDashboardInstanceRole:
-    Type: 'AWS::IAM::Role'
+    Type: "AWS::IAM::Role"
     Properties:
       Description: EC2 MinecraftDashboard Role
       AssumeRolePolicyDocument:
@@ -39,25 +41,25 @@ Resources:
           - Effect: Allow
             Principal:
               Service:
-              - ec2.amazonaws.com
+                - ec2.amazonaws.com
             Action:
-              - 'sts:AssumeRole'
+              - "sts:AssumeRole"
       Policies:
         - PolicyName: cloudwatchMetric
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
               - Effect: Allow
-                Action: 
-                  - 'cloudwatch:PutMetricData'
-                  - 'cloudwatch:List*'
-                  - 'cloudwatch:Get*'
-                Resource: '*'
+                Action:
+                  - "cloudwatch:PutMetricData"
+                  - "cloudwatch:List*"
+                  - "cloudwatch:Get*"
+                Resource: "*"
               - Effect: Allow
-                Action: 
-                  - 'ssm:DescribeParameters'
-                  - 'ssm:PutParameter'
-                  - 'ssm:GetParameter'
+                Action:
+                  - "ssm:DescribeParameters"
+                  - "ssm:PutParameter"
+                  - "ssm:GetParameter"
                 Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/amplify/minecraft*"
 
       ManagedPolicyArns:
@@ -66,9 +68,9 @@ Resources:
 
   IAMEC2InstanceProfile:
     Type: AWS::IAM::InstanceProfile
-    Properties: 
+    Properties:
       InstanceProfileName: !Sub AWSEC2MinecraftProfile-${AWS::Region}
-      Roles: 
+      Roles:
         - !Ref Ec2MinecraftDashboardInstanceRole
 
   AmazonCloudWatchLinuxParameter:
@@ -79,13 +81,426 @@ Resources:
       Value: '{ "agent": { "metrics_collection_interval": 60, "run_as_user": "root" }, "logs": { "logs_collected": { "files": { "collect_list": [ { "file_path": "/opt/minecraft/server/logs/latest.log", "log_group_name": "/minecraft/serverlog/{instance_id}", "retention_in_days": 3, "filters": [ { "type": "include", "expression": "Server thread/INFO" } ] } ] } } }, "metrics": { "append_dimensions": { "AutoScalingGroupName": "${aws:AutoScalingGroupName}", "InstanceId": "${aws:InstanceId}" }, "metrics_collected": { "collectd": { "metrics_aggregation_interval": 60 }, "cpu": { "measurement": [ "cpu_usage_active" ], "resources": [ "*" ], "metrics_collection_interval": 60 }, "net": { "measurement": [ "net_bytes_sent" ], "metrics_collection_interval": 60 }, "mem": { "measurement": [ "mem_used_percent" ], "metrics_collection_interval": 60 }, "statsd": { "metrics_aggregation_interval": 60, "metrics_collection_interval": 10, "service_address": ":8125" } } } }'
       Description: Amazon CloudWatch agent config
 
-  AdminEmailParameter:
-    Type: AWS::SSM::Parameter
+  CognitoUserPool:
+    Type: AWS::Cognito::UserPool
     Properties:
-      Name: /amplify/minecraftserverdashboard/adminemail
-      Type: String
-      Value: !Ref AdminEmail
-      Description: Email (Gmail) that is going to be identified as the app admin
+      UserPoolName: !Sub ${ProjectName}-${EnvironmentName}-userpool
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+      UsernameAttributes:
+        - email
+      AutoVerifiedAttributes:
+        - email
+      Schema:
+        - AttributeDataType: String
+          Name: email
+          Required: true
+        - AttributeDataType: String
+          Name: family_name
+          Required: true
+        - AttributeDataType: String
+          Name: given_name
+          Required: true
+
+  CognitoUserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      UserPoolId: !Ref CognitoUserPool
+      ClientName: !Sub ${ProjectName}-${EnvironmentName}-client
+      GenerateSecret: false
+
+  UserPoolDomain:
+    Type: AWS::Cognito::UserPoolDomain
+    Properties:
+      Domain:
+        !Join [
+          "-",
+          [
+            "minecraft",
+            !Select [
+              1,
+              !Split ["-", !Select [2, !Split ["/", !Ref AWS::StackId]]],
+            ],
+          ],
+        ]
+      UserPoolId: !Ref CognitoUserPool
+
+  CognitoIdentityPool:
+    Type: AWS::Cognito::IdentityPool
+    Properties:
+      IdentityPoolName: !Sub ${ProjectName}-${EnvironmentName}-identity
+      AllowUnauthenticatedIdentities: true
+      CognitoIdentityProviders:
+        - ClientId: !Ref CognitoUserPoolClient
+          ProviderName: !GetAtt CognitoUserPool.ProviderName
+
+  # Create a role for unauthorized acces to AWS resources. Very limited access. Only allows users in the previously created Identity Pool
+  CognitoUnAuthorizedRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Federated: "cognito-identity.amazonaws.com"
+            Action:
+              - "sts:AssumeRoleWithWebIdentity"
+            Condition:
+              StringEquals:
+                "cognito-identity.amazonaws.com:aud":
+                  Ref: CognitoIdentityPool
+              "ForAnyValue:StringLike":
+                "cognito-identity.amazonaws.com:amr": unauthenticated
+
+  # Create a role for authorized acces to AWS resources. Control what your user can access. This example only allows Lambda invokation
+  # Only allows users in the previously created Identity Pool
+  CognitoAuthorizedRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Federated: "cognito-identity.amazonaws.com"
+            Action:
+              - "sts:AssumeRoleWithWebIdentity"
+            Condition:
+              StringEquals:
+                "cognito-identity.amazonaws.com:aud":
+                  Ref: CognitoIdentityPool
+              "ForAnyValue:StringLike":
+                "cognito-identity.amazonaws.com:amr": authenticated
+
+  # Assigns the roles to the Identity Pool
+  IdentityPoolRoleMapping:
+    Type: AWS::Cognito::IdentityPoolRoleAttachment
+    Properties:
+      IdentityPoolId: !Ref CognitoIdentityPool
+      Roles:
+        authenticated: !GetAtt CognitoAuthorizedRole.Arn
+        unauthenticated: !GetAtt CognitoUnAuthorizedRole.Arn
+
+  ApiGw:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: !Sub ${ProjectName}-api
+      StageName: !Sub ${EnvironmentName}
+      Cors:
+        AllowOrigin: "'*'"
+        AllowHeaders: "'*'"
+        AllowMethods: "'OPTIONS,POST,GET,PUT,DELETE'"
+      Auth:
+        DefaultAuthorizer: TokenAuthorizer
+        Authorizers:
+          TokenAuthorizer:
+            UserPoolArn: !GetAtt CognitoUserPool.Arn
+        AddDefaultAuthorizerToCorsPreflight: False
+
+  GraphQLAPI:
+    Type: AWS::Serverless::GraphQLApi
+    Properties:
+      Name: !Sub ${ProjectName}-${EnvironmentName}-graphql
+      SchemaUri: ./schema.graphql
+      Auth:
+        Type: "AMAZON_COGNITO_USER_POOLS"
+        UserPool:
+          UserPoolId: !Ref CognitoUserPool
+          AwsRegion: !Ref "AWS::Region"
+          DefaultAction: ALLOW
+        Additional:
+          - Type: AWS_IAM
+      DataSources:
+        DynamoDb:
+          DriversTable:
+            TableName: !Ref DriversTable
+            TableArn: !GetAtt DriversTable.Arn
+          TripsTable:
+            TableName: !Ref TripsTable
+            TableArn: !GetAtt TripsTable.Arn
+      Functions:
+        listDrivers:
+          Runtime:
+            Name: APPSYNC_JS
+            Version: "1.0.0"
+          DataSource: DriversTable
+          CodeUri: ./webapp/src/resolvers/listDrivers.js
+        listTrips:
+          Runtime:
+            Name: APPSYNC_JS
+            Version: "1.0.0"
+          DataSource: TripsTable
+          CodeUri: ./webapp/src/resolvers/listTrips.js
+        statusTrips:
+          Runtime:
+            Name: APPSYNC_JS
+            Version: "1.0.0"
+          DataSource: TripsTable
+          CodeUri: ./webapp/src/resolvers/statusTrips.js
+        hydrateTrips:
+          Runtime:
+            Name: APPSYNC_JS
+            Version: "1.0.0"
+          DataSource: DriversTable
+          CodeUri: ./webapp/src/resolvers/hydrateTrips.js
+        getTrip:
+          Runtime:
+            Name: APPSYNC_JS
+            Version: "1.0.0"
+          DataSource: TripsTable
+          CodeUri: ./webapp/src/resolvers/getById.js
+        getDriver:
+          Runtime:
+            Name: APPSYNC_JS
+            Version: "1.0.0"
+          DataSource: DriversTable
+          CodeUri: ./webapp/src/resolvers/getById.js
+        delDriver:
+          Runtime:
+            Name: APPSYNC_JS
+            Version: "1.0.0"
+          DataSource: DriversTable
+          CodeUri: ./webapp/src/resolvers/delById.js
+        saveDriver:
+          Runtime:
+            Name: APPSYNC_JS
+            Version: "1.0.0"
+          DataSource: DriversTable
+          CodeUri: ./webapp/src/resolvers/saveById.js
+        addDriverTrip:
+          Runtime:
+            Name: APPSYNC_JS
+            Version: "1.0.0"
+          DataSource: DriversTable
+          CodeUri: ./webapp/src/resolvers/addDriverTrip.js
+        removeDriverTrip:
+          Runtime:
+            Name: APPSYNC_JS
+            Version: "1.0.0"
+          DataSource: DriversTable
+          CodeUri: ./webapp/src/resolvers/removeDriverTrip.js
+        saveTrip:
+          Runtime:
+            Name: APPSYNC_JS
+            Version: "1.0.0"
+          DataSource: TripsTable
+          CodeUri: ./webapp/src/resolvers/saveById.js
+        delTrip:
+          Runtime:
+            Name: APPSYNC_JS
+            Version: "1.0.0"
+          DataSource: TripsTable
+          CodeUri: ./webapp/src/resolvers/delById.js
+      Resolvers:
+        Mutation:
+          saveDriver:
+            Runtime:
+              Name: APPSYNC_JS
+              Version: "1.0.0"
+            Pipeline:
+              - saveDriver
+          delDriver:
+            Runtime:
+              Name: APPSYNC_JS
+              Version: "1.0.0"
+            Pipeline:
+              - delDriver
+          saveTrip:
+            Runtime:
+              Name: APPSYNC_JS
+              Version: "1.0.0"
+            Pipeline:
+              - saveTrip
+              - addDriverTrip
+          delTrip:
+            Runtime:
+              Name: APPSYNC_JS
+              Version: "1.0.0"
+            Pipeline:
+              - delTrip
+              - removeDriverTrip
+        Query:
+          listTrips:
+            Runtime:
+              Name: APPSYNC_JS
+              Version: "1.0.0"
+            Pipeline:
+              - listTrips
+              - hydrateTrips
+          statusTrips:
+            Runtime:
+              Name: APPSYNC_JS
+              Version: "1.0.0"
+            Pipeline:
+              - statusTrips
+              - hydrateTrips
+          listDrivers:
+            Runtime:
+              Name: APPSYNC_JS
+              Version: "1.0.0"
+            Pipeline:
+              - listDrivers
+
+  S3WebAppBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      AccessControl: Private
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+    DeletionPolicy: Delete
+
+  S3WebAppBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref S3WebAppBucket
+      PolicyDocument:
+        Statement:
+          - Action: s3:GetObject
+            Effect: Allow
+            Resource: !Sub ${S3WebAppBucket.Arn}/*
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub arn:aws:cloudfront::${AWS::AccountId}:distribution/${CloudFront}
+
+  OriginAccessControl:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub ${ProjectName}-${EnvironmentName}-OAC
+        Description: Default Origin Access Control
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  CloudFront:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Origins:
+          - Id: S3Origin
+            DomainName: !GetAtt S3WebAppBucket.DomainName
+            S3OriginConfig:
+              OriginAccessIdentity: ""
+            OriginAccessControlId: !GetAtt OriginAccessControl.Id
+        Enabled: true
+        DefaultRootObject: index.html
+        DefaultCacheBehavior:
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods:
+            - GET
+            - HEAD
+            - OPTIONS
+          CachedMethods:
+            - GET
+            - HEAD
+            - OPTIONS
+          TargetOriginId: S3Origin
+          ForwardedValues:
+            QueryString: false
+            Cookies:
+              Forward: none
+
+  ListServers:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: minecraft-server-dashboard-listServers
+      CodeUri: ./lambdas/listServers/
+      Policies:
+        - CostExplorerReadOnlyPolicy: {}
+        - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
+        - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess
+        - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
+        - arn:aws:iam::aws:policy/AWSCloudTrail_ReadOnlyAccess
+        - arn:aws:iam::aws:policy/AmazonCognitoReadOnly
+        - SSMParameterReadPolicy:
+            ParameterName: !Sub "/${ProjectName}/${EnvironmentName}*"
+        - DynamoDBCrudPolicy:
+            TableName: !Ref InstancesTable
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /listServers
+            Method: get
+            RestApiId: !Ref ApiGw
+      Environment:
+        Variables:
+          APP_NAME: !Ref ProjectName
+          TAG_APP_VALUE: !Ref AppValue
+          APPSYNC_URL: !GetAtt GraphQLAPI.GraphQLUrl
+          INSTANCES_TABLE_NAME: !Ref InstancesTable
+          EC2_INSTANCE_PROFILE_NAME: !Ref IAMEC2InstanceProfile
+          EC2_INSTANCE_PROFILE_ARN: !GetAtt IAMEC2InstanceProfile.Arn
+          COGNITO_USER_POOL_ID: !Ref CognitoUserPool
+
+  TriggerServerAction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: minecraft-server-dashboard-triggerServerAction
+      CodeUri: ./lambdas/triggerServerAction/
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /action
+            Method: post
+            RestApiId: !Ref ApiGw
+      Policies:
+        - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
+        - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess
+        - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
+        - arn:aws:iam::aws:policy/AmazonCognitoReadOnly
+        - StepFunctionsExecutionPolicy:
+            StateMachineName: !GetAtt StateMachine.Name
+        - SSMParameterReadPolicy:
+            ParameterName: !Sub "/${ProjectName}/${EnvironmentName}*"
+        - DynamoDBCrudPolicy:
+            TableName: !Ref InstancesTable
+        - Version: "2012-10-17" # Policy Document
+          Statement:
+            - Effect: Allow
+              Action:
+                - ec2:AssociateIamInstanceProfile
+                - ec2:DisassociateIamInstanceProfile
+              Resource: "*"
+        - Version: "2012-10-17" # Policy Document
+          Statement:
+            - Effect: Allow
+              Action:
+                - iam:PassRole
+              Resource: !GetAtt Ec2MinecraftDashboardInstanceRole.Arn
+        - Version: "2012-10-17" # Policy Document
+          Statement:
+            - Effect: Allow
+              Action:
+                - ssm:PutParameter
+                - ssm:GetParameters
+              Resource: !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/amplify/minecraftserverdashboard*
+        - Version: "2012-10-17" # Policy Document
+          Statement:
+            - Effect: Allow
+              Action:
+                - cognito-idp:CreateGroup
+                - cognito-idp:AdminAddUserToGroup
+                - cloudwatch:PutMetricAlarm
+              Resource: "*"
+      Environment:
+        Variables:
+          StepFunctionsArn: !Ref StateMachine
+          APP_NAME: !Ref ProjectName
+          TAG_APP_VALUE: !Ref AppValue
+          APPSYNC_URL: !GetAtt GraphQLAPI.GraphQLUrl
+          INSTANCES_TABLE_NAME: !Ref InstancesTable
+          EC2_INSTANCE_PROFILE_NAME: !Ref IAMEC2InstanceProfile
+          EC2_INSTANCE_PROFILE_ARN: !GetAtt IAMEC2InstanceProfile.Arn
+          CONFIG_SERVER_LAMBDA_NAME: !Ref ConfigServer
+          COGNITO_USER_POOL_ID: !Ref CognitoUserPool
 
   InstancesTable:
     Type: AWS::DynamoDB::Table
@@ -105,214 +520,8 @@ Resources:
         AttributeName: expiration
         Enabled: true
 
-  HelperLayer:
-    Type: AWS::Serverless::LayerVersion
-    Properties:
-      Description: MinecraftDashboardHelper
-      ContentUri: ./layers/helpers/
-      CompatibleRuntimes:
-        - python3.10
-      RetentionPolicy: Delete
-    Metadata:
-      BuildMethod: makefile
-
-  ScheduledRule: 
-    Type: AWS::Events::Rule
-    Properties: 
-      Description: "ScheduledRule"
-      ScheduleExpression: "rate(1 minute)"
-      State: "DISABLED"
-      Targets: 
-        - 
-          Arn: 
-            Fn::GetAtt: 
-              - "EventResponse"
-              - "Arn"
-          Id: "EventResponseV1"
-
-  PermissionForEventsToInvokeLambda: 
-    Type: AWS::Lambda::Permission
-    Properties: 
-      FunctionName: !Ref "EventResponse"
-      Action: "lambda:InvokeFunction"
-      Principal: "events.amazonaws.com"
-      SourceArn: 
-        Fn::GetAtt: 
-          - "ScheduledRule"
-          - "Arn"
-
-  ScheduledRuleParameter:
-    Type: AWS::SSM::Parameter
-    Properties:
-      Name: /amplify/minecraftserverdashboard/scheduledrule
-      Type: String
-      Value: !Ref ScheduledRule
-      Description: ScheduledRule
-
-  EventResponse:
-    Type: AWS::Serverless::Function 
-    Properties:
-      FunctionName: minecraft-server-dashboard-eventResponse
-      CodeUri: ./lambdas/eventResponse/
-      Events:
-        EC2StateTrigger:
-          Type: CloudWatchEvent 
-          Properties:
-            Pattern:
-              source:
-                - aws.ec2
-              detail-type:
-                - EC2 Instance State-change Notification                
-      Policies:
-        - CostExplorerReadOnlyPolicy: {}
-        - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
-        - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess
-        - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
-        - arn:aws:iam::aws:policy/AWSCloudTrail_ReadOnlyAccess
-        - arn:aws:iam::aws:policy/AmazonCognitoReadOnly
-        - SSMParameterReadPolicy:
-            ParameterName: "amplify/minecraftserverdashboard*"
-        - Version: '2012-10-17' # Policy Document
-          Statement:
-            - Effect: Allow
-              Action:
-                - logs:Get*
-                - logs:List*
-                - logs:StartQuery
-              Resource: !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/minecraft/*'
-        - Version: '2012-10-17' # Policy Document
-          Statement:
-            - Effect: Allow
-              Action:
-                - appsync:ListGraphqlApis
-                - appsync:GetGraphqlApi
-                - appsync:GraphQL
-              Resource: '*'
-        - Version: '2012-10-17' # Policy Document
-          Statement:
-            - Effect: Allow
-              Action:
-                - events:ListRules
-                - events:DescribeRule
-                - events:DisableRule
-                - events:EnableRule
-              Resource: "*"
-      Environment:
-        Variables:
-          APP_NAME: !Ref ProjectName
-          TAG_APP_VALUE: !Ref AppValue
-          APPSYNC_URL: '{{resolve:ssm:/amplify/minecraftserverdashboard/appsyncurl:1}}'
-          USERPOOL_ID: '{{resolve:ssm:/amplify/minecraftserverdashboard/userpoolid:1}}'
-          INSTANCES_TABLE_NAME: !Ref InstancesTable
-          EC2_INSTANCE_PROFILE_NAME: !Ref IAMEC2InstanceProfile
-          EC2_INSTANCE_PROFILE_ARN: !GetAtt IAMEC2InstanceProfile.Arn
-
-  ListServers:
-    Type: AWS::Serverless::Function 
-    Properties:
-      FunctionName: minecraft-server-dashboard-listServers
-      CodeUri: ./lambdas/listServers/
-      Policies:
-        - CostExplorerReadOnlyPolicy: {}
-        - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
-        - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess
-        - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
-        - arn:aws:iam::aws:policy/AWSCloudTrail_ReadOnlyAccess
-        - arn:aws:iam::aws:policy/AmazonCognitoReadOnly
-        - SSMParameterReadPolicy:
-            ParameterName: "amplify/minecraftserverdashboard*"
-        - DynamoDBCrudPolicy:
-            TableName: !Ref InstancesTable
-      Environment:
-        Variables:
-          APP_NAME: !Ref ProjectName
-          TAG_APP_VALUE: !Ref AppValue
-          APPSYNC_URL: '{{resolve:ssm:/amplify/minecraftserverdashboard/appsyncurl:1}}'
-          INSTANCES_TABLE_NAME: !Ref InstancesTable
-          EC2_INSTANCE_PROFILE_NAME: !Ref IAMEC2InstanceProfile
-          EC2_INSTANCE_PROFILE_ARN: !GetAtt IAMEC2InstanceProfile.Arn
-
-  GetMonthlyCost:
-    Type: AWS::Serverless::Function 
-    Properties:
-      FunctionName: minecraft-server-dashboard-getMonthlyCost
-      CodeUri: ./lambdas/getMonthlyCost/
-      Policies:
-        - CostExplorerReadOnlyPolicy: {}
-        - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
-        - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess
-        - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
-        - arn:aws:iam::aws:policy/AWSCloudTrail_ReadOnlyAccess
-        - arn:aws:iam::aws:policy/AmazonCognitoReadOnly
-        - SSMParameterReadPolicy:
-            ParameterName: "amplify/minecraftserverdashboard*"
-        - DynamoDBCrudPolicy:
-            TableName: !Ref InstancesTable
-      Environment:
-        Variables:
-          APP_NAME: !Ref ProjectName
-          TAG_APP_VALUE: !Ref AppValue
-          APPSYNC_URL: '{{resolve:ssm:/amplify/minecraftserverdashboard/appsyncurl:1}}'
-          INSTANCES_TABLE_NAME: !Ref InstancesTable
-
-  TriggerServerAction:
-    Type: AWS::Serverless::Function 
-    Properties:
-      FunctionName: minecraft-server-dashboard-triggerServerAction
-      CodeUri: ./lambdas/triggerServerAction/
-      Policies:
-        - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
-        - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess
-        - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
-        - arn:aws:iam::aws:policy/AmazonCognitoReadOnly
-        - StepFunctionsExecutionPolicy:
-            StateMachineName: !GetAtt StateMachine.Name
-        - SSMParameterReadPolicy:
-            ParameterName: "amplify/minecraftserverdashboard*"
-        - DynamoDBCrudPolicy:
-            TableName: !Ref InstancesTable
-        - Version: '2012-10-17' # Policy Document
-          Statement:
-            - Effect: Allow
-              Action:
-                - ec2:AssociateIamInstanceProfile
-                - ec2:DisassociateIamInstanceProfile
-              Resource: '*'
-        - Version: '2012-10-17' # Policy Document
-          Statement:
-            - Effect: Allow
-              Action:
-                - iam:PassRole
-              Resource: !GetAtt Ec2MinecraftDashboardInstanceRole.Arn
-        - Version: '2012-10-17' # Policy Document
-          Statement:
-            - Effect: Allow
-              Action:
-                - ssm:PutParameter
-                - ssm:GetParameters          
-              Resource: !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/amplify/minecraftserverdashboard*
-        - Version: '2012-10-17' # Policy Document
-          Statement:
-            - Effect: Allow
-              Action:
-                - cognito-idp:CreateGroup
-                - cognito-idp:AdminAddUserToGroup
-                - cloudwatch:PutMetricAlarm
-              Resource: '*'
-            
-      Environment:
-        Variables: 
-          StepFunctionsArn: !Ref StateMachine
-          APP_NAME: !Ref ProjectName
-          TAG_APP_VALUE: !Ref AppValue
-          APPSYNC_URL: '{{resolve:ssm:/amplify/minecraftserverdashboard/appsyncurl:1}}'
-          INSTANCES_TABLE_NAME: !Ref InstancesTable
-          EC2_INSTANCE_PROFILE_NAME: !Ref IAMEC2InstanceProfile
-          EC2_INSTANCE_PROFILE_ARN: !GetAtt IAMEC2InstanceProfile.Arn
-          CONFIG_SERVER_LAMBDA_NAME: !Ref ConfigServer
-
   ChangeServerState:
-    Type: AWS::Serverless::Function 
+    Type: AWS::Serverless::Function
     Properties:
       FunctionName: minecraft-server-dashboard-changeServerState
       CodeUri: ./lambdas/changeServerState/
@@ -325,24 +534,24 @@ Resources:
             ParameterName: "amplify/minecraftserverdashboard*"
         - DynamoDBCrudPolicy:
             TableName: !Ref InstancesTable
-        - Version: '2012-10-17' # Policy Document
+        - Version: "2012-10-17" # Policy Document
           Statement:
             - Effect: Allow
               Action:
                 - ec2:StartInstances
                 - ec2:StopInstances
                 - ec2:RebootInstances
-              Resource: '*'
+              Resource: "*"
       Environment:
         Variables:
           APP_NAME: !Ref ProjectName
           TAG_APP_VALUE: !Ref AppValue
-          APPSYNC_URL: '{{resolve:ssm:/amplify/minecraftserverdashboard/appsyncurl:1}}'
-          USERPOOL_ID: '{{resolve:ssm:/amplify/minecraftserverdashboard/userpoolid:1}}'
+          APPSYNC_URL: !GetAtt GraphQLAPI.GraphQLUrl
+          USERPOOL_ID: !Ref IdentityPoolId
           INSTANCES_TABLE_NAME: !Ref InstancesTable
 
   ConfigServer:
-    Type: AWS::Serverless::Function 
+    Type: AWS::Serverless::Function
     Properties:
       FunctionName: minecraft-server-dashboard-configServer
       CodeUri: ./lambdas/configServer/
@@ -355,7 +564,7 @@ Resources:
             ParameterName: "amplify/minecraftserverdashboard*"
         - DynamoDBCrudPolicy:
             TableName: !Ref InstancesTable
-        - Version: '2012-10-17' # Policy Document
+        - Version: "2012-10-17" # Policy Document
           Statement:
             - Effect: Allow
               Action:
@@ -366,8 +575,8 @@ Resources:
                 - ssm:CancelCommand
                 - ec2:AssociateIamInstanceProfile
                 - ec2:DisassociateIamInstanceProfile
-              Resource: '*'
-        - Version: '2012-10-17' # Policy Document
+              Resource: "*"
+        - Version: "2012-10-17" # Policy Document
           Statement:
             - Effect: Allow
               Action:
@@ -377,14 +586,13 @@ Resources:
         Variables:
           APP_NAME: !Ref ProjectName
           TAG_APP_VALUE: !Ref AppValue
-          APPSYNC_URL: '{{resolve:ssm:/amplify/minecraftserverdashboard/appsyncurl:1}}'
+          APPSYNC_URL: !GetAtt GraphQLAPI.GraphQLUrl
           INSTANCES_TABLE_NAME: !Ref InstancesTable
-          
 
   StateMachine:
     Type: AWS::Serverless::StateMachine
     Properties:
-      DefinitionUri: ./step-functions.json
+      DefinitionUri: ../step-functions.json
       DefinitionSubstitutions:
         changeServerState: !GetAtt ChangeServerState.Arn
         configServer: !GetAtt ConfigServer.Arn
@@ -394,13 +602,13 @@ Resources:
         IncludeExecutionData: true
         Destinations:
           - CloudWatchLogsLogGroup:
-             LogGroupArn: !GetAtt StateMachineLogGroup.Arn
+            LogGroupArn: !GetAtt StateMachineLogGroup.Arn
 
   StateMachineLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: !Sub '/aws/states/${ProjectName}-StateMachine-LogGroup-${AWS::Region}'
-  
+      LogGroupName: !Sub "/aws/states/${ProjectName}-StateMachine-LogGroup-${AWS::Region}"
+
   StatesExecutionRole:
     Type: "AWS::IAM::Role"
     Properties:
@@ -415,10 +623,10 @@ Resources:
       Path: "/"
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess
-      Policies:        
+      Policies:
         - PolicyName: steprolep1
           PolicyDocument:
-            Version: "2012-10-17"      
+            Version: "2012-10-17"
             Statement:
               - Effect: Allow
                 Action:
@@ -437,13 +645,30 @@ Resources:
                 Resource: "*"
 
 Outputs:
-  StateMachineArn:
-        Value: !Ref StateMachine
-  StateMachineName:
-      Value: !GetAtt StateMachine.Name
-  EventResponseArn:
-      Value: !GetAtt EventResponse.Arn
-  ListServersArn:
-      Value: !GetAtt ListServers.Arn
-  ConfigServerArn:
-      Value: !GetAtt ConfigServer.Arn
+  IdentityPoolId:
+    Description: Cognito IdentityPool Id
+    Value: !Ref CognitoIdentityPool
+
+  CognitoUserPoolClientId:
+    Description: Cognito UserPool ClientId
+    Value: !Ref CognitoUserPoolClient
+
+  CognitoUserPoolId:
+    Description: Cognito UserPool Id
+    Value: !Ref CognitoUserPool
+
+  CognitoDomainName:
+    Description: Cognito DomainName
+    Value: !Ref UserPoolDomain
+
+  ApiGwId:
+    Description: API Id
+    Value: !Ref ApiGw
+
+  CloudFrontUrl:
+    Description: CloudFront Url
+    Value: !GetAtt CloudFront.DomainName
+
+  AppSyncUrl:
+    Description: AppSync Url
+    Value: !GetAtt GraphQLAPI.GraphQLUrl

@@ -19,13 +19,12 @@ pst = pytz.timezone('US/Pacific')
 
 ec2_client = boto3.client('ec2')
 ec2 = boto3.resource('ec2')
-cw_client = boto3.client('cloudwatch')
 ct_client = boto3.client('cloudtrail')
-ce_client = boto3.client('ce')
 cognito_idp = boto3.client('cognito-idp')
 ENCODING = 'utf-8'
 
 appValue = os.getenv('TAG_APP_VALUE')
+cognito_pool_id = os.getenv('COGNITO_USER_POOL_ID')
 
 def is_token_valid(token, keys):
     # https://github.com/awslabs/aws-support-tools/tree/master/Cognito/decode-verify-jwt
@@ -152,119 +151,112 @@ def getInstanceHoursFromCloudTailEvents(instanceId):
     return totalMinutes
 
 def handler(event, context):
+  
+  instanceArray = []
+  
+  if not 'headers' in event:
+    logger.error("No Identity found")
+    return "No Identity found"
 
-    instanceArray = []
+  # Get JWT token from header
+  auth_header = event['headers']['Authorization']
+  token = auth_header.split(' ')[1]
+  jwk_url = cognito_pool_id + '.auth.region.amazoncognito.com/.well-known/jwks.json'
 
-    if not 'identity' in event:
-        logger.error("No Identity found")
-        return "No Identity found"
+  # download the key
+  with urllib.request.urlopen(jwk_url) as f:
+    response = f.read()
+  keys = json.loads(response.decode('utf-8'))['keys']
 
-    iss = event["identity"]["claims"]["iss"] 
-    token = event["request"]["headers"]["authorization"] 
-    keys_url = iss + '/.well-known/jwks.json'
-    # download the key
-    with urllib.request.urlopen(keys_url) as f:
-        response = f.read()
-    keys = json.loads(response.decode('utf-8'))['keys']
+  token_claims = is_token_valid(token,keys)
 
-    token_claims = is_token_valid(token,keys)
+  if token_claims == None:
+      logger.error("Invalid Token")
+      return "Invalid Token"  
+  if 'cognito:username' in token_claims:
+      userName=token_claims["cognito:username"]
+  else:
+      userName=token_claims["username"]  
+  # Get User Email from Cognito
+  cog_user = cognito_idp.admin_get_user(
+      UserPoolId=cognito_pool_id,
+      Username=userName
+  )  
+  userEmail=""
+  for att in cog_user["UserAttributes"]:
+      if att["Name"] == "email":
+          userEmail = att["Value"]
+          break
 
-    if token_claims == None:
-        logger.error("Invalid Token")
-        return "Invalid Token"
+  instancesInfo = utl.describeInstances('email',userEmail)
 
-    if 'cognito:username' in token_claims:
-        userName=token_claims["cognito:username"]
-    else:
-        userName=token_claims["username"]
+  if len(instancesInfo) == 0:
+      logger.error("No Instances Found")
+      return "No Instances Found"        
+  
+  for instance in instancesInfo:
+      instanceId = instance["Instances"][0]["InstanceId"] 
+      launchTime = instance["Instances"][0]["LaunchTime"]
+      if "Association" in instance["Instances"][0]["NetworkInterfaces"][0]:
+          publicIp = instance["Instances"][0]["NetworkInterfaces"][0]["Association"]["PublicIp"]
+      else:
+          publicIp = "none"
 
-    # Get User Email from Cognito
-    cog_user = cognito_idp.admin_get_user(
-        UserPoolId=iss.split("/")[3],
-        Username=userName
-    )
+      instanceName = "Undefined"
 
-    userEmail=""
-    for att in cog_user["UserAttributes"]:
-        if att["Name"] == "email":
-            userEmail = att["Value"]
-            break
+      for tag in instance["Instances"][0]["Tags"]:
+          if tag["Key"] == "Name":
+            instanceName = tag["Value"]
 
-    instancesInfo = utl.describeInstances('email',userEmail)
+      instanceId = instance["Instances"][0]["InstanceId"]
+      instanceType = ec2_client.describe_instance_types(InstanceTypes=[instance["Instances"][0]["InstanceType"]])
+      vCpus = instanceType["InstanceTypes"][0]["VCpuInfo"]["DefaultVCpus"]
+      memoryInfo = instanceType["InstanceTypes"][0]["MemoryInfo"]["SizeInMiB"]
+      volume = ec2.Volume(instance["Instances"][0]["BlockDeviceMappings"][0]["Ebs"]["VolumeId"])
+      instanceStatus = utl.describeInstanceStatus(instanceId)
 
-    if len(instancesInfo) == 0:
-        logger.error("No Instances Found")
-        return "No Instances Found"
-
-    
-    for instance in instancesInfo:
-        instanceId = instance["Instances"][0]["InstanceId"] 
-
-        launchTime = instance["Instances"][0]["LaunchTime"]
-        if "Association" in instance["Instances"][0]["NetworkInterfaces"][0]:
-            publicIp = instance["Instances"][0]["NetworkInterfaces"][0]["Association"]["PublicIp"]
-        else:
-            publicIp = "none"
-
-        instanceName = "Undefined"
-        for tag in instance["Instances"][0]["Tags"]:
-            if tag["Key"] == "Name":
-               instanceName = tag["Value"]
-
-        instanceId = instance["Instances"][0]["InstanceId"]
-        instanceType = ec2_client.describe_instance_types(InstanceTypes=[instance["Instances"][0]["InstanceType"]])
-        vCpus = instanceType["InstanceTypes"][0]["VCpuInfo"]["DefaultVCpus"]
-        memoryInfo = instanceType["InstanceTypes"][0]["MemoryInfo"]["SizeInMiB"]
-        volume = ec2.Volume(instance["Instances"][0]["BlockDeviceMappings"][0]["Ebs"]["VolumeId"])
-
-        instanceStatus = utl.describeInstanceStatus(instanceId)
-        print(instanceStatus)
-
-        pstLaunchTime = launchTime.astimezone(pst)
-        
-        runningMinutes = getInstanceHoursFromCloudTailEvents(instanceId)
-
-        groupMembers = []
-
-        cogGrp = group_exists(instanceId,iss.split("/")[3])
-        if cogGrp:
-            response = cognito_idp.list_users_in_group(
-                UserPoolId=iss.split("/")[3],
-                GroupName=instanceId
-            )            
-            if len(response["Users"]) > 0:
-                for user in response["Users"]:            
-                    for att in user["Attributes"]:
-                        if att["Name"] == "email":
-                            email = att["Value"]
-                        elif att["Name"] == "sub":
-                            id = att["Value"]
-                        elif att["Name"] == "given_name":
-                            given_name = att["Value"]
-                        elif att["Name"] == "family_name":
-                            family_name = att["Value"]
-                    groupMembers.append({
-                        "id": id,
-                        "email": email,
-                        "fullname": given_name + ' ' + family_name                        
-                    })                        
-
-        instanceArray.append({
-            "id": instanceId,
-            "name": instanceName,
-            "type": instance["Instances"][0]["InstanceType"],            
-            "userEmail": userEmail,
-            "state": instance["Instances"][0]["State"]["Name"].lower(),
-            "vCpus": vCpus,            
-            "memSize": memoryInfo,
-            "diskSize": volume.size,
-            "launchTime": pstLaunchTime.strftime("%m/%d/%Y - %H:%M:%S"),
-            "publicIp": publicIp,            
-            "initStatus": instanceStatus["initStatus"].lower(),
-            "iamStatus": instanceStatus["iamStatus"].lower(),
-            "runningMinutes": runningMinutes,
-            "groupMembers": groupMembers
-        })
+      print(instanceStatus)
+      pstLaunchTime = launchTime.astimezone(pst)        
+      runningMinutes = getInstanceHoursFromCloudTailEvents(instanceId)
+      groupMembers = []
+      cogGrp = group_exists(instanceId,iss.split("/")[3])
+      if cogGrp:
+          response = cognito_idp.list_users_in_group(
+              UserPoolId=iss.split("/")[3],
+              GroupName=instanceId
+          )            
+          if len(response["Users"]) > 0:
+              for user in response["Users"]:            
+                  for att in user["Attributes"]:
+                      if att["Name"] == "email":
+                          email = att["Value"]
+                      elif att["Name"] == "sub":
+                          id = att["Value"]
+                      elif att["Name"] == "given_name":
+                          given_name = att["Value"]
+                      elif att["Name"] == "family_name":
+                          family_name = att["Value"]
+                  groupMembers.append({
+                      "id": id,
+                      "email": email,
+                      "fullname": given_name + ' ' + family_name                        
+                  })                        
+      instanceArray.append({
+          "id": instanceId,
+          "name": instanceName,
+          "type": instance["Instances"][0]["InstanceType"],            
+          "userEmail": userEmail,
+          "state": instance["Instances"][0]["State"]["Name"].lower(),
+          "vCpus": vCpus,            
+          "memSize": memoryInfo,
+          "diskSize": volume.size,
+          "launchTime": pstLaunchTime.strftime("%m/%d/%Y - %H:%M:%S"),
+          "publicIp": publicIp,            
+          "initStatus": instanceStatus["initStatus"].lower(),
+          "iamStatus": instanceStatus["iamStatus"].lower(),
+          "runningMinutes": runningMinutes,
+          "groupMembers": groupMembers
+      })
 
     return instanceArray 
 
