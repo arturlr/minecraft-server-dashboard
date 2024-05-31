@@ -13,9 +13,9 @@ export const putServerMetric = /* GraphQL */ `
     }
   }
 `;
-export const changeServerState = /* GraphQL */ `
-  mutation ChangeServerState($input: ServerInfoInput!) {
-    changeServerState(input: $input) {
+export const onChangeState = /* GraphQL */ `
+  mutation OnChangeState($input: ServerInfoInput!) {
+    onChangeState(input: $input) {
       id
       name
       type
@@ -33,9 +33,24 @@ export const changeServerState = /* GraphQL */ `
     }
   }
 `;
-export const triggerServerAction = /* GraphQL */ `
-  mutation TriggerServerAction($input: ServerActionInput!) {
-    triggerServerAction(input: $input)
+export const fixServerRole = /* GraphQL */ `
+  mutation FixServerRole($instanceId: String!) {
+    fixServerRole(instanceId: $instanceId)
+  }
+`;
+export const startServer = /* GraphQL */ `
+  mutation StartServer($instanceId: String!) {
+    startServer(instanceId: $instanceId) 
+  }
+`;
+export const stopServer = /* GraphQL */ `
+  mutation StopServer($instanceId: String!) {
+    stopServer(instanceId: $instanceId) 
+  }
+`;
+export const restartServer = /* GraphQL */ `
+  mutation RestartServer($instanceId: String!) {
+    restartServer(instanceId: $instanceId) 
   }
 `;
 export const createLoginAudit = /* GraphQL */ `

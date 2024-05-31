@@ -7,11 +7,13 @@ import helpers
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
+appValue = os.getenv('TAG_APP_VALUE')
+cognito_pool_id = os.getenv('COGNITO_USER_POOL_ID')
+
 utl = helpers.Utils()
 dyn = helpers.Dyn()
-
+auth = helpers.Auth(cognito_pool_id)
 ec2_client = boto3.client('ec2')
-appValue = os.getenv('TAG_APP_VALUE')
 
 def handler(event, context):
     try:   
@@ -22,13 +24,13 @@ def handler(event, context):
         else:
             steps = 0
 
-        instanceInfo = utl.describeInstances('id',instanceId)
+        instanceInfo = utl.list_server_by_id(instanceId)
 
-        launchTime = instanceInfo[0]["Instances"][0]["LaunchTime"]            
-        state = instanceInfo[0]["Instances"][0]["State"]["Name"]
+        launchTime = instanceInfo["Reservations"]["Instances"][0]["LaunchTime"]            
+        state = instanceInfo["Reservations"]["Instances"][0]["State"]["Name"]
 
         if action == "start":
-            instanceStatus = utl.describeInstanceStatus(instanceId)
+            instanceStatus = utl.describe_instance_status(instanceId)
             IsInstanceReady = False
             if instanceStatus["initStatus"] == "ok":
                 IsInstanceReady = True

@@ -1,97 +1,159 @@
-type Query {
-  listServers: [ServerInfo] @function(name: "minecraft-server-dashboard-listServers") @aws_cognito_user_pools
-  getMonthlyCost: [MonthlyCost] @function(name: "minecraft-server-dashboard-getMonthlyCost") @aws_cognito_user_pools
+input AddUserToServerInput {
+	instanceId: String!
+	userEmail: AWSEmail!
 }
 
-type Mutation {
-  putServerMetric(input: ServerMetricInput!): ServerMetric @aws_iam
-  changeServerState(input: ServerInfoInput!): ServerInfo @aws_iam
-  triggerServerAction(input: ServerActionInput!): AWSJSON @function(name: "minecraft-server-dashboard-triggerServerAction") @aws_cognito_user_pools
+type LogAudit @aws_iam
+@aws_cognito_user_pools {
+	id: ID!
+	email: AWSEmail!
+	action: String!
+	expirationEpoch: AWSTimestamp
 }
 
-type Subscription {
-  # onPutServerMetric(userEmail: AWSEmail!): ServerMetric 
-  onPutServerMetric: ServerMetric
-    @aws_subscribe(mutations: ["putServerMetric"])
-  # onChangeServerInfo(userEmail: AWSEmail!): ServerInfo 
-  onChangeServerInfo: ServerInfo
-    @aws_subscribe(mutations: ["changeServerState"])
+input LogAuditInput {
+	id: ID!
+	email: AWSEmail!
+	action: String!
+	expirationEpoch: AWSTimestamp
 }
 
-type ServerMetric  @aws_iam @aws_cognito_user_pools {
-  id: String!
-  cpuStats: AWSJSON
-  networkStats: AWSJSON
-  memStats: AWSJSON
-  activeUsers: AWSJSON
-}
-
-input ServerMetricInput {
-  id: String!
-  cpuStats: AWSJSON
-  networkStats: AWSJSON
-  memStats: AWSJSON
-  activeUsers: AWSJSON
-}
-
-type MonthlyCost @aws_iam @aws_cognito_user_pools {
-  id: String!
-  timePeriod: String!
-  UnblendedCost: Float!
-  UsageQuantity: Float!
+type MonthlyCost @aws_iam
+@aws_cognito_user_pools {
+	id: String!
+	timePeriod: String!
+	UnblendedCost: Float!
+	UsageQuantity: Float!
 }
 
 input MonthlyCostInput {
-  id: String!
-  timePeriod: String
-  UnblendedCost: Float
-  UsageQuantity: Float
+	id: String!
+	timePeriod: String
+	UnblendedCost: Float
+	UsageQuantity: Float
 }
 
-type ServerInfo @aws_iam @aws_cognito_user_pools {
-  id: String!
-  name: String
-  type: String
-  userEmail: AWSEmail
-  state: String
-  vCpus: Int
-  memSize: Int
-  diskSize: Int
-  launchTime: String
-  publicIp: String
-  initStatus: String
-  iamStatus: String
-  runningMinutes: String
-  groupMembers: AWSJSON
+input ServerActionInput {
+	action: String!
+	instanceId: String!
+	params: AWSJSON
+}
+
+type ServerConfig @aws_iam
+@aws_cognito_user_pools {
+	id: String!
+	region: String!
+	alarmType: String!
+	alarmThreshold: Float!
+	minecraftRunCommand: String!
+	minecraftWorkDir: String!
+}
+
+input ServerConfigInput {
+	id: String!
+	region: String!
+	alarmType: String!
+	alarmThreshold: Float!
+	minecraftRunCommand: String!
+	minecraftWorkDir: String!
+}
+
+type ServerInfo @aws_iam
+@aws_cognito_user_pools {
+	id: String!
+	name: String
+	type: String
+	userEmail: AWSEmail
+	state: String
+	vCpus: Int
+	memSize: Int
+	diskSize: Int
+	launchTime: String
+	publicIp: String
+	initStatus: String
+	iamStatus: String
+	runningMinutes: String
+	groupMembers: AWSJSON
 }
 
 input ServerInfoInput {
-  id: String!
-  name: String
-  type: String
-  userEmail: AWSEmail
-  state: String
-  vCpus: Int
-  memSize: Int
-  diskSize: Int
-  launchTime: String
-  publicIp: String
-  initStatus: String
-  iamStatus: String
-  runningMinutes: String
-  groupMembers: AWSJSON
+	id: String!
+	name: String
+	type: String
+	userEmail: AWSEmail
+	state: String
+	vCpus: Int
+	memSize: Int
+	diskSize: Int
+	launchTime: String
+	publicIp: String
+	initStatus: String
+	iamStatus: String
+	runningMinutes: String
+	groupMembers: AWSJSON
 }
 
-input ServerActionInput {  
-  action: String!
-  instanceId: String!
-  params: AWSJSON
+type ServerMetric @aws_iam
+@aws_cognito_user_pools {
+	id: String!
+	cpuStats: AWSJSON
+	networkStats: AWSJSON
+	memStats: AWSJSON
+	activeUsers: AWSJSON
 }
 
-type LoginAudit @model @auth(rules: [{ allow: private }])
-{
-  id: ID!
-  email: AWSEmail!
-  action: String!
-  expirationEpoch: AWSTimestamp
+input ServerMetricInput {
+	id: String!
+	cpuStats: AWSJSON
+	networkStats: AWSJSON
+	memStats: AWSJSON
+	activeUsers: AWSJSON
+}
+
+type Mutation {
+	putServerMetric(input: ServerMetricInput!): ServerMetric
+		@aws_iam @aws_cognito_user_pools
+	changeServerState(input: ServerInfoInput!): ServerInfo
+		@aws_iam
+	startServer(instanceId: String!): AWSJSON
+		@aws_cognito_user_pools
+	restartServer(instanceId: String!): AWSJSON
+		@aws_cognito_user_pools
+	stopServer(instanceId: String!): AWSJSON
+		@aws_cognito_user_pools
+	fixServerRole(instanceId: String!): AWSJSON
+		@aws_cognito_user_pools
+	addUserToServer(input: AddUserToServerInput!): AWSJSON
+		@aws_cognito_user_pools
+	putServerConfig(input: ServerConfigInput!): AWSJSON
+		@aws_cognito_user_pools
+	updateServerConfig(input: ServerConfigInput!): AWSJSON
+		@aws_cognito_user_pools
+	putLogAudit(input: LogAuditInput!): AWSJSON
+		@aws_iam
+}
+
+type Query {
+	listServers: [ServerInfo]
+		@aws_cognito_user_pools
+	getMonthlyCost: [MonthlyCost]
+		@aws_cognito_user_pools
+	getServerConfig: [ServerConfig]
+		@aws_cognito_user_pools
+	getLogAudit: [LogAudit]
+		@aws_cognito_user_pools
+}
+
+type Subscription {
+	onPutServerMetric: ServerMetric
+		@aws_subscribe(mutations: ["putServerMetric"])
+@aws_cognito_user_pools
+@aws_iam
+
+
+
+	onChangeState: ServerInfo
+		@aws_subscribe(mutations: ["changeServerState"])
+@aws_cognito_user_pools
+@aws_iam
 }

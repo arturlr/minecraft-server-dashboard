@@ -14,24 +14,25 @@ import pytz
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-utl = helpers.Utils()
-utc = pytz.utc
-pst = pytz.timezone('US/Pacific')
-
 ssm = boto3.client('ssm')
 appsync = boto3.client('appsync')
 ec2_client = boto3.client('ec2')
 cw_logs = boto3.client('logs')
 cw_client = boto3.client('cloudwatch')
-
 eb_client = boto3.client('events')
-cognito_idp = boto3.client('cognito-idp')
 ENCODING = 'utf-8'
 
 appValue = os.getenv('TAG_APP_VALUE')
 appName = os.getenv('APP_NAME') 
-endpoint = os.environ.get('APPSYNC_URL', None)
-userPoolId = os.environ.get('USERPOOL_ID', None)
+endpoint = os.environ.get('APPSYNC_URL', None) 
+cognito_pool_id = os.environ.get('COGNITO_USER_POOL_ID', None)
+
+utl = helpers.Utils()
+utc = pytz.utc
+pst = pytz.timezone('US/Pacific')
+cog_auth = helpers.Auth(cognito_pool_id)
+
+scheduled_event_bridge_rule = utl.get_ssm_param("/minecraftserverdashboard/scheduledrule")
 
 boto3_session = boto3.Session()
 credentials = boto3_session.get_credentials()
@@ -45,10 +46,9 @@ auth = AWS4Auth(
     session_token=credentials.token,
 )
 
-headers={"Content-Type": "application/json"}
-
 session = requests.Session()
 session.auth = auth
+session.close()
 
 queryString="""
 fields @message  
@@ -90,44 +90,8 @@ changeServerState = """
     }
 }
 """
-
-def _group_exists(instanceId, poolId):
-    try:
-        grpRsp = cognito_idp.get_group(
-                GroupName=instanceId,
-                UserPoolId=poolId
-            )
-            
-        return True
-        
-    except cognito_idp.exceptions.ResourceNotFoundException:
-        logger.warning("Group does not exist.")
-        return False
-
-def getAlert(instanceId):
-    try:
-        alarm = cw_client.describe_alarms_for_metric(
-            MetricName='cpu_usage_active',
-            Namespace='CWAgent',
-            Period=60,
-            Dimensions=[
-                {'Name': 'InstanceId','Value': instanceId},
-                {'Name': 'cpu','Value': "cpu-total"}
-            ]
-        )
-        if len(alarm["MetricAlarms"]) == 0:
-            logger.warning('No Datapoint for cpu_usage_active alarm:' + instanceId)
-            return ''
-
-        # logger.info(alarm["MetricAlarms"][0]["StateValue"])
-        # logger.info(alarm["MetricAlarms"][0]["StateReason"])
-        # logger.info(alarm["MetricAlarms"][0]["DatapointsToAlarm"])
-        return str(alarm["MetricAlarms"][0]["StateValue"])
-    except Exception as e:
-        logger.error(str(e))
-        return ''
     
-def getConnectUsers(instanceId,startTime):
+def get_connect_minecraft_users(instanceId,startTime):
     try:
         queryRsp = cw_logs.start_query(
             logGroupName='/minecraft/serverlog/' + instanceId,
@@ -146,7 +110,7 @@ def getConnectUsers(instanceId,startTime):
                 dtX = ""
                 cdata = []
                 if data['status'] == 'Complete':
-                    if len(data['results']) > 0:
+                    if data['results']:
                         for rec in data['results']:
                             for dt in rec:
                                 if dt['field'] == 'bin(5m)':
@@ -181,16 +145,18 @@ def getConnectUsers(instanceId,startTime):
         logger.error("start_query: " + str(e) + " occurred.")
         return "[]"
 
-def getMetricData(instanceId,nameSpace,metricName,unit,statType,startTime,endTime,period):
+def get_metrics_data(instanceId,nameSpace,metricName,unit,statType,startTime,endTime,period):
+    logger.info("get_metrics_data: " + metricName + " - " + instanceId)
     cdata = []
     dimensions=[]
     dimensions.append({'Name': 'InstanceId','Value': instanceId})
     if metricName == "cpu_usage_active":
         dimensions.append({'Name': 'cpu','Value': "cpu-total"})
     elif metricName == "net_bytes_sent":
-        nic = utl.getSsmParam("/amplify/minecraftserverdashboard/" + instanceId + "/nic")
-        if nic != None:        
-            dimensions.append({'Name': 'interface','Value': nic})
+        dimensions.append({'Name': 'interface','Value': 'nic'})
+        # nic = utl.get_ssm_param("/minecraftserverdashboard/" + instanceId + "/nic")
+        # if nic is not None:        
+        #     dimensions.append({'Name': 'interface','Value': 'nic'})
 
     try:
         rsp = cw_client.get_metric_statistics(
@@ -204,9 +170,8 @@ def getMetricData(instanceId,nameSpace,metricName,unit,statType,startTime,endTim
             Unit=unit
         )
 
-        if len(rsp["Datapoints"]) == 0:
-            logger.warning('No Datapoint for namespace:' + nameSpace + ' - metricName: ' + metricName + ' - InstanceId: ' + instanceId)
-            logger.info("startTime: " + startTime.strftime("%Y/%m/%dT%H:%M:%S") + " endTime: " + endTime.strftime("%Y/%m/%dT%H:%M:%S") + " Period: " + str(period))
+        if rsp["Datapoints"]:
+            logger.warning('No Datapoint for namespace:' + metricName + ' - InstanceId: ' + instanceId)
             return "[]"
         else:
             for rec in rsp["Datapoints"]:
@@ -223,123 +188,120 @@ def getMetricData(instanceId,nameSpace,metricName,unit,statType,startTime,endTim
         logger.error('Something went wrong: ' + str(e))
         return "[]"
 
+def enable_scheduled_rule():    
+    evtRule = eb_client.describe_rule(Name=scheduled_event_bridge_rule)
+    if evtRule["State"] == "DISABLED":                    
+        eb_client.enable_rule(Name=scheduled_event_bridge_rule)
+        logger.info("Enabled Evt Bridge Rule")
+
+def state_change_response(instance_id):
+
+    reservation_instance = utl.list_server_by_id(instance_id)
+    instance_info = reservation_instance["Reservations"]["Instances"][0]
+    groupMembers = cog_auth.list_users_in_group(instance_id) 
+    ec2Status = utl.describe_instance_status(instance_id)
+    launchTime = instance_info["LaunchTime"]
+    if "Association" in instance_info["NetworkInterfaces"][0]:
+        publicIp = instance_info["NetworkInterfaces"][0]["Association"]["PublicIp"]
+    else:
+        publicIp = "none"
+
+    tags = {tag['Key']: tag['Value'] for tag in instance_info["Tags"]}
+
+    userEmail = 'minecraft-dashboard@maildrop.cc'
+    userEmail = tags.get("Owner", userEmail)
+
+    instanceName = "Undefined"
+    instanceName = tags.get("Name", instanceName)
+
+    # Converting to PST as the logs are in PST        
+    pstLaunchTime = launchTime.astimezone(pst)
+
+    # building payload
+    input = {
+        "id": instance_id,
+        "userEmail": userEmail,
+        "name": instanceName,
+        "type": instance_info["InstanceType"],
+        "state": instance_info["State"]["Name"].lower(),
+        "initStatus": ec2Status["initStatus"].lower(),
+        "iamStatus": ec2Status["iamStatus"].lower(),
+        "launchTime": pstLaunchTime.strftime("%m/%d/%Y - %H:%M:%S"),
+        "publicIp": publicIp,
+        "runningMinutes": utl.get_total_hours_running_per_month(instance_id),
+        "groupMembers": json.dumps(groupMembers)
+    }
+
+    return input
+    
+def schedule_event_response():
+
+    # Check for instances running to update their stats. It can only be a Schedule Event
+    instances_running = utl.list_servers_by_state("running")
+    
+    reservations = instances_running["Reservations"]
+    if not reservations["Instances"]:  
+        logger.error("No Instances Found for updating")
+        eb_client.disable_rule(Name=scheduled_event_bridge_rule)
+        logger.info("Disabled Evt Bridge Rule")
+        return "No Instances Found for updating"
+
+
+    instances_payload = []
+    dt_4_four_hours_before = datetime.now(tz=timezone.utc) - timedelta(hours=4)
+    dt_now = datetime.now(tz=timezone.utc)
+
+    for instance in reservations["Instances"]:
+        instance_info = {
+            'id': instance["InstanceId"],
+            'memStats': get_metrics_data(instance["InstanceId"], 'CWAgent', 'mem_used_percent', 'Percent', 'Average', dt_4_four_hours_before, dt_now, 300),
+            'cpuStats': get_metrics_data(instance["InstanceId"], 'CWAgent', 'cpu_usage_active', 'Percent', 'Average', dt_4_four_hours_before, dt_now, 300),
+            'networkStats': get_metrics_data(instance["InstanceId"], 'CWAgent', 'net_bytes_sent', 'Bytes', 'Sum', dt_4_four_hours_before, dt_now, 300),
+            'activeUsers': get_metrics_data(instance["InstanceId"], 'MinecraftDashboard', 'UserCount', 'None', 'Maximum', dt_4_four_hours_before, dt_now, 300),
+            #'alertMsg': get_alert(instance["InstanceId"])
+        }
+        instances_payload.append(instance_info)
+
+    return instances_payload
+
+def send_to_appsync(payload):
+    headers={"Content-Type": "application/json"}
+    # sending response to AppSync
+    response = requests.post(
+        endpoint,
+        auth=auth,
+        headers=headers,
+        json=payload
+    )
+    logger.info(response.json())
+
 def handler(event, context):     
-    dt_4_four_hours_before=datetime.utcnow() - timedelta(hours=4)
-    dt_now = datetime.utcnow()  
-    instancesInfo = []
+    
     # Event Brigde
     if 'detail-type' in event:
         logger.info(event['detail-type'])
         if event['detail-type'] == "EC2 Instance State-change Notification":   
-            logger.info("Found InstanceId: " + event['detail']['instance-id'] + ' at ' + event['detail']['state'] + ' state')
-            instancesInfo = utl.describeInstances("id",event['detail']['instance-id'])
-            scheduledEventBridgeRuleName = utl.getSsmParam("/amplify/minecraftserverdashboard/scheduledrule")
-            if scheduledEventBridgeRuleName == None:
+            logger.info("Found InstanceId: " + event['detail']['instance-id'] + ' at ' + event['detail']['state'] + ' state')            
+            if not scheduled_event_bridge_rule:
                 logger.error("Scheduled Event Name not registered")
                 return "No Scheduled Event"         
-
-            instancesRunning = utl.describeInstances("state","running")
-            if len(instancesRunning) == 0:
-                eb_client.disable_rule(Name=scheduledEventBridgeRuleName)
-                logger.info("Disabled Evt Bridge Rule")
-            else:
-                evtRule = eb_client.describe_rule(Name=scheduledEventBridgeRuleName)
-                if evtRule["State"] == "DISABLED":                    
-                    eb_client.enable_rule(Name=scheduledEventBridgeRuleName)
-                    logger.info("Enabled Evt Bridge Rule")
-
-        elif event['detail-type'] == "Scheduled Event":
-                # Check for instances running to update their stats. It can only be a Schedule Event
-                instancesInfo = utl.describeInstances("state","running")
-                if len(instancesInfo) == 0:  
-                    logger.error("No Instances Found for updating")
-                    return "No Instances Found for updating"
-
-
-    for instance in instancesInfo:
-        instanceId = instance["Instances"][0]["InstanceId"]
-
-        #
-        # Group Checking and Creation
-        #
-        groupMembers = []
-        cogGrp = _group_exists(instanceId,userPoolId)
-        if cogGrp:
-            response = cognito_idp.list_users_in_group(
-                UserPoolId=userPoolId,
-                GroupName=instanceId
-            )            
-            if len(response["Users"]) > 0:
-                for user in response["Users"]:            
-                    for att in user["Attributes"]:
-                        if att["Name"] == "email":
-                            email = att["Value"]
-                        elif att["Name"] == "sub":
-                            id = att["Value"]
-                        elif att["Name"] == "given_name":
-                            given_name = att["Value"]
-                        elif att["Name"] == "family_name":
-                            family_name = att["Value"]
-                    groupMembers.append({
-                        "id": id,
-                        "email": email,
-                        "fullname": given_name + ' ' + family_name                        
-                    }) 
             
-        ec2Status = utl.describeInstanceStatus(instanceId)
-        guid = str(uuid4())
-        launchTime = instance["Instances"][0]["LaunchTime"]
-        if "Association" in instance["Instances"][0]["NetworkInterfaces"][0]:
-            publicIp = instance["Instances"][0]["NetworkInterfaces"][0]["Association"]["PublicIp"]
-        else:
-            publicIp = "none"
+            if event['detail']['state'] == "running" or event['detail']['state'] == "pending":
+                enable_scheduled_rule()
 
-        userEmail = 'minecraft-dashboard@maildrop.cc'
-        for tag in instance["Instances"][0]["Tags"]:
-            if tag["Key"] == "User":
-                userEmail = tag["Value"]
-
-        instanceName = "Undefined"
-        for tag in instance["Instances"][0]["Tags"]:
-            if tag["Key"] == "Name":
-               instanceName = tag["Value"]
-
-        input = { "id": instanceId }
-
-        # Converting to PST as the logs are in PST        
-        pstLaunchTime = launchTime.astimezone(pst)
-        #activeUsers = getConnectUsers(instanceId, datetime.utcfromtimestamp(pstLaunchTime.timestamp()))
-
-        if event['detail-type'] == "EC2 Instance State-change Notification":
-            input["userEmail"] = userEmail
-            input["name"] = instanceName
-            input["type"] = instance["Instances"][0]["InstanceType"]
-            input["state"] = instance["Instances"][0]["State"]["Name"].lower()
-            input["initStatus"] = ec2Status["initStatus"].lower()
-            input["iamStatus"] = ec2Status["iamStatus"].lower()
-            input["launchTime"] = pstLaunchTime.strftime("%m/%d/%Y - %H:%M:%S")
-            input["publicIp"] = publicIp
-            input["runningMinutes"] = ""
-            input["groupMembers"] = json.dumps(groupMembers)
+            input = state_change_response(event['detail']['instance-id'])
             payload={"query": changeServerState, 'variables': { "input": input }}
 
-        if event['detail-type'] == "Scheduled Event":
-            input['activeUsers'] = getMetricData(instanceId,'MinecraftDashboard','UserCount','None','Maximum',dt_4_four_hours_before,dt_now,300)
-            # input["cpuStats"] = getMetricData(instanceId,'AWS/EC2','CPUUtilization','Percent','Average',dt_4_four_hours_before,dt_now,300)
-            # input["networkStats"] = getMetricData(instanceId,'AWS/EC2','NetworkOut','Bytes','Average',dt_4_four_hours_before,dt_now,300)
-            input["cpuStats"] = getMetricData(instanceId,'CWAgent','cpu_usage_active','Percent','Average',dt_4_four_hours_before,dt_now,300)
-            input["networkStats"] = getMetricData(instanceId,'CWAgent','net_bytes_sent','Bytes','Sum',dt_4_four_hours_before,dt_now,300)
-            input["memStats"] = getMetricData(instanceId,'CWAgent','mem_used_percent','Percent','Average',dt_4_four_hours_before,dt_now,300)
-            input["alertMsg"] = getAlert(instanceId)
-            payload={"query": putServerMetric, 'variables': { "input": input }}
-        
-        response = requests.post(
-            endpoint,
-            auth=auth,
-            headers=headers,
-            json=payload
-        )
-        logger.info(response.json())
+            send_to_appsync(payload)
 
-    return response.json()
+        elif event['detail-type'] == "Scheduled Event":
+            input = schedule_event_response()
+            
+            for metrics in input:
+                payload={"query": putServerMetric, 'variables': { "input": metrics }}
+                send_to_appsync(payload)        
+        else:
+            logger.error("No Event Found")
+            return "No Event Found"
 
+    return "Event Successful processed"

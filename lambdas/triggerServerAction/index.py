@@ -1,11 +1,8 @@
-import urllib
 import boto3
 import logging
 import os
 import json
 import time
-from jose import jwk, jwt
-from jose.utils import base64url_decode
 import helpers
 
 logger = logging.getLogger()
@@ -14,174 +11,90 @@ utl = helpers.Utils()
 dyn = helpers.Dyn()
 
 appValue = os.getenv('TAG_APP_VALUE')
-ec2InstanceProfileName = os.getenv('EC2_INSTANCE_PROFILE_NAME')
-ec2InstanceProfileArn = os.getenv('EC2_INSTANCE_PROFILE_ARN')
-configServerLambdaName = os.getenv('CONFIG_SERVER_LAMBDA_NAME')
+ec2_instance_profile_name = os.getenv('EC2_INSTANCE_PROFILE_NAME')
+ec2_instance_profile_arn = os.getenv('EC2_INSTANCE_PROFILE_ARN')
+config_server_lambda_name = os.getenv('CONFIG_SERVER_LAMBDA_NAME')
+cognito_pool_id = os.getenv('COGNITO_USER_POOL_ID')
 
 ssm = boto3.client('ssm')
 sfn = boto3.client('stepfunctions')
 ec2 = boto3.client('ec2')
 lambda_client = boto3.client('lambda')
 cw_client = boto3.client('cloudwatch')
-cognito_idp = boto3.client('cognito-idp')
+auth = helpers.Auth(cognito_pool_id)
 
 sftArn = os.getenv('StepFunctionsArn')
 botoSession = boto3.session.Session()
 awsRegion = botoSession.region_name
 
-adminEmail = utl.getSsmParam('/minecraftserverdashboard/adminemail')
+def manage_iam_profile(instance_id):
+    iam_profile = utl.describe_iam_profile(instance_id, "associated")
+    logger.info(iam_profile)
 
-def is_token_valid(token, keys):
-    # https://github.com/awslabs/aws-support-tools/tree/master/Cognito/decode-verify-jwt
-    headers = jwt.get_unverified_headers(token)
-    kid = headers['kid']
-    # search for the kid in the downloaded public keys
-    key_index = -1
-    for i in range(len(keys)):
-        if kid == keys[i]['kid']:
-            key_index = i
-            break
-    if key_index == -1:
-        logger.error('Public key not found in jwks.json')
-        return None
-    # construct the public key
-    public_key = jwk.construct(keys[key_index])
-    # get the last two sections of the token,
-    # message and signature (encoded in base64)
-    message, encoded_signature = str(token).rsplit('.', 1)
-    # decode the signature
-    decoded_signature = base64url_decode(encoded_signature.encode('utf-8'))
-    # verify the signature
-    if not public_key.verify(message.encode("utf8"), decoded_signature):
-        logger.error('Signature verification failed')
-        return None
-    logger.info('Signature successfully verified')
-    # since we passed the verification, we can now safely
-    # use the unverified claims
-    claims = jwt.get_unverified_claims(token)
-    
-    # additionally we can verify the token expiration
-    if time.time() > claims['exp']:
-        logger.error('Token is expired')
-        return None
-    # now we can use the claims
-    return claims
-
-def iamProfileTask(instance):
-    loopCount = 0
-
-    iamProfile = utl.describeIamProfile(instance,"associated")
-    if iamProfile != None and iamProfile['Arn'] == ec2InstanceProfileArn:
-        logger.info("Instance IAM Profile is already valid: " + iamProfile['Arn'] )
+    if iam_profile and iam_profile['Arn'] == ec2_instance_profile_arn:
+        logger.info(f"Instance IAM Profile is already valid: {iam_profile['Arn']}")
         return True
-
-    if iamProfile != None:
-        disassociateIamProfile(iamProfile['AssociationId'])
-        while True:
-            checkStatusCommand = utl.describeIamProfile(instance,"disassociated")
-            time.sleep(10)
-            if checkStatusCommand != None:
-                loopCount = loopCount + 1                
-            else:
-                break
-
-            if loopCount >= 5:
-                logger.warn("Profile timeout during disassociating")
-                return False
+    elif iam_profile:
+        logger.info(f"Instance IAM Profile is invalid: {iam_profile['Arn']}")
+        rsp = disassociate_iam_profile(instance_id, iam_profile['AssociationId'])
+        if not rsp:
+            return False
 
     logger.info("Attaching IAM role to the Minecraft Instance")
-    resp = attachIamProfile(instance)
-    return resp
-        
-def disassociateIamProfile(id):
-    logger.info("disassociateIamProfile: " + id)
-    ec2.disassociate_iam_instance_profile(
-        AssociationId=id
-     )
+    return attach_iam_profile(instance_id)
 
-def attachIamProfile(instance):      
-    try:  
-        # Associating the IAM Profile to the Instance
-        logger.info("attachIamProfile: " + ec2InstanceProfileName)
-        ec2.associate_iam_instance_profile(
-            IamInstanceProfile={
-                'Name': ec2InstanceProfileName
-            },
-            InstanceId=instance
-        )
-        return True
+def disassociate_iam_profile(instance_id, association_id):
+    logger.info(f"Disassociating IAM profile: {association_id}")
+    ec2.disassociate_iam_instance_profile(AssociationId=association_id)
 
-    except Exception as e:
-        logger.error('Something went wrong at attachIamProfile: ' + str(e))
+    def check_disassociated_status():
+        return utl.describe_iam_profile(instance_id, "disassociated", association_id) is not None
+
+    if not retry_operation(check_disassociated_status, max_retries=30, delay=5):
+        logger.warn("Profile timeout during disassociating")
         return False
 
-def group_exists(instanceId, poolId):
-    try:
-        grpRsp = cognito_idp.get_group(
-                GroupName=instanceId,
-                UserPoolId=poolId
-            )
-            
-        return True
-        
-    except cognito_idp.exceptions.ResourceNotFoundException:
-        logger.warning("Group does not exist.")
+    return True
+
+def attach_iam_profile(instance_id):
+    logger.info(f"Attaching IAM profile: {ec2_instance_profile_name}")
+    response = ec2.associate_iam_instance_profile(
+        IamInstanceProfile={"Name": ec2_instance_profile_name},
+        InstanceId=instance_id
+    )
+
+    def check_associated_status():
+        iam_profile = utl.describe_iam_profile(instance_id, "associated")
+        logger.info(iam_profile)
+        return iam_profile and iam_profile['Arn'] == ec2_instance_profile_arn
+
+    if not retry_operation(check_associated_status, max_retries=30, delay=5):
+        logger.warn("Profile timeout during association")
         return False
-            
-def create_group(instanceId, poolId):    
-    try:
-        grpRsp = cognito_idp.create_group(
-            GroupName=instanceId,
-            UserPoolId=poolId,
-            Description='Minecraft Dashboard'
-        )
 
-        return True
+    return True
 
-    except Exception as e:
-            logger.info("Exception create_group")
-            logger.error(str(e))
-            return False
-        
-def add_user_to_group(instanceId,poolId,userEmail):
-        try:
-            user = cognito_idp.list_users(
-                UserPoolId=poolId,
-                Filter="email = '" + userEmail + "'"
-            )
+def retry_operation(operation, max_retries, delay):
+    retries = 0
+    while retries < max_retries:
+        if operation():
+            return True
+        retries += 1
+        time.sleep(delay)
+    return False
 
-            if len(user['Users']) == 0:
-                logger.error("Unable to find user: " + userEmail + ". User has to create a profile by login in this website")
-                return {"err": "Unable to find user: " + userEmail + ". User has to create a profile by login in this website" }
-
-            userRsp = cognito_idp.admin_add_user_to_group(
-                UserPoolId=poolId,
-                Username=user['Users'][0]["Username"],
-                GroupName=instanceId
-            )
-
-            return {"msg": "User added to the group"}
-    
-        except Exception as e:
-            logger.info("Exception admin_add_user_to_group")
-            logger.warning(str(e))
-            return { "err": str(e) } 
-
-def updateAlarm(instanceId):
+def update_alarm(instanceId):
     logger.info("updateAlarm: " + instanceId)
     instanceInfo = dyn.GetInstanceAttr(instanceId)
     # Default values
     alarmMetric = "CPUUtilization"
     alarmThreshold = "10"
+    
+    if instanceInfo and instanceInfo['code'] == 200:
+        alarmMetric = instanceInfo['msg'].get('alarmMetric')
+        alarmThreshold = instanceInfo['msg'].get('alarmThreshold')
 
-    if instanceInfo != None and instanceInfo['code'] == 200:
-        if 'alarmMetric' in instanceInfo['msg']:
-            alarmMetric = instanceInfo['msg']['alarmMetric']
-            
-        if 'alarmThreshold' in instanceInfo['msg']:
-            alarmThreshold = instanceInfo['msg']['alarmThreshold']
-        
-    elif instanceInfo != None and instanceInfo['code'] == 400:
+    elif instanceInfo and instanceInfo['code'] == 400:
         logger.info("Using Default values for Alarming")
 
     else:
@@ -218,181 +131,163 @@ def updateAlarm(instanceId):
         )
 
     logger.info("Alarm configured to " + alarmMetric + " and " + alarmThreshold)
-            
-def handler(event, context):
-    if not 'identity' in event:
-        logger.error("No Identity found")
-        resp = {"err": "No Identity found" }
-        return utl.response(401,resp)
 
-    iss = event["identity"]["claims"]["iss"] 
-    token = event["request"]["headers"]["authorization"] 
-    keys_url = iss + '/.well-known/jwks.json'
-    # download the key
-    with urllib.request.urlopen(keys_url) as f:
-        response = f.read()
-    keys = json.loads(response.decode('utf-8'))['keys']
-
-    token_claims = is_token_valid(token,keys)
-
-    if token_claims == None:
-        logger.error("Invalid Token")
-        resp = {"err": "Invalid Token" }
-        return utl.response(401,resp)        
-
-    if 'cognito:username' in token_claims:
-        userName=token_claims["cognito:username"]
-    else:
-        userName=token_claims["username"]
-
-    # Get User Email from Cognito
-    cog_user = cognito_idp.admin_get_user(
-        UserPoolId=iss.split("/")[3],
-        Username=userName
+def invoke_step_functions(instanceId,action):
+    # Invoking Step-Functions to change EC2 Stage
+    sfn_rsp = sfn.start_execution(
+        stateMachineArn=sftArn,
+        input='{\"instanceId\" : \"' + instanceId + '\", \"action\" : \"' + action + '\"}'
     )
+    #resp = {"msg" : sfn_rsp["executionArn"]}
 
-    invokerEmail=""
-    for att in cog_user["UserAttributes"]:
-        if att["Name"] == "email":
-            invokerEmail = att["Value"]
-            break
+    return True
 
-    try:                 
-        logger.info(event["arguments"]["input"])
-        instanceId = event["arguments"]["input"]["instanceId"]
-        action = event["arguments"]["input"]["action"]
+# function to create a DynamoDb
+def create_dynamodb(instanceId):
+    logger.info("create_dynamodb: " + instanceId)
+    dyn.CreateTable(instanceId)
 
-        if 'params' in event["arguments"]["input"]:
-            params = event["arguments"]["input"]['params']
+
+def action_process(action,instance_id):
+
+    action = action.lower()
+
+    if action == "startserver":
+        #update_alarm(instance_id)
+        invoke_step_functions(instance_id,"start")
+        return utl.response(200,"Start command submitted")
+    elif action == "restartserver":
+        invoke_step_functions(instance_id,"restart")
+        return utl.response(200,"Restart command submitted")
+    elif action == "stopserver":
+        invoke_step_functions(instance_id, "stop")
+        return utl.response(200,"Stop command submitted")
+    elif action == "fixserverrole":
+        # attach the IAM Profile to the EC2 Instance
+        resp = manage_iam_profile(instance_id)
+        print(resp)
+        # Execute Config Server Lambda to configure EC2 SSM
+        if resp:
+            msg = { "msg" : "Successfuly attached IAM role to the Minecraft Instance" }
+            return utl.response(200,msg)
         else:
-            params = None
+            error = { "err" :"Attaching IAM role failed" }
+            logger.error("Attaching IAM role failed")
+            return utl.response(500,error)
+    else:
+        return utl.response(400, {"err": f"Invalid action: {action}"})
+    
 
-        if 'paramKey' in event["arguments"]["input"]:
-            paramKey = event["arguments"]["input"]['paramKey']
-        else:
-            paramKey = None
+    # # GET INSTANCE INFO
+    # elif action == "get_instance_attr":
+    #     response = dyn.GetInstanceAttr(instance_id)
+    #     return utl.response(response["code"],response["msg"])
 
-        if 'paramValue' in event["arguments"]["input"]:
-            paramValue = event["arguments"]["input"]['paramValue']
-        else:
-            paramValue = None
+    
+    # # GET INSTANCE INFO
+    # elif action == "set_instance_attr":            
+    #     response = dyn.SetInstanceAttr(instance_id,params)
+    #     if 'at' in params:
+    #         updateAlarm(instance_id)
+    #     return utl.response(response["code"],response["msg"])            
 
-        #
-        # Autorization Begin
-        #
-        authorized = False
-        cognitoGroups = event["identity"]["groups"] 
-        if cognitoGroups != None:       
-            for group in cognitoGroups:
-                if (group == instanceId):    
-                    authorized = True
-                    break
-       
-        if invokerEmail == adminEmail:
-            logger.info("Authorized as Admin")
-            authorized = True
-        
-        if authorized == False:
-            resp = {"err": 'User not authorized'}
-            logger.error(invokerEmail + " is not authorized as Admin")
-            return utl.response(401,resp)
+    # except KeyError:
+    #     logger.error("Invalid input data format")
+    #     resp = {"err": "Invalid input data format"}
+    #     return utl.response(500, resp)
 
-        #
-        # Group Checking and Creation
-        #
-        cogGrp = group_exists(instanceId,iss.split("/")[3])
-        if cogGrp == False:
-            # Create Group
-            logger.warning("Group " + instanceId + " does not exit. Creating one.")
-            crtGrp = create_group(instanceId,iss.split("/")[3])
-            if crtGrp:
-                # adding Admin Account to the group
-                logger.info("Group created. Now adding admin user to it.")
-                resp = add_user_to_group(instanceId,iss.split("/")[3],adminEmail)
-            else:
-                return utl.response(401,{"err": 'Cognito group creation failed'})
-
-        #
-        # Action Processing
-        #
-        if action == "add_user":
-            # get only prefix if user provided @ accidently and add the gmail suffix
-            gmailAccount = paramValue.split("@")[0] + '@gmail.com'
-            resp = add_user_to_group(instanceId,iss.split("/")[3],gmailAccount)
-            if 'msg' in  resp:
-                return utl.response(200,resp)
-            else:
-                logger.error(invokerEmail + " is not authorized to add_user")
-                return utl.response(500,resp)
-
-        if action == "config_iam":
-            # attach the IAM Profile to the EC2 Instance
-            resp = iamProfileTask(instanceId)
-            print(resp)
-            # Execute Config Server Lambda to configure EC2 SSM
-            if resp:
-                msg = { "msg" : "Successfuly attached IAM role to the Minecraft Instance" }
-                return utl.response(200,msg)
-            else:
-                error = { "err" :"Attaching IAM role failed" }
-                logger.error("Attaching IAM role failed")
-                return utl.response(500,error)
+    # except Exception as e:
+    #     resp = {"err": str(e)}
+    #     logger.error(str(e))
+    #     return utl.response(500,resp)
             
 
-        # ADD SSM PARAMETER
-        elif action == "add_parameter":            
-            response = utl.putSsmParam(paramKey,paramValue,'String')
-            resp = {"msg" : "Parameter saved"}
-            return utl.response(200,resp)
+def handle_local_invocation(event, context):
+    # Handle local invocations here
+    return action_process(event["action"], event["instanceId"])
 
-        # GET INSTANCE INFO
-        elif action == "get_instance_attr":
-            response = dyn.GetInstanceAttr(instanceId)
-            return utl.response(response["code"],response["msg"])
-
-        
-        # GET INSTANCE INFO
-        elif action == "set_instance_attr":            
-            response = dyn.SetInstanceAttr(instanceId,params)
-            if 'at' in params:
-                updateAlarm(instanceId)
-            return utl.response(response["code"],response["msg"])
-
-
-        # GET SSM PARAMETERS
-        elif action == "get_parameters":
-            response = utl.getSsmParameters(paramKey)
-            if response != None:
-                return utl.response(200,response)
+def handler(event, context):
+    try:
+        if 'request' in event:
+            if 'headers' in event['request']:
+                if 'authorization' in event['request']['headers']:
+                    # Get JWT token from header
+                    token = event['request']['headers']['authorization']
+                else:
+                    logger.error("No Authorization header found")
+                    return utl.response(401,{"err": "No Authorization header found" })
             else:
-                logger.error("get_parameters failed")
-                return utl.response(500,"No parameters")
-
-        # GET SSM PARAMETER
-        elif action == "get_parameter":
-            response = utl.getSsmParam(paramKey)
-            if response != None:
-                return utl.response(200,response)
-            else:
-                logger.error("get_parameter failed")
-                return utl.response(500,"No parameters")
-
+                logger.error("No headers found in request")
+                return utl.response(401,{"err": "No headers found in request" })
         else:
-            # Updating Alarm
-            if action == "start": 
-                updateAlarm(instanceId)
-
-            # Invoking Step-Functions to change EC2 Stage
-            sfn_rsp = sfn.start_execution(
-                stateMachineArn=sftArn,
-                input='{\"instanceId\" : \"' + instanceId + '\", \"action\" : \"' + action + '\"}'
-            )
-            resp = {"msg" : sfn_rsp["executionArn"]}
-
-            return utl.response(200,resp)
-            
+            # Local invocation
+            return handle_local_invocation(event, context)            
+            #logger.error("No request found in event")
+            #return utl.response(401,{"err": "No request found in event" })
     except Exception as e:
-        resp = {"err": str(e)}
-        logger.error(str(e))
-        return utl.response(500,resp)
-            
+        logger.error(f"Error processing request: {e}")
+        return utl.response(401,{"err": e })
+
+    # Get user info
+    user_attributes = auth.process_token(token)    
+
+    # Check if claims are valid
+    if user_attributes is None:
+        logger.error("Invalid Token")
+        return "Invalid Token"
+
+    #try:
+    instance_id = event["arguments"]["instanceId"]
+    if instance_id:
+        logger.info(f"Received instanceId: {instance_id}")
+    else:
+        logger.warning("No instanceId provided in the input data")
+
+    #
+    # Autorization Begin
+    #
+    authorized = False
+    cognitoGroups = event["identity"].get("groups") 
+    if cognitoGroups:       
+        for group in cognitoGroups:
+            if (group == instance_id):   
+                logger.info("Authorized server action for email %s on instance %s", user_attributes["email"], instance_id) 
+                authorized = True
+                break         
+
+    server_info = utl.list_server_by_id(instance_id)
+  
+    server_admin_email = ""
+    tags = server_info["Reservations"]["Instances"][0]["Tags"]
+    for tag in tags:
+        if tag['Key'] == 'Owner':
+            server_admin_email = tag['Value']
+
+    if server_admin_email == user_attributes["email"]:
+        logger.info("Authorized as server owner")
+        authorized = True
+    
+    if not authorized:
+        resp = {"err": "User not authorized"}
+        logger.error(user_attributes["email"] + " is not authorized as Server Owner")
+        return utl.response(401, resp)
+
+    #
+    # Group Checking and Creation
+    #
+    cogGrp = auth.group_exists(instance_id)
+    if not cogGrp:
+        # Create Group
+        logger.warning(f"Group {instance_id} does not exit. Creating one.")
+        crtGrp = auth.create_group(instance_id)
+        if crtGrp:
+            # adding Admin Account to the group
+            logger.info("Group created. Now adding admin user to it.")
+            # resp = add_user_to_group(instance_id,cognito_pool_id,adminEmail)
+        else:
+            return utl.response(401,{"err": 'Cognito group creation failed'})
+
+    # Calling action_process function to process the action with the mutation name
+    mutation_name = event["info"]["fieldName"]
+    return action_process(mutation_name,instance_id)
+    

@@ -27,41 +27,30 @@ export const useServerStore = defineStore("server", {
             try {
                 console.group("listServers");
 
+                this.loading = true
+
                 const results = await client.graphql({
                     query: queries.listServers
                 });
 
-                console.log(results.data.listServers);
-
-                if (results.data.listServers.length == 0) {
-                    console.log("No servers found");
+                if (results.data.listServers === null || results.data.listServers.length === 0) {
+                    console.warn("No servers found");
                     console.groupEnd();
+                    this.loading = false
                     return [];
                 }
 
-                this.serversList = results.data.listServers;
-
-                for (let i = 0; i < results.data.listServers.length; i++) {
-                    this.serversDict[results.data.listServers[i].id] = {}
-                    this.serversDict[results.data.listServers[i].id].id = results.data.listServers[i].id
-                    this.serversDict[results.data.listServers[i].id].name = results.data.listServers[i].name
-                    this.serversDict[results.data.listServers[i].id].memSize = results.data.listServers[i].memSize
-                    this.serversDict[results.data.listServers[i].id].diskSize = results.data.listServers[i].diskSize
-                    this.serversDict[results.data.listServers[i].id].vCpus = results.data.listServers[i].vCpus
-                    this.serversDict[results.data.listServers[i].id].state = results.data.listServers[i].state
-                    this.serversDict[results.data.listServers[i].id].initStatus = results.data.listServers[i].initStatus
-                    this.serversDict[results.data.listServers[i].id].iamStatus = results.data.listServers[i].iamStatus
-                    this.serversDict[results.data.listServers[i].id].publicIp = results.data.listServers[i].publicIp
-                    this.serversDict[results.data.listServers[i].id].launchTime = results.data.listServers[i].launchTime
-                    this.serversDict[results.data.listServers[i].id].runningMinutes = results.data.listServers[i].runningMinutes
-                    this.serversDict[results.data.listServers[i].id].groupMembers = results.data.listServers[i].groupMembers 
-                }
+                results.data.listServers.forEach(({ id, name, memSize, diskSize, vCpus, state, initStatus, iamStatus, publicIp, launchTime, runningMinutes, groupMembers }) => {
+                    this.serversDict[id] = { id, name, memSize, diskSize, vCpus, state, initStatus, iamStatus, publicIp, launchTime, runningMinutes, groupMembers };
+                });
 
                 console.groupEnd();
+                this.loading = false
                 return results.data.listServers;
 
             } catch (error) {
                 console.error(error);
+                this.loading = false
                 console.groupEnd();
                 throw error;
             }

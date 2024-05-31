@@ -126,7 +126,6 @@ def handler(event, context):
     else:
         start_date = dt_1st_day_of_month_ago
 
-
     # validate query type
     # validate jwt token
 

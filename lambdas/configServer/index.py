@@ -18,8 +18,8 @@ ec2 = boto3.client('ec2')
 appValue = os.getenv('TAG_APP_VALUE')
 appName = os.getenv('APP_NAME') 
 
-def getNicInformation(instance):
-    logger.info(instance + "- getNicInformation")
+def get_nic_information(instance):
+    logger.info(instance + "- get_nic_information")
 
     ssm_rsp = ssm.send_command(
             InstanceIds=[instance],
@@ -31,11 +31,11 @@ def getNicInformation(instance):
                 ]
             },
         )    
-    resp = checkExecutionLoop(instance,ssm_rsp["Command"]["CommandId"])
+    resp = check_execution_loop(instance,ssm_rsp["Command"]["CommandId"])
     logger.info(resp)   
 
-def minecraftInit(instance):
-    logger.info(instance + " - minecraftInit")
+def minecraft_init(instance):
+    logger.info(instance + " - minecraft_init")
     instanceInfo = dyn.GetInstanceAttr(instance)
     logger.info(instanceInfo)
 
@@ -66,9 +66,9 @@ def minecraftInit(instance):
         logger.warning("RunCommand or Working Directories are not defined")
         return False
 
-def cwAgentStatusCheck(instance):
-    logger.info(instance + " - cwAgentStatusCheck")
-    ssmAgentStatus = ssmExecCommands(instance,"AmazonCloudWatch-ManageAgent",{"action": ["status"],"mode": ["ec2"]})
+def cw_agent_status_check(instance):
+    logger.info(instance + " - cw_agent_status_check")
+    ssmAgentStatus = ssm_exec_commands(instance,"AmazonCloudWatch-ManageAgent",{"action": ["status"],"mode": ["ec2"]})
     #logger.info(ssmAgentStatus)
 
     # Checking Agent Status if Success. Failed messages occurs when the CloudWatch Agent is not installed. 
@@ -84,7 +84,7 @@ def cwAgentStatusCheck(instance):
                 logger.info("Agent is already running. Version :" + agentDetailsJson["version"])
                 # AmazonCloudWatch Agent configuration  
                 logger.info("Configuring agent")
-                ssmAgentConfig = ssmExecCommands(instance,"AmazonCloudWatch-ManageAgent",{"action": ["configure"],"mode": ["ec2"],"optionalConfigurationLocation": ["/amplify/minecraftserverdashboard/amazoncloudwatch-linux"],"optionalConfigurationSource": ["ssm"],"optionalRestart": ["yes"]})
+                ssmAgentConfig = ssm_exec_commands(instance,"AmazonCloudWatch-ManageAgent",{"action": ["configure"],"mode": ["ec2"],"optionalConfigurationLocation": ["/amplify/minecraftserverdashboard/amazoncloudwatch-linux"],"optionalConfigurationSource": ["ssm"],"optionalRestart": ["yes"]})
                 logger.info(ssmAgentConfig)
                 return { "code": 200, "msg": "Agent is already running. Version :" + agentDetailsJson["version"] }
             else:
@@ -96,8 +96,8 @@ def cwAgentStatusCheck(instance):
     else:
         return { "code": 500, "msg": "Failed" }
 
-def cwAgentInstall(instance):
-    ssmInstallAgent = ssmExecCommands(instance,"AWS-ConfigureAWSPackage",{"action": ["Install"],"name": ["AmazonCloudWatchAgent"]})
+def cw_agent_install(instance):
+    ssmInstallAgent = ssm_exec_commands(instance,"AWS-ConfigureAWSPackage",{"action": ["Install"],"name": ["AmazonCloudWatchAgent"]})
     #logger.info(ssmInstallAgent)
 
     # Checking Agent Status if Success. Failed messages occurs when the CloudWatch Agent is not installed. 
@@ -109,14 +109,14 @@ def cwAgentInstall(instance):
             logger.info(agentDetails)
         # AmazonCloudWatch Agent configuration 
         logger.info("Configuring agent") 
-        ssmAgentConfig = ssmExecCommands(instance,"AmazonCloudWatch-ManageAgent",{"action": ["configure"],"mode": ["ec2"],"optionalConfigurationLocation": ["/amplify/minecraftserverdashboard/amazoncloudwatch-linux"],"optionalConfigurationSource": ["ssm"],"optionalRestart": ["yes"]})
+        ssmAgentConfig = ssm_exec_commands(instance,"AmazonCloudWatch-ManageAgent",{"action": ["configure"],"mode": ["ec2"],"optionalConfigurationLocation": ["/amplify/minecraftserverdashboard/amazoncloudwatch-linux"],"optionalConfigurationSource": ["ssm"],"optionalRestart": ["yes"]})
         logger.info(ssmAgentConfig)
 
 def scriptExec(instance):
-    ssmRunScript = ssmExecCommands(instance,"AWS-RunRemoteScript",{"sourceType": ["GitHub"],"sourceInfo": ["{\"owner\":\"arturlr\", \"repository\": \"minecraft-server-dashboard\", \"path\": \"scripts/adding_cron.sh\", \"getOptions\": \"branch:dev\" }"],"commandLine": ["bash adding_cron.sh"]})
+    ssmRunScript = ssm_exec_commands(instance,"AWS-RunRemoteScript",{"sourceType": ["GitHub"],"sourceInfo": ["{\"owner\":\"arturlr\", \"repository\": \"minecraft-server-dashboard\", \"path\": \"scripts/adding_cron.sh\", \"getOptions\": \"branch:dev\" }"],"commandLine": ["bash adding_cron.sh"]})
     logger.info(ssmRunScript)
 
-def sendCommand(instance, param, docName):    
+def send_command(instance, param, docName):    
     ssm_rsp = ssm.send_command(
                 InstanceIds=[instance],
                 DocumentName=docName,
@@ -124,7 +124,7 @@ def sendCommand(instance, param, docName):
                 Parameters=param
             )
 
-    # logger.info("sendCommand " + instance + " - " + ssm_rsp["Command"]["Status"])
+    # logger.info("send_command " + instance + " - " + ssm_rsp["Command"]["Status"])
     return { "CommandId": ssm_rsp["Command"]["CommandId"], "Status": ssm_rsp["Command"]["Status"] }
 
 def listCommand(instance, commandId):
@@ -136,7 +136,7 @@ def listCommand(instance, commandId):
     logger.info("listCommand " + instance + " - " + ssm_rsp["Commands"][0]["Status"])
     return { "Status": ssm_rsp["Commands"][0]["Status"] }
 
-def getCommandDetails(instance, commandId):
+def get_command_details(instance, commandId):
     ssm_rsp = ssm.list_command_invocations(
             CommandId=commandId,
             InstanceId=instance,
@@ -149,7 +149,7 @@ def getCommandDetails(instance, commandId):
     logger.info("getCommandDetails " + instance + " - " + ssm_rsp["CommandInvocations"][0]["Status"])
     return { "Status": ssm_rsp["CommandInvocations"][0]["Status"], "pluginsDetails": pluginsDetails }
 
-def checkExecutionLoop(instanceId, commandId, sleepTime=5):
+def check_execution_loop(instanceId, commandId, sleepTime=5):
 
     loopCount = 0
     
@@ -157,7 +157,7 @@ def checkExecutionLoop(instanceId, commandId, sleepTime=5):
         checkStatusCommand = listCommand(instanceId, commandId)
         logger.info(instanceId + " - " + commandId + " - " + checkStatusCommand["Status"])
         if checkStatusCommand["Status"] == "Success":
-            getStatusDetails = getCommandDetails(instanceId, commandId)
+            getStatusDetails = get_command_details(instanceId, commandId)
             return getStatusDetails
         elif checkStatusCommand["Status"] == "Failed":
             return "Failed"
@@ -174,11 +174,11 @@ def checkExecutionLoop(instanceId, commandId, sleepTime=5):
             time.sleep(sleepTime)
 
 
-def ssmExecCommands(instanceId, docName, params):
-    logger.info("ssmExecCommands " + instanceId + " - " + docName)
+def ssm_exec_commands(instanceId, docName, params):
+    logger.info("ssm_exec_commands " + instanceId + " - " + docName)
 
-    command = sendCommand(instanceId, params, docName)
-    response = checkExecutionLoop(instanceId,command["CommandId"])
+    command = send_command(instanceId, params, docName)
+    response = check_execution_loop(instanceId,command["CommandId"])
 
     return response
 
@@ -187,15 +187,15 @@ def handler(event, context):
         instanceId = event["instanceId"]
 
         # Execute minecraft initialization
-        minecraftInit(instanceId)
+        minecraft_init(instanceId)
 
         # Nic Value
-        getNicInformation(instanceId)
+        get_nic_information(instanceId)
 
         ## CloudWatch Agent Steps 
-        cwAgentStatus = cwAgentStatusCheck(instanceId)
+        cwAgentStatus = cw_agent_status_check(instanceId)
         if cwAgentStatus['code'] != 200:
-            cwAgentInstall(instanceId)
+            cw_agent_install(instanceId)
             scriptExec(instanceId)
             return { "code": 200, "msg": "CW Agent installed and Script executed"}
         else:

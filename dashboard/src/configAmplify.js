@@ -21,7 +21,7 @@ export function configAmplify() {
                             'aws.cognito.signin.user.admin'
                         ],
                         responseType: 'code'
-                    }
+                    },
                 },
                 identityPoolId: import.meta.env.VITE_IDENTITY_POOL_ID, // REQUIRED - Amazon Cognito Identity Pool ID
                 region: import.meta.env.VITE_AWS_REGION, // REQUIRED - Amazon Cognito Region

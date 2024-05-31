@@ -256,13 +256,13 @@ function classColor(sState) {
     }
 }
 
-async function subscribePutServerMetric() {
+function subscribePutServerMetric() {
 
-    const createSub = await graphQlClient
+    const createSub = graphQlClient
         .graphql({ query: subscriptions.onPutServerMetric })
         .subscribe({
             next: ({ data }) => {
-                console.log("updating metrics for: " + data.onPutServerMetric.id)
+                console.log("updating metrics for: " + data)
                 if (data.onPutServerMetric.id === serverStore.selectedServer.id) {
                     const cpuData = JSON.parse(data.onPutServerMetric.cpuStats)
                     const memData = JSON.parse(data.onPutServerMetric.memStats)
@@ -293,19 +293,19 @@ onMounted(async () => {
 
 <template>
 
-    <v-card>
+    <v-card variant="plain">
         <VueApexCharts height="70" :options="usersOptions" :series="usersSeries" />
     </v-card>
 
-    <v-card>
+    <v-card variant="plain">
         <VueApexCharts height="70" :options="cpuOptions" :series="cpuSeries" />
     </v-card>
 
-    <v-card>
+    <v-card variant="plain">
         <VueApexCharts height="70" :options="memOptions" :series="memSeries" />
     </v-card>
 
-    <v-card>
+    <v-card variant="plain">
         <VueApexCharts height="70" :options="netOptions" :series="netSeries" />
     </v-card>
 </template>

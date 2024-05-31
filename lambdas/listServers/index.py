@@ -1,66 +1,25 @@
 import boto3
 import logging
 import os
-import json
-import urllib.request
-import time
-from datetime import date, datetime, timezone, timedelta
-from jose import jwk, jwt
-from jose.utils import base64url_decode
+import concurrent.futures
 import helpers
 import pytz
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-utl = helpers.Utils()
-utc = pytz.utc
-pst = pytz.timezone('US/Pacific')
-
 ec2_client = boto3.client('ec2')
 ec2 = boto3.resource('ec2')
-ct_client = boto3.client('cloudtrail')
 cognito_idp = boto3.client('cognito-idp')
 ENCODING = 'utf-8'
 
 appValue = os.getenv('TAG_APP_VALUE')
 cognito_pool_id = os.getenv('COGNITO_USER_POOL_ID')
 
-def is_token_valid(token, keys):
-    # https://github.com/awslabs/aws-support-tools/tree/master/Cognito/decode-verify-jwt
-    headers = jwt.get_unverified_headers(token)
-    kid = headers['kid']
-    # search for the kid in the downloaded public keys
-    key_index = -1
-    for i in range(len(keys)):
-        if kid == keys[i]['kid']:
-            key_index = i
-            break
-    if key_index == -1:
-        logger.error('Public key not found in jwks.json')
-        return None
-    # construct the public key
-    public_key = jwk.construct(keys[key_index])
-    # get the last two sections of the token,
-    # message and signature (encoded in base64)
-    message, encoded_signature = str(token).rsplit('.', 1)
-    # decode the signature
-    decoded_signature = base64url_decode(encoded_signature.encode('utf-8'))
-    # verify the signature
-    if not public_key.verify(message.encode("utf8"), decoded_signature):
-        logger.error('Signature verification failed')
-        return None
-    logger.info('Signature successfully verified')
-    # since we passed the verification, we can now safely
-    # use the unverified claims
-    claims = jwt.get_unverified_claims(token)
-    
-    # additionally we can verify the token expiration
-    if time.time() > claims['exp']:
-        logger.error('Token is expired')
-        return None
-    # now we can use the claims
-    return claims
+auth = helpers.Auth(cognito_pool_id)
+utl = helpers.Utils()
+utc = pytz.utc
+pst = pytz.timezone('US/Pacific')
 
 def group_exists(instanceId, poolId):
     try:
@@ -75,188 +34,160 @@ def group_exists(instanceId, poolId):
         logger.warning("Group does not exist.")
         return False
 
-def extractStateEventTime(evt,previousState,instanceId):
-    ctEvent = json.loads(evt['CloudTrailEvent'])
-    if 'responseElements' in ctEvent:
-        if ctEvent['responseElements'] != None and 'instancesSet' in ctEvent['responseElements']:
-            if 'items' in ctEvent['responseElements']['instancesSet']:
-                for item in ctEvent['responseElements']['instancesSet']['items']:
-                    if item['instanceId'] == instanceId and item['previousState']['name'] == previousState:
-                        return ctEvent['eventTime']
+# def extractStateEventTime(evt,previousState,instanceId):
+#     ctEvent = json.loads(evt['CloudTrailEvent'])
+#     if 'responseElements' in ctEvent:
+#         if ctEvent['responseElements'] != None and 'instancesSet' in ctEvent['responseElements']:
+#             if 'items' in ctEvent['responseElements']['instancesSet']:
+#                 for item in ctEvent['responseElements']['instancesSet']['items']:
+#                     if item['instanceId'] == instanceId and item['previousState']['name'] == previousState:
+#                         return ctEvent['eventTime']
     
-    return None
+#     return None
 
-def getInstanceHoursFromCloudTailEvents(instanceId):
-    totalMinutes = 0
+# def getInstanceHoursFromCloudTailEvents(instanceId):
+#     totalMinutes = 0
 
-    eventData = []
+#     eventData = []
 
-    paginator = ct_client.get_paginator('lookup_events')
-    StartingToken = None
+#     paginator = ct_client.get_paginator('lookup_events')
+#     StartingToken = None
     
-    page_iterator = paginator.paginate(
-    	LookupAttributes=[{'AttributeKey':'ResourceName','AttributeValue': instanceId}],
-    	PaginationConfig={'PageSize':50, 'StartingToken':StartingToken },
-        StartTime=datetime.utcnow().replace(day=1,hour=0,minute=0,second=0),
-        EndTime=datetime.utcnow()
-        )
-    for page in page_iterator:
-        for evt in page['Events']:
-            if evt['EventName'] == "RunInstances":
-                ctEvent = json.loads(evt['CloudTrailEvent'])
-                eventData.append({'s': 'StartInstances', 'x': ctEvent['eventTime'] })
+#     page_iterator = paginator.paginate(
+#     	LookupAttributes=[{'AttributeKey':'ResourceName','AttributeValue': instanceId}],
+#     	PaginationConfig={'PageSize':50, 'StartingToken':StartingToken },
+#         StartTime=datetime.utcnow().replace(day=1,hour=0,minute=0,second=0),
+#         EndTime=datetime.utcnow()
+#         )
+#     for page in page_iterator:
+#         for evt in page['Events']:
+#             if evt['EventName'] == "RunInstances":
+#                 ctEvent = json.loads(evt['CloudTrailEvent'])
+#                 eventData.append({'s': 'StartInstances', 'x': ctEvent['eventTime'] })
                 
-            if evt['EventName'] == "StartInstances":
-                startEvent = extractStateEventTime(evt,"stopped",instanceId)
-                if startEvent != None:
-                    eventData.append({'s': 'StartInstances', 'x': startEvent })
+#             if evt['EventName'] == "StartInstances":
+#                 startEvent = extractStateEventTime(evt,"stopped",instanceId)
+#                 if startEvent is not None:
+#                     eventData.append({'s': 'StartInstances', 'x': startEvent })
 
-            if evt['EventName'] == "StopInstances":
-                stopEvent = extractStateEventTime(evt,"running",instanceId) 
-                if stopEvent != None:
-                    eventData.append({'s': 'StopInstances', 'x': stopEvent })
+#             if evt['EventName'] == "StopInstances":
+#                 stopEvent = extractStateEventTime(evt,"running",instanceId) 
+#                 if stopEvent is not None:
+#                     eventData.append({'s': 'StopInstances', 'x': stopEvent })
  
-    data_points = sorted(eventData, key=lambda k : k['x'])
+#     data_points = sorted(eventData, key=lambda k : k['x'])
     
-    dtStartEvent = None
-    dtStopEvent = None
-    for point in data_points:
-        if point['s'] == "StartInstances":
-            dtStartEvent = datetime.fromisoformat(point['x'].replace("Z", "+00:00"))
-            continue
-        elif point['s'] == "StopInstances":
-            if isinstance(dtStartEvent, datetime):
-                dtStopEvent = datetime.fromisoformat(point['x'].replace("Z", "+00:00"))
-            else:
-                # Instance started before the beginning of the month
-                dtStartEvent = datetime.now().replace(day=1,hour=0,minute=0,second=0)
-                dtStopEvent = datetime.fromisoformat(point['x'].replace("Z", "+00:00")).replace(tzinfo=None)
+#     dtStartEvent = None
+#     dtStopEvent = None
+#     for point in data_points:
+#         if point['s'] == "StartInstances":
+#             dtStartEvent = datetime.fromisoformat(point['x'].replace("Z", "+00:00"))
+#             continue
+#         elif point['s'] == "StopInstances":
+#             if isinstance(dtStartEvent, datetime):
+#                 dtStopEvent = datetime.fromisoformat(point['x'].replace("Z", "+00:00"))
+#             else:
+#                 # Instance started before the beginning of the month
+#                 dtStartEvent = datetime.now().replace(day=1,hour=0,minute=0,second=0)
+#                 dtStopEvent = datetime.fromisoformat(point['x'].replace("Z", "+00:00")).replace(tzinfo=None)
 
-        if isinstance(dtStartEvent, datetime) and isinstance(dtStopEvent, datetime):
-            delta = dtStopEvent.replace(tzinfo=None) - dtStartEvent.replace(tzinfo=None)
-            #print(instanceId + ' s:' + dtStartEvent.strftime("%m/%d/%Y - %H:%M:%S") + ' - e:' + dtStopEvent.strftime("%m/%d/%Y - %H:%M:%S") + ' = ' + str(round(delta.total_seconds()/60,2)))
-            totalMinutes = totalMinutes + round(delta.total_seconds()/60,2)
-            dtStartEvent = None
-            dtStopEvent = None
+#         if isinstance(dtStartEvent, datetime) and isinstance(dtStopEvent, datetime):
+#             delta = dtStopEvent.replace(tzinfo=None) - dtStartEvent.replace(tzinfo=None)
+#             #print(instanceId + ' s:' + dtStartEvent.strftime("%m/%d/%Y - %H:%M:%S") + ' - e:' + dtStopEvent.strftime("%m/%d/%Y - %H:%M:%S") + ' = ' + str(round(delta.total_seconds()/60,2)))
+#             totalMinutes = totalMinutes + round(delta.total_seconds()/60,2)
+#             dtStartEvent = None
+#             dtStopEvent = None
 
-    # in case the instance is still running
-    if isinstance(dtStartEvent, datetime) and not isinstance(dtStopEvent, datetime):
-            dtStopEvent = datetime.utcnow()
-            delta = dtStopEvent.replace(tzinfo=None) - dtStartEvent.replace(tzinfo=None)
-            #print(instanceId + ' s:' + dtStartEvent.strftime("%m/%d/%Y - %H:%M:%S") + ' - e:' + dtStopEvent.strftime("%m/%d/%Y - %H:%M:%S") + ' = ' + str(round(delta.total_seconds()/60,2)))
-            totalMinutes = totalMinutes + round(delta.total_seconds()/60,2)
-            dtStartEvent = None
-            dtStopEvent = None                               
+#     # in case the instance is still running
+#     if isinstance(dtStartEvent, datetime) and not isinstance(dtStopEvent, datetime):
+#             dtStopEvent = datetime.utcnow()
+#             delta = dtStopEvent.replace(tzinfo=None) - dtStartEvent.replace(tzinfo=None)
+#             #print(instanceId + ' s:' + dtStartEvent.strftime("%m/%d/%Y - %H:%M:%S") + ' - e:' + dtStopEvent.strftime("%m/%d/%Y - %H:%M:%S") + ' = ' + str(round(delta.total_seconds()/60,2)))
+#             totalMinutes = totalMinutes + round(delta.total_seconds()/60,2)
+#             dtStartEvent = None
+#             dtStopEvent = None                               
                     
-    return totalMinutes
+#     return totalMinutes
 
 def handler(event, context):
-  
-  instanceArray = []
-  
-  if not 'headers' in event:
-    logger.error("No Identity found")
-    return "No Identity found"
+      
+    try:
+        if 'request' in event:
+            if 'headers' in event['request']:
+                if 'authorization' in event['request']['headers']:
+                    # Get JWT token from header
+                    token = event['request']['headers']['authorization']
+                else:
+                    logger.error("No Authorization header found")
+                    return "No Authorization header found"
+            else:
+                logger.error("No headers found in request")
+                return "No headers found in request"
+        else:
+            logger.error("No request found in event")
+            return "No request found in event"
+    except Exception as e:
+        logger.error(f"Error processing request: {e}")
+        return f"Error processing request: {e}"
 
-  # Get JWT token from header
-  auth_header = event['headers']['Authorization']
-  token = auth_header.split(' ')[1]
-  jwk_url = cognito_pool_id + '.auth.region.amazoncognito.com/.well-known/jwks.json'
+    # Get user info
+    user_attributes = auth.process_token(token)
 
-  # download the key
-  with urllib.request.urlopen(jwk_url) as f:
-    response = f.read()
-  keys = json.loads(response.decode('utf-8'))['keys']
+    # Check if claims are valid
+    if user_attributes is None:
+        logger.error("Invalid Token")
+        return "Invalid Token"
 
-  token_claims = is_token_valid(token,keys)
+    # Get all servers in a single API call
+    all_servers = utl.list_all_servers()  
+    reservations = all_servers["Reservations"]
 
-  if token_claims == None:
-      logger.error("Invalid Token")
-      return "Invalid Token"  
-  if 'cognito:username' in token_claims:
-      userName=token_claims["cognito:username"]
-  else:
-      userName=token_claims["username"]  
-  # Get User Email from Cognito
-  cog_user = cognito_idp.admin_get_user(
-      UserPoolId=cognito_pool_id,
-      Username=userName
-  )  
-  userEmail=""
-  for att in cog_user["UserAttributes"]:
-      if att["Name"] == "email":
-          userEmail = att["Value"]
-          break
+    if not reservations["Instances"]:
+        logger.error("No Instances Found")
+        return "No Instances Found"
 
-  instancesInfo = utl.describeInstances('email',userEmail)
+    # Fetch instance types and status in parallel
+    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+        instance_types = {executor.submit(ec2_client.describe_instance_types, InstanceTypes=[instance['InstanceType']]): instance for instance in [server for server in reservations["Instances"]]}
+        instance_status = {executor.submit(utl.describe_instance_status, instance['InstanceId']): instance for instance in [server for server in reservations["Instances"]]}
 
-  if len(instancesInfo) == 0:
-      logger.error("No Instances Found")
-      return "No Instances Found"        
-  
-  for instance in instancesInfo:
-      instanceId = instance["Instances"][0]["InstanceId"] 
-      launchTime = instance["Instances"][0]["LaunchTime"]
-      if "Association" in instance["Instances"][0]["NetworkInterfaces"][0]:
-          publicIp = instance["Instances"][0]["NetworkInterfaces"][0]["Association"]["PublicIp"]
-      else:
-          publicIp = "none"
+    listServer_result = []
+    for server in reservations["Instances"]:
+        instance_id = server['InstanceId']
+        logger.info(instance_id)
+        launchTime = server["LaunchTime"]
+        instance_type_future = next(future for future in instance_types if future.result()['InstanceTypes'][0]['InstanceType'] == server['InstanceType'])
+        instance_type = instance_type_future.result()
+        instance_status_future = next(future for future in instance_status if future.result()['instanceId'] == instance_id)
+        status = instance_status_future.result()
 
-      instanceName = "Undefined"
+        instance_name = next((tag['Value'] for tag in server['Tags'] if tag['Key'] == 'Name'), 'Undefined')
+        public_ip = server['NetworkInterfaces'][0].get('Association', {}).get('PublicIp', 'none')
+        vcpus = instance_type['InstanceTypes'][0]['VCpuInfo']['DefaultVCpus']
+        memory_info = instance_type['InstanceTypes'][0]['MemoryInfo']['SizeInMiB']
+        volume_id = server['BlockDeviceMappings'][0]['Ebs']['VolumeId']
+        volume = ec2.Volume(volume_id)
 
-      for tag in instance["Instances"][0]["Tags"]:
-          if tag["Key"] == "Name":
-            instanceName = tag["Value"]
+        pstLaunchTime = launchTime.astimezone(pst)        
+        runningMinutes = utl.get_total_hours_running_per_month(instance_id)
+        groupMembers = []
 
-      instanceId = instance["Instances"][0]["InstanceId"]
-      instanceType = ec2_client.describe_instance_types(InstanceTypes=[instance["Instances"][0]["InstanceType"]])
-      vCpus = instanceType["InstanceTypes"][0]["VCpuInfo"]["DefaultVCpus"]
-      memoryInfo = instanceType["InstanceTypes"][0]["MemoryInfo"]["SizeInMiB"]
-      volume = ec2.Volume(instance["Instances"][0]["BlockDeviceMappings"][0]["Ebs"]["VolumeId"])
-      instanceStatus = utl.describeInstanceStatus(instanceId)
+        listServer_result.append({
+            'id': instance_id,
+            'name': instance_name,
+            'userEmail': user_attributes['email'],
+            'type': server['InstanceType'],
+            'state': server['State']['Name'].lower(),
+            'vCpus': vcpus,
+            'memSize': memory_info,
+            'diskSize': volume.size,
+            'publicIp': public_ip,
+            'initStatus': status['initStatus'].lower(),
+            'iamStatus': status['iamStatus'].lower(),
+            'launchTime': pstLaunchTime.strftime("%m/%d/%Y - %H:%M:%S"),
+            'runningMinutes': runningMinutes,
+            'groupMembers': groupMembers
+        })
 
-      print(instanceStatus)
-      pstLaunchTime = launchTime.astimezone(pst)        
-      runningMinutes = getInstanceHoursFromCloudTailEvents(instanceId)
-      groupMembers = []
-      cogGrp = group_exists(instanceId,iss.split("/")[3])
-      if cogGrp:
-          response = cognito_idp.list_users_in_group(
-              UserPoolId=iss.split("/")[3],
-              GroupName=instanceId
-          )            
-          if len(response["Users"]) > 0:
-              for user in response["Users"]:            
-                  for att in user["Attributes"]:
-                      if att["Name"] == "email":
-                          email = att["Value"]
-                      elif att["Name"] == "sub":
-                          id = att["Value"]
-                      elif att["Name"] == "given_name":
-                          given_name = att["Value"]
-                      elif att["Name"] == "family_name":
-                          family_name = att["Value"]
-                  groupMembers.append({
-                      "id": id,
-                      "email": email,
-                      "fullname": given_name + ' ' + family_name                        
-                  })                        
-      instanceArray.append({
-          "id": instanceId,
-          "name": instanceName,
-          "type": instance["Instances"][0]["InstanceType"],            
-          "userEmail": userEmail,
-          "state": instance["Instances"][0]["State"]["Name"].lower(),
-          "vCpus": vCpus,            
-          "memSize": memoryInfo,
-          "diskSize": volume.size,
-          "launchTime": pstLaunchTime.strftime("%m/%d/%Y - %H:%M:%S"),
-          "publicIp": publicIp,            
-          "initStatus": instanceStatus["initStatus"].lower(),
-          "iamStatus": instanceStatus["iamStatus"].lower(),
-          "runningMinutes": runningMinutes,
-          "groupMembers": groupMembers
-      })
-
-    return instanceArray 
-
+    logger.info(listServer_result)
+    return listServer_result

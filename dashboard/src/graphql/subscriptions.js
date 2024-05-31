@@ -9,13 +9,12 @@ export const onPutServerMetric = /* GraphQL */ `
       networkStats
       memStats
       activeUsers
-      alertMsg
     }
   }
 `;
-export const onChangeServerInfo = /* GraphQL */ `
-  subscription OnChangeServerInfo {
-    onChangeServerInfo {
+export const onChangeState = /* GraphQL */ `
+  subscription OnChangeState {
+    onChangeState {
       id
       name
       type
