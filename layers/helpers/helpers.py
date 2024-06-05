@@ -104,6 +104,74 @@ class Utils:
         else:
             return {"statusCode": status_code, "body": body }
         
+    def get_instance_attributes(self,instance_id):
+        try:
+        
+            # Get existing tags
+            existing_tags = self.ec2_client.describe_tags(
+                Filters=[
+                    {'Name': 'resource-id', 'Values': [instance_id]}
+                ]
+            )['Tags']
+
+            tag_mapping = {}
+            
+            for tag in existing_tags:
+                tag_mapping[tag['Key'].lower()] = tag['Value']
+
+            return tag_mapping
+        except Exception as e:
+            logger.error(f"Error getting tags: {e}")
+        
+
+    def set_instance_attributes(self,instance_id):
+
+        tag_mapping = self.get_instance_attr(instance_id)
+        
+        tags = [{'Key': key, 'Value': value} for key, value in tag_mapping.items()]
+
+        try:
+            # Delete existing tags based on tag_mapping
+            self.ec2_client.delete_tags(
+                Resources=[instance_id],
+                Tags=[{'Key': key} for key in tag_mapping.keys()]
+            )
+
+            # Create new tags
+            self.ec2_client.create_tags(
+                Resources=[instance_id],
+                Tags=tags
+            )
+            logger.info(f"Tags set successfully for instance {instance_id}")
+        except Exception as e:
+            logger.error(f"Error setting tags: {e}")
+
+
+    # def set_instance_attr(self,instance_id):
+        
+    #     existing_tags = self.get_instance_attr(instance_id)
+    #     if existing_tags:
+    #         logger.info("Updating Instance " + instance_id)
+
+    #         # Remove existing tags that are being updated
+    #         tags = ['minecraftruncommand', 'alarm_name', 'alarm_threshold']
+    #         tags_to_remove = [tag for tag in existing_tags if tag['Key'] in tags]
+    #         if tags_to_remove:
+    #             self.ec2_client.delete_tags(
+    #                 Resources=[instance_id],
+    #                 Tags=tags_to_remove
+    #             )
+
+    #         # Add or update tags
+    #         if new_tags:
+    #             self.ec2_client.create_tags(
+    #                 Resources=[instance_id],
+    #                 Tags=new_tags
+    #             )
+
+    #     return {'code': 200, 'msg': 'Tags updated successfully'}
+
+        
     def get_total_hours_running_per_month(self, instanceId):
         total_minutes = 0
         event_data = []

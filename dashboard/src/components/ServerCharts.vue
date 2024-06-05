@@ -201,14 +201,14 @@ function updateMetrics(name, data) {
     // if (name == "users" && data.length > 0) {
     //     this.$refs.users.updateOptions({
     //         title: {
-    //             text: String(serverStore.selectedServer.activeUsers[serverStore.selectedServer.activeUsers.length - 1].y) + " Connection(s)"
+    //             text: String(serverStore.serversDict[serverStore.selectedServerId].activeUsers[serverStore.serversDict[serverStore.selectedServerId].activeUsers.length - 1].y) + " Connection(s)"
     //         }
     //     })
     // }
 
     if (data.alertMsg && data.alertMsg.length > 0) {
         metricAlert.value = true;
-        metricMsg.value = serverStore.selectedServer.alertMsg
+        metricMsg.value = serverStore.serversDict[serverStore.selectedServerId].alertMsg
     }
     else {
         metricAlert.value = false;
@@ -256,18 +256,18 @@ function classColor(sState) {
     }
 }
 
-function subscribePutServerMetric() {
+async function subscribePutServerMetric() {
 
-    const createSub = graphQlClient
+    const createSub = await graphQlClient
         .graphql({ query: subscriptions.onPutServerMetric })
         .subscribe({
-            next: ({ data }) => {
-                console.log("updating metrics for: " + data)
-                if (data.onPutServerMetric.id === serverStore.selectedServer.id) {
-                    const cpuData = JSON.parse(data.onPutServerMetric.cpuStats)
-                    const memData = JSON.parse(data.onPutServerMetric.memStats)
-                    const netData = JSON.parse(data.onPutServerMetric.networkStats)
-                    const usersData = JSON.parse(data.onPutServerMetric.activeUsers)
+            next: ({ response }) => {
+                console.log("updating metrics for: " + response)
+                if (response.data.onPutServerMetric.id === serverStore.selectedServerId) {
+                    const cpuData = JSON.parse(response.data.onPutServerMetric.cpuStats)
+                    const memData = JSON.parse(response.data.onPutServerMetric.memStats)
+                    const netData = JSON.parse(response.data.onPutServerMetric.networkStats)
+                    const usersData = JSON.parse(response.data.onPutServerMetric.activeUsers)
                     if (cpuData.length > 0)
                         updateMetrics('cpu', cpuData);
                     
@@ -286,7 +286,7 @@ function subscribePutServerMetric() {
 }
 
 onMounted(async () => {
-    subscribePutServerMetric()
+    await subscribePutServerMetric()
 })
 
 </script>

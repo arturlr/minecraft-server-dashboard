@@ -790,6 +790,7 @@ Resources:
                 - ssm:Get*
                 - ssm:SendCommand
                 - ssm:CancelCommand
+                - ssm:GetCommandInvocation
                 - ec2:AssociateIamInstanceProfile
                 - ec2:DisassociateIamInstanceProfile
               Resource: "*"

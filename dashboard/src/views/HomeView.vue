@@ -168,7 +168,12 @@ async function triggerAction(action) {
               </v-col>
             </v-row>
           </v-alert>
-          <v-text-field class="pa-1" label="Public IP" id="publicIp" :hint="serverStore.selectedServer.state"
+          <v-text-field 
+            class="pb-5" 
+            label="Public IP" 
+            id="publicIp" 
+            :hint="serverStore.selectedServer.state"
+            persistent-hint
             v-model="serverStore.selectedServer.publicIp" readonly=true>
 
             <template v-slot:prepend-inner>

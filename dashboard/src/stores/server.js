@@ -54,8 +54,31 @@ export const useServerStore = defineStore("server", {
                 console.groupEnd();
                 throw error;
             }
-        }
+        },
 
+        updateServerStateDict(server) {
+            const serverAttributes = this.serversDict[server.id];
+            if (serverAttributes) {
+                // Servers Dictionary update state
+                this.serversDict[server.id] = { 
+                    ...serverAttributes, 
+                    state: server.state,
+                    initStatus: server.initStatus                
+                };
+
+                // If selectedServer is populated, update state
+                if (this.selectedServer) {
+                    this.selectedServer = {
+                        ...serverAttributes, 
+                        state: server.state,
+                        initStatus: server.initStatus                    
+                    }
+                }
+                
+            } else {
+                console.warn(`Server with ID ${server.id} not found in serversDict`);
+            }
+        }
     }
 
 })

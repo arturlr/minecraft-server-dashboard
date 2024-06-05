@@ -12,7 +12,6 @@ const graphQlClient = generateClient();
 
 const serversList = ref([])
 const serversDict = ref({})
-let changeServerInfo = null;
 
 onMounted(async () => {
     serversList.value = await serverStore.listServers()
@@ -21,12 +20,14 @@ onMounted(async () => {
 })
 
 async function subscribeChangeServerInfo() {
-    changeServerInfo = await graphQlClient.graphql({
+     await graphQlClient.graphql({
         query: subscriptions.onChangeState,
         variables: {},
     }).subscribe({
-        next: (eventData) => {
-            console.log(eventData);
+        next: (response) => {
+            let server = response.data.onChangeState
+            console.log("updating :" + server.id);
+            serverStore.updateServerStateDict(server)
         },
         error: (error) => {
             console.error('Error subscribing to server info changes:', error);
