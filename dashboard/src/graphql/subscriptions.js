@@ -2,8 +2,8 @@
 // this is an auto generated file. This will be overwritten
 
 export const onPutServerMetric = /* GraphQL */ `
-  subscription OnPutServerMetric {
-    onPutServerMetric {
+  subscription OnPutServerMetric($id: String!) {
+    onPutServerMetric(id: $id) {
       id
       cpuStats
       networkStats
@@ -28,7 +28,6 @@ export const onChangeState = /* GraphQL */ `
       initStatus
       iamStatus
       runningMinutes
-      groupMembers
     }
   }
 `;

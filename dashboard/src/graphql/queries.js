@@ -17,7 +17,6 @@ export const listServers = /* GraphQL */ `
       initStatus
       iamStatus
       runningMinutes
-      groupMembers
     }
   }
 `;
@@ -61,4 +60,18 @@ export const listLoginAudits = /* GraphQL */ `
       nextToken
     }
   }
+`;
+
+export const getServerConfig = /* GraphQL */ `
+query GetServerConfig($instanceId: String!) {
+  getServerConfig(instanceId: $instanceId) {
+    id
+    alarmType
+    alarmThreshold
+    alarmEvaluationPeriod
+    workDir
+    runCommand
+    groupMembers
+  }
+}
 `;

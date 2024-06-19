@@ -56,9 +56,6 @@ function showServer(id) {
     serverStore.selectedServer = serverStore.serversDict[id]
 }
 
-
-
-
 </script>
 
 <template>

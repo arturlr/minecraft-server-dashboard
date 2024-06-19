@@ -29,7 +29,6 @@ export const onChangeState = /* GraphQL */ `
       initStatus
       iamStatus
       runningMinutes
-      groupMembers
     }
   }
 `;
@@ -95,6 +94,14 @@ export const deleteLoginAudit = /* GraphQL */ `
       expirationEpoch
       createdAt
       updatedAt
+    }
+  }
+`;
+
+export const putServerConfig = /* GraphQL */ `
+  mutation PutServerConfig($input: ServerConfigInput!) {
+    putServerConfig(input: $input) {
+      id
     }
   }
 `;

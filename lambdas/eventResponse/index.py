@@ -86,7 +86,6 @@ changeServerState = """
       initStatus
       iamStatus
       runningMinutes
-      groupMembers
     }
 }
 """
@@ -144,49 +143,156 @@ def get_connect_minecraft_users(instanceId,startTime):
     except Exception as e:
         logger.error("start_query: " + str(e) + " occurred.")
         return "[]"
+    
+def send_to_appsync(payload):
+    headers={"Content-Type": "application/json"}
+    # sending response to AppSync
+    response = requests.post(
+        endpoint,
+        auth=auth,
+        headers=headers,
+        json=payload
+    )
+    logger.info(response.json())
+    
+def schedule_event_response():
 
-def get_metrics_data(instanceId,nameSpace,metricName,unit,statType,startTime,endTime,period):
-    logger.info("get_metrics_data: " + metricName + " - " + instanceId)
-    cdata = []
-    dimensions=[]
-    dimensions.append({'Name': 'InstanceId','Value': instanceId})
-    if metricName == "cpu_usage_active":
-        dimensions.append({'Name': 'cpu','Value': "cpu-total"})
-    elif metricName == "net_bytes_sent":
-        dimensions.append({'Name': 'interface','Value': 'nic'})
-        # nic = utl.get_ssm_param("/minecraftserverdashboard/" + instanceId + "/nic")
-        # if nic is not None:        
-        #     dimensions.append({'Name': 'interface','Value': 'nic'})
+    # Check for instances running to update their stats. It can only be a Schedule Event
+    instances_running = utl.list_servers_by_state("running")
+    
+    reservations = instances_running["Reservations"]
+    if not reservations["Instances"]:  
+        logger.error("No Instances Found for updating")
+        eb_client.disable_rule(Name=scheduled_event_bridge_rule)
+        logger.info("Disabled Evt Bridge Rule")
+        return "No Instances Found for updating"
+
+    instances_payload = []
+    dt_4_four_hours_before = datetime.now(tz=timezone.utc) - timedelta(hours=4)
+    dt_now = datetime.now(tz=timezone.utc)
+
+    for instance in reservations["Instances"]:
+        instance_info = {
+            'id': instance["InstanceId"],
+            'memStats': get_metrics_data(instance["InstanceId"], 'CWAgent', 'mem_used_percent', 'Percent', 'Average', dt_4_four_hours_before, dt_now, 300),
+            'cpuStats': get_metrics_data(instance["InstanceId"], 'CWAgent', 'cpu_usage_active', 'Percent', 'Average', dt_4_four_hours_before, dt_now, 300),
+            'networkStats': get_metrics_data(instance["InstanceId"], 'CWAgent', 'net_bytes_sent', 'Bytes', 'Sum', dt_4_four_hours_before, dt_now, 300),
+            'activeUsers': get_metrics_data(instance["InstanceId"], 'MinecraftDashboard', 'UserCount', 'None', 'Maximum', dt_4_four_hours_before, dt_now, 300),
+            #'alertMsg': get_alert(instance["InstanceId"])
+        }
+        instances_payload.append(instance_info)
+
+    return instances_payload
+
+
+# def get_metrics_data(instance_id, namespace, metric_name, unit, stat_type, start_time, end_time, period):
+#     logger.info(f"get_metrics_data: {metric_name} - {instance_id}")
+
+#     dimensions = [
+#         {'Name': 'InstanceId', 'Value': instance_id}
+#     ]
+
+#     if metric_name == "cpu_usage_active":
+#         dimensions.append({'Name': 'cpu', 'Value': "cpu-total"})
+#     elif metric_name == "net_bytes_sent":
+#         dimensions.append({'Name': 'interface', 'Value': 'nic'})
+
+#     try:
+#         metric_data = cw_client.get_metric_data(
+#             MetricDataQueries=[
+#                 {
+#                     'Id': 'query1',
+#                     'MetricStat': {
+#                         'Metric': {
+#                             'Namespace': namespace,
+#                             'MetricName': metric_name,
+#                             'Dimensions': dimensions
+#                         },
+#                         'Period': period,
+#                         'Stat': stat_type,
+#                         'Unit': unit
+#                     },
+#                     'ReturnData': True
+#                 }
+#             ],
+#             StartTime=start_time,
+#             EndTime=end_time
+#         )
+
+#         if not metric_data['MetricDataResults']:
+#             logger.warning(f'No Datapoint for namespace: {metric_name} - InstanceId: {instance_id}')
+#             return "[]"
+
+#         data_points = []
+#         for result in metric_data['MetricDataResults']:
+#             for datapoint in result['Values']:
+#                 if metric_name == "net_bytes_sent":
+#                     # Converting to Gbit per Second - Divide by 60 to convert from 1 minute to 1 second - Divide by 1024/1024*8 to convert Byte in Mbps.
+#                     data_points.append({
+#                         'y': round(datapoint * 8 / 1024 / 1024, 2),
+#                         'x': datapoint['Timestamp'].strftime("%Y/%m/%dT%H:%M:%S")
+#                     })
+#                 else:
+#                     data_points.append({
+#                         'y': round(datapoint, 2),
+#                         'x': datapoint['Timestamp'].strftime("%Y/%m/%dT%H:%M:%S")
+#                     })
+
+#         return json.dumps(sorted(data_points, key=lambda x: x['x']))
+
+#     except Exception as e:
+#         logger.error(f'Something went wrong: {str(e)}')
+#         return "[]"
+
+
+def get_metrics_data(instance_id, namespace, metric_name, unit, stat_type, start_time, end_time, period):
+    logger.info(f"get_metrics_data: {metric_name} - {instance_id}")
+
+    dimensions = [
+        {'Name': 'InstanceId', 'Value': instance_id}
+    ]
+
+    if metric_name == "cpu_usage_active":
+        dimensions.append({'Name': 'cpu', 'Value': "cpu-total"})
+    elif metric_name == "net_bytes_sent":
+        dimensions.append({'Name': 'interface', 'Value': 'nic'})
 
     try:
-        rsp = cw_client.get_metric_statistics(
-            Namespace=nameSpace,
-            MetricName=metricName,
+        response = cw_client.get_metric_statistics(
+            Namespace=namespace,
+            MetricName=metric_name,
             Dimensions=dimensions,
-            StartTime=startTime,
-            EndTime=endTime,
+            StartTime=start_time,
+            EndTime=end_time,
             Period=period,
-            Statistics=[statType],
+            Statistics=[stat_type],
             Unit=unit
         )
 
-        if rsp["Datapoints"]:
-            logger.warning('No Datapoint for namespace:' + metricName + ' - InstanceId: ' + instanceId)
+        if not response["Datapoints"]:
+            logger.warning(f'No Datapoint for namespace: {metric_name} - InstanceId: {instance_id}')
             return "[]"
-        else:
-            for rec in rsp["Datapoints"]:
-                if metricName == "net_bytes_sent":
-                    # converting to Gbit per Second - Divide by 60 to convert from 1 minute to 1 second - Divide by 1024/1024*8 to convert Byte in Mbps.
-                    cdata.append({'y': round(rec[statType]/60/1024/1024*8, 2), 'x': rec["Timestamp"].strftime("%Y/%m/%dT%H:%M:%S")})
-                else:
-                    cdata.append({'y': round(rec[statType], 2), 'x': rec["Timestamp"].strftime("%Y/%m/%dT%H:%M:%S")})
 
-            data_points = sorted(cdata, key=lambda k : k['x'])            
-            return json.dumps(data_points)
+        data_points = []
+        for datapoint in response["Datapoints"]:
+            if metric_name == "net_bytes_sent":
+                # Converting to Gbit per Second - Divide by 60 to convert from 1 minute to 1 second - Divide by 1024/1024*8 to convert Byte in Mbps.
+                data_points.append({
+                    'y': round(datapoint[stat_type] / 60 / 1024 / 1024 * 8, 2),
+                    'x': datapoint["Timestamp"].strftime("%Y/%m/%dT%H:%M:%S")
+                })
+            else:
+                data_points.append({
+                    'y': round(datapoint[stat_type], 2),
+                    'x': datapoint["Timestamp"].strftime("%Y/%m/%dT%H:%M:%S")
+                })
+
+        return json.dumps(sorted(data_points, key=lambda x: x['x']))
 
     except Exception as e:
-        logger.error('Something went wrong: ' + str(e))
+        logger.error(f'Something went wrong: {str(e)}')
         return "[]"
+
 
 def enable_scheduled_rule():    
     evtRule = eb_client.describe_rule(Name=scheduled_event_bridge_rule)
@@ -198,7 +304,6 @@ def state_change_response(instance_id):
 
     reservation_instance = utl.list_server_by_id(instance_id)
     instance_info = reservation_instance["Reservations"]["Instances"][0]
-    groupMembers = cog_auth.list_users_in_group(instance_id) 
     ec2Status = utl.describe_instance_status(instance_id)
     launchTime = instance_info["LaunchTime"]
     if "Association" in instance_info["NetworkInterfaces"][0]:
@@ -208,7 +313,9 @@ def state_change_response(instance_id):
 
     tags = {tag['Key']: tag['Value'] for tag in instance_info["Tags"]}
 
+    
     userEmail = 'minecraft-dashboard@maildrop.cc'
+
     userEmail = tags.get("Owner", userEmail)
 
     instanceName = "Undefined"
@@ -228,52 +335,11 @@ def state_change_response(instance_id):
         "iamStatus": ec2Status["iamStatus"].lower(),
         "launchTime": pstLaunchTime.strftime("%m/%d/%Y - %H:%M:%S"),
         "publicIp": publicIp,
-        "runningMinutes": utl.get_total_hours_running_per_month(instance_id),
-        "groupMembers": json.dumps(groupMembers)
+        "runningMinutes": utl.get_total_hours_running_per_month(instance_id)
     }
 
     return input
     
-def schedule_event_response():
-
-    # Check for instances running to update their stats. It can only be a Schedule Event
-    instances_running = utl.list_servers_by_state("running")
-    
-    reservations = instances_running["Reservations"]
-    if not reservations["Instances"]:  
-        logger.error("No Instances Found for updating")
-        eb_client.disable_rule(Name=scheduled_event_bridge_rule)
-        logger.info("Disabled Evt Bridge Rule")
-        return "No Instances Found for updating"
-
-
-    instances_payload = []
-    dt_4_four_hours_before = datetime.now(tz=timezone.utc) - timedelta(hours=4)
-    dt_now = datetime.now(tz=timezone.utc)
-
-    for instance in reservations["Instances"]:
-        instance_info = {
-            'id': instance["InstanceId"],
-            'memStats': get_metrics_data(instance["InstanceId"], 'CWAgent', 'mem_used_percent', 'Percent', 'Average', dt_4_four_hours_before, dt_now, 300),
-            'cpuStats': get_metrics_data(instance["InstanceId"], 'CWAgent', 'cpu_usage_active', 'Percent', 'Average', dt_4_four_hours_before, dt_now, 300),
-            'networkStats': get_metrics_data(instance["InstanceId"], 'CWAgent', 'net_bytes_sent', 'Bytes', 'Sum', dt_4_four_hours_before, dt_now, 300),
-            'activeUsers': get_metrics_data(instance["InstanceId"], 'MinecraftDashboard', 'UserCount', 'None', 'Maximum', dt_4_four_hours_before, dt_now, 300),
-            #'alertMsg': get_alert(instance["InstanceId"])
-        }
-        instances_payload.append(instance_info)
-
-    return instances_payload
-
-def send_to_appsync(payload):
-    headers={"Content-Type": "application/json"}
-    # sending response to AppSync
-    response = requests.post(
-        endpoint,
-        auth=auth,
-        headers=headers,
-        json=payload
-    )
-    logger.info(response.json())
 
 def handler(event, context):     
     

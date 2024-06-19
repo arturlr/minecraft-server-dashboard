@@ -8,7 +8,6 @@ import helpers
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 utl = helpers.Utils()
-dyn = helpers.Dyn()
 
 appValue = os.getenv('TAG_APP_VALUE')
 ec2_instance_profile_name = os.getenv('EC2_INSTANCE_PROFILE_NAME')
@@ -85,14 +84,14 @@ def retry_operation(operation, max_retries, delay):
 
 def update_alarm(instanceId):
     logger.info("updateAlarm: " + instanceId)
-    instanceInfo = dyn.GetInstanceAttr(instanceId)
+    instanceInfo = utl.get_instance_attributes(instanceId)
     # Default values
     alarmMetric = "CPUUtilization"
     alarmThreshold = "10"
     
     if instanceInfo and instanceInfo['code'] == 200:
-        alarmMetric = instanceInfo['msg'].get('alarmMetric')
-        alarmThreshold = instanceInfo['msg'].get('alarmThreshold')
+        alarmMetric = instanceInfo.get('alarmmetric')
+        alarmThreshold = instanceInfo.get('alarmthreshold')
 
     elif instanceInfo and instanceInfo['code'] == 400:
         logger.info("Using Default values for Alarming")
@@ -142,14 +141,9 @@ def invoke_step_functions(instanceId,action):
 
     return True
 
-# function to create a DynamoDb
-def create_dynamodb(instanceId):
-    logger.info("create_dynamodb: " + instanceId)
-    dyn.CreateTable(instanceId)
-
-
-def action_process(action,instance_id):
-
+def action_process(action,instance_id,arguments=None):
+    
+    logger.info(f"Action: {action} InstanceId: {instance_id}")
     action = action.lower()
 
     if action == "startserver":
@@ -174,33 +168,20 @@ def action_process(action,instance_id):
             error = { "err" :"Attaching IAM role failed" }
             logger.error("Attaching IAM role failed")
             return utl.response(500,error)
+    elif action == "getserverconfig":
+        response = utl.get_instance_attributes(instance_id)
+        return response
+    elif action == "putserverconfig" or action == "updateserverconfig":
+        if not arguments:
+            logger.error("Missing arguments for putserverconfig action")
+            return None
+                
+        response = utl.set_instance_attributes(arguments)
+        return response
+
     else:
         return utl.response(400, {"err": f"Invalid action: {action}"})
-    
-
-    # # GET INSTANCE INFO
-    # elif action == "get_instance_attr":
-    #     response = dyn.GetInstanceAttr(instance_id)
-    #     return utl.response(response["code"],response["msg"])
-
-    
-    # # GET INSTANCE INFO
-    # elif action == "set_instance_attr":            
-    #     response = dyn.SetInstanceAttr(instance_id,params)
-    #     if 'at' in params:
-    #         updateAlarm(instance_id)
-    #     return utl.response(response["code"],response["msg"])            
-
-    # except KeyError:
-    #     logger.error("Invalid input data format")
-    #     resp = {"err": "Invalid input data format"}
-    #     return utl.response(500, resp)
-
-    # except Exception as e:
-    #     resp = {"err": str(e)}
-    #     logger.error(str(e))
-    #     return utl.response(500,resp)
-            
+                
 
 def handle_local_invocation(event, context):
     # Handle local invocations here
@@ -237,11 +218,36 @@ def handler(event, context):
         return "Invalid Token"
 
     #try:
-    instance_id = event["arguments"]["instanceId"]
-    if instance_id:
-        logger.info(f"Received instanceId: {instance_id}")
+    input = None
+    if "arguments" in event:
+        if "instanceId" in event["arguments"]:
+            instance_id = event["arguments"]["instanceId"]
+            # Use instance_id
+        elif "input" in event["arguments"] and "id" in event["arguments"]["input"]:
+            instance_id = event["arguments"]["input"]["id"]
+            input_arguments = event["arguments"]["input"]
+            input = {
+                'id': instance_id,
+                'alarmType': input_arguments.get('alarmType', ''),
+                'alarmThreshold': input_arguments.get('alarmThreshold',''),
+                'alarmEvaluationPeriod': input_arguments.get('alarmEvaluationPeriod', ''),
+                'runCommand': input_arguments.get('runCommand', ''),
+                'workDir': input_arguments.get('workDir', '')
+            }
+            # Use input_id
+        else:
+            # Neither instanceId nor input.id is present
+            return {
+                "error": "Instance id is not present in the event"
+            }
     else:
-        logger.warning("No instanceId provided in the input data")
+        # No arguments in the event
+        return {
+            "error": "No arguments found in the event"
+        }
+    
+    logger.info(f"Received instanceId: {instance_id}")
+
 
     #
     # Autorization Begin
@@ -288,6 +294,6 @@ def handler(event, context):
             return utl.response(401,{"err": 'Cognito group creation failed'})
 
     # Calling action_process function to process the action with the mutation name
-    mutation_name = event["info"]["fieldName"]
-    return action_process(mutation_name,instance_id)
+    field_name = event["info"]["fieldName"]
+    return action_process(field_name,instance_id,input)
     

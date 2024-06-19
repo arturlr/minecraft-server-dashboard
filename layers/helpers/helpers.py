@@ -98,6 +98,21 @@ class Utils:
         self.appValue = os.getenv('TAG_APP_VALUE')
         self.ec2InstanceProfileArn = os.getenv('EC2_INSTANCE_PROFILE_ARN')
 
+    def capitalize_first_letter(self, text):
+        """
+        Capitalizes the first letter of each word in the given text, while preserving the original case of the remaining letters.
+        
+        Args:
+            text (str): The input text to be capitalized.
+            
+        Returns:
+            str: The text with the first letter of each word capitalized.
+        """
+        words = text.split()
+        capitalized_words = [word[0].upper() + word[1:] for word in words]
+        return ' '.join(capitalized_words)
+
+
     def response(self, status_code, body, headers={}):
         if bool(headers): # Return True if dictionary is not empty # use json.dumps for body when using with API GW
             return {"statusCode": status_code, "body": body, "headers": headers}
@@ -105,8 +120,8 @@ class Utils:
             return {"statusCode": status_code, "body": body }
         
     def get_instance_attributes(self,instance_id):
-        try:
-        
+        logger.info("Getting instance attributes for " + instance_id)
+        try:        
             # Get existing tags
             existing_tags = self.ec2_client.describe_tags(
                 Filters=[
@@ -119,58 +134,77 @@ class Utils:
             for tag in existing_tags:
                 tag_mapping[tag['Key'].lower()] = tag['Value']
 
-            return tag_mapping
+            logger.info(f"Existing tags: {tag_mapping}")
+
+
+            # returning following the Appsync Schema for ServerConfig
+            return {
+                'id': instance_id,
+                'alarmType': tag_mapping.get('alarmmetric', ''),
+                'alarmThreshold': tag_mapping.get('alarmthreshold', ''),
+                'alarmEvaluationPeriod': tag_mapping.get('alarmevaluationperiod', ''),
+                'runCommand': tag_mapping.get('runcommand', ''),
+                'workDir': tag_mapping.get('workdir', ''),
+                'groupMembers': ''
+            }
+        
         except Exception as e:
             logger.error(f"Error getting tags: {e}")
         
 
-    def set_instance_attributes(self,instance_id):
+    def set_instance_attributes(self,input):
+        instance_id = input.get('id')
 
-        tag_mapping = self.get_instance_attr(instance_id)
+        logger.info("Setting instance attributes for " + instance_id)
+
+        alarm_type = input.get('alarmType', '')
+        alarm_threshold = input.get('alarmThreshold', '20')
+        alarmEvaluationPeriod = input.get('alarmEvaluationPeriod', '35')
+        run_command = input.get('runCommand', '')
+        work_dir = input.get('workDir', '')
+        group_members = input.get('groupMembers', '')
+
+        # Getting current EC2 Tags
+        ec2_attrs = self.get_instance_attributes(instance_id)
+
+        ec2_tag_mapping = {
+            self.capitalize_first_letter('alarmType'): alarm_type,
+            self.capitalize_first_letter('alarmThreshold'): alarm_threshold,
+            self.capitalize_first_letter('alarmEvaluationPeriod'): alarmEvaluationPeriod,
+            self.capitalize_first_letter('runCommand'): run_command,
+            self.capitalize_first_letter('workDir'): work_dir
+        }
+
+        appsync_server_config_attrs = {
+            'id': instance_id,
+            'alarmType': alarm_type,
+            'alarmThreshold': alarm_threshold,
+            'alarmEvaluationPeriod': alarmEvaluationPeriod,
+            'runCommand': run_command,
+            'workDir': work_dir
+        }
+
+        logger.info(f"input : {input}")
+        logger.info(f"ec2_tag_mapping : {ec2_tag_mapping}")
         
-        tags = [{'Key': key, 'Value': value} for key, value in tag_mapping.items()]
-
         try:
             # Delete existing tags based on tag_mapping
             self.ec2_client.delete_tags(
                 Resources=[instance_id],
-                Tags=[{'Key': key} for key in tag_mapping.keys()]
+                Tags=[{'Key': key} for key in ec2_attrs.keys()]
             )
 
             # Create new tags
             self.ec2_client.create_tags(
                 Resources=[instance_id],
-                Tags=tags
+                Tags=[{'Key': key, 'Value': str(value) } for key, value in ec2_tag_mapping.items()]
             )
             logger.info(f"Tags set successfully for instance {instance_id}")
+
+            return appsync_server_config_attrs
+
         except Exception as e:
             logger.error(f"Error setting tags: {e}")
-
-
-    # def set_instance_attr(self,instance_id):
-        
-    #     existing_tags = self.get_instance_attr(instance_id)
-    #     if existing_tags:
-    #         logger.info("Updating Instance " + instance_id)
-
-    #         # Remove existing tags that are being updated
-    #         tags = ['minecraftruncommand', 'alarm_name', 'alarm_threshold']
-    #         tags_to_remove = [tag for tag in existing_tags if tag['Key'] in tags]
-    #         if tags_to_remove:
-    #             self.ec2_client.delete_tags(
-    #                 Resources=[instance_id],
-    #                 Tags=tags_to_remove
-    #             )
-
-    #         # Add or update tags
-    #         if new_tags:
-    #             self.ec2_client.create_tags(
-    #                 Resources=[instance_id],
-    #                 Tags=new_tags
-    #             )
-
-    #     return {'code': 200, 'msg': 'Tags updated successfully'}
-
         
     def get_total_hours_running_per_month(self, instanceId):
         total_minutes = 0

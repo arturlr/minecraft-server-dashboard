@@ -1,14 +1,12 @@
 <script setup>
 import { reactive, ref, onMounted } from "vue";
-import { generateClient, CONNECTION_STATE_CHANGE } from 'aws-amplify/api';
+import { generateClient } from 'aws-amplify/api';
 import * as subscriptions from '../graphql/subscriptions';
 import { Hub } from 'aws-amplify/utils';
-import { useUserStore } from "../stores/user";
 import { useServerStore } from "../stores/server";
 import VueApexCharts from "vue3-apexcharts";
 import moment from "moment";
 
-const userStore = useUserStore();
 const serverStore = useServerStore()
 
 const graphQlClient = generateClient();
@@ -18,43 +16,13 @@ const memSeries = ref([{ data: [] }]);
 const netSeries = ref([{ data: [] }]);
 const usersSeries = ref([{ data: [] }]);
 
+const currentCPU = ref(0);
+const currentMemory = ref(0);
+const currentNet = ref(0);
+const currentUsers = ref(0);
+
 const metricAlert = ref(false);
 const metricMsg = ref(null)
-
-
-const lineChartOptions = ref({
-    chart: {
-        type: "line",
-        toolbar: {
-            show: false,
-        },
-    },
-    colors: ["#154360", "#5DADE2", "#D35400"],
-    dataLabels: {
-        enabled: false,
-    },
-    stroke: {
-        curve: "smooth",
-    },
-    grid: {
-        borderColor: "#e7e7e7",
-        row: {
-            colors: ["#f3f3f3", "transparent"], // takes an array which will be repeated on columns
-            opacity: 0.5,
-        },
-    },
-    markers: {
-        size: 0,
-    },
-    xaxis: {
-        type: "datetime",
-        labels: {
-            formatter: function (val, timestamp) {
-                return moment(new Date(timestamp)).format("HH:mm");
-            },
-        },
-    },
-})
 
 const cpuOptions = ref({
     chart: {
@@ -198,14 +166,6 @@ const usersOptions = ref({
 
 function updateMetrics(name, data) {
 
-    // if (name == "users" && data.length > 0) {
-    //     this.$refs.users.updateOptions({
-    //         title: {
-    //             text: String(serverStore.serversDict[serverStore.selectedServerId].activeUsers[serverStore.serversDict[serverStore.selectedServerId].activeUsers.length - 1].y) + " Connection(s)"
-    //         }
-    //     })
-    // }
-
     if (data.alertMsg && data.alertMsg.length > 0) {
         metricAlert.value = true;
         metricMsg.value = serverStore.serversDict[serverStore.selectedServerId].alertMsg
@@ -217,31 +177,31 @@ function updateMetrics(name, data) {
 
     switch (name) {
         case "users":
-            usersSeries.value = [{ 
-                    name: "users",
-                    data: data 
-                }];
+            usersSeries.value = [{
+                name: "users",
+                data: data
+            }];
             break;
 
         case "cpu":
-            cpuSeries.value = [{ 
+            cpuSeries.value = [{
                 name: "cpu",
-                data: data 
+                data: data
             }];
             break;
 
         case "mem":
-            memSeries.value = [{ 
-                    name: "mem",
-                    data: data 
-                }];
+            memSeries.value = [{
+                name: "mem",
+                data: data
+            }];
             break
 
         case "net":
-            netSeries.value = [{ 
-                    name: "net",
-                    data: data 
-                }]
+            netSeries.value = [{
+                name: "net",
+                data: data
+            }]
             break;
     }
 }
@@ -258,28 +218,54 @@ function classColor(sState) {
 
 async function subscribePutServerMetric() {
 
-    const createSub = await graphQlClient
-        .graphql({ query: subscriptions.onPutServerMetric })
-        .subscribe({
-            next: ({ response }) => {
-                console.log("updating metrics for: " + response)
-                if (response.data.onPutServerMetric.id === serverStore.selectedServerId) {
-                    const cpuData = JSON.parse(response.data.onPutServerMetric.cpuStats)
-                    const memData = JSON.parse(response.data.onPutServerMetric.memStats)
-                    const netData = JSON.parse(response.data.onPutServerMetric.networkStats)
-                    const usersData = JSON.parse(response.data.onPutServerMetric.activeUsers)
-                    if (cpuData.length > 0)
-                        updateMetrics('cpu', cpuData);
-                    
-                    if (netData.length > 0)
-                        updateMetrics('net', netData);
+    await graphQlClient
+        .graphql({
+            query: subscriptions.onPutServerMetric,
+            variables: { id: serverStore.selectedServer.id },
+        }).subscribe({
+            next: (response) => {
+                console.log("updating: " + response.data.onPutServerMetric.id)
+                const cpuData = JSON.parse(response.data.onPutServerMetric.cpuStats);
+                const memData = JSON.parse(response.data.onPutServerMetric.memStats);
+                const netData = JSON.parse(response.data.onPutServerMetric.networkStats);
+                const usersData = JSON.parse(response.data.onPutServerMetric.activeUsers);
 
-                    if (memData.length > 0)
-                        updateMetrics('mem', memData);
-
-                    if (usersData.length > 0)
-                        updateMetrics('users', usersData);
+                if (cpuData.length > 0)
+                    currentCPU.value = cpuData[cpuData.length - 1].y;
+                cpuOptions.value = {
+                    title: {
+                        text: "CPU - " + currentCPU.value.toString() + " %"
+                    }
                 }
+                updateMetrics('cpu', cpuData);
+
+                if (netData.length > 0)
+                    currentNet.value = netData[netData.length - 1].y;
+                netOptions.value = {
+                    title: {
+                        text: "Network - " + currentNet.value.toString() + " packages"
+                    }
+                }
+                updateMetrics('net', netData);
+
+                if (memData.length > 0)
+                    currentMemory.value = memData[memData.length - 1].y;
+                memOptions.value = {
+                    title: {
+                        text: "Memory - " + currentMemory.value.toString() + " %"
+                    }
+                }
+                updateMetrics('mem', memData);
+
+                if (usersData.length > 0)
+                    currentUsers.value = usersData[usersData.length - 1].y;
+                usersOptions.value = {
+                    title: {
+                        text: "Users - " + currentUsers.value.toString()
+                    }
+                }
+                updateMetrics('users', usersData);
+
             },
             error: (error) => console.warn(error)
         });
@@ -292,20 +278,19 @@ onMounted(async () => {
 </script>
 
 <template>
-
     <v-card variant="plain">
-        <VueApexCharts height="70" :options="usersOptions" :series="usersSeries" />
+        <VueApexCharts ref="usersChart" height="70" :options="usersOptions" :series="usersSeries" />
     </v-card>
 
     <v-card variant="plain">
-        <VueApexCharts height="70" :options="cpuOptions" :series="cpuSeries" />
+        <VueApexCharts ref="cpuChart" height="70" :options="cpuOptions" :series="cpuSeries" />
     </v-card>
 
     <v-card variant="plain">
-        <VueApexCharts height="70" :options="memOptions" :series="memSeries" />
+        <VueApexCharts ref="memChart" height="70" :options="memOptions" :series="memSeries" />
     </v-card>
 
     <v-card variant="plain">
-        <VueApexCharts height="70" :options="netOptions" :series="netSeries" />
+        <VueApexCharts ref="netChart" height="70" :options="netOptions" :series="netSeries" />
     </v-card>
 </template>

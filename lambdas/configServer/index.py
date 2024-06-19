@@ -119,35 +119,27 @@ def get_nic_information(instance_id):
  
 
 def minecraft_init(instance_id):
-    logger.info("------- minecraft_init: " + instance_id
-                )
+    logger.info(f"------- minecraft_init: {instance_id}")
     instance_attributes = utl.get_instance_attributes(instance_id)
 
     if not instance_attributes:
         logger.warning("Instance data does not exist")
         return False
     
-    if 'minecraftruncommand' in instance_attributes:  
-        # Split the path into its components
-        path_components = instance_attributes["minecraftruncommand"].split('/')        
-        # Find the index of the last component (the command)
-        command_index = len(path_components) - 1        
-        # Extract the command
-        command = path_components[command_index]        
-        # Extract the directory by joining all components except the last one
-        directory = '/'.join(path_components[:command_index])
-  
-        parameters = {
-            'commands':[command],                 
-            'workingDirectory':[directory],
-        }
-
-        ssm_rsp = ssm_exec_commands(instance_id, "AWS-RunShellScript", parameters)
-        logger.info(ssm_rsp)                    
-
-    else:
+    if 'runCommand' not in instance_attributes:
         logger.warning("RunCommand or Working Directories are not defined")
         return False
+    
+    run_command = instance_attributes["runCommand"]
+    work_dir = instance_attributes["workDir"]
+    
+    parameters = {
+        'commands':[run_command],                 
+        'workingDirectory':[work_dir],
+    }
+
+    ssm_rsp = ssm_exec_commands(instance_id, "AWS-RunShellScript", parameters)
+    logger.info(ssm_rsp)                    
 
 def cw_agent_status_check(instance_id):
     logger.info("------- cw_agent_status_check : " + instance_id)

@@ -34,81 +34,6 @@ def group_exists(instanceId, poolId):
         logger.warning("Group does not exist.")
         return False
 
-# def extractStateEventTime(evt,previousState,instanceId):
-#     ctEvent = json.loads(evt['CloudTrailEvent'])
-#     if 'responseElements' in ctEvent:
-#         if ctEvent['responseElements'] != None and 'instancesSet' in ctEvent['responseElements']:
-#             if 'items' in ctEvent['responseElements']['instancesSet']:
-#                 for item in ctEvent['responseElements']['instancesSet']['items']:
-#                     if item['instanceId'] == instanceId and item['previousState']['name'] == previousState:
-#                         return ctEvent['eventTime']
-    
-#     return None
-
-# def getInstanceHoursFromCloudTailEvents(instanceId):
-#     totalMinutes = 0
-
-#     eventData = []
-
-#     paginator = ct_client.get_paginator('lookup_events')
-#     StartingToken = None
-    
-#     page_iterator = paginator.paginate(
-#     	LookupAttributes=[{'AttributeKey':'ResourceName','AttributeValue': instanceId}],
-#     	PaginationConfig={'PageSize':50, 'StartingToken':StartingToken },
-#         StartTime=datetime.utcnow().replace(day=1,hour=0,minute=0,second=0),
-#         EndTime=datetime.utcnow()
-#         )
-#     for page in page_iterator:
-#         for evt in page['Events']:
-#             if evt['EventName'] == "RunInstances":
-#                 ctEvent = json.loads(evt['CloudTrailEvent'])
-#                 eventData.append({'s': 'StartInstances', 'x': ctEvent['eventTime'] })
-                
-#             if evt['EventName'] == "StartInstances":
-#                 startEvent = extractStateEventTime(evt,"stopped",instanceId)
-#                 if startEvent is not None:
-#                     eventData.append({'s': 'StartInstances', 'x': startEvent })
-
-#             if evt['EventName'] == "StopInstances":
-#                 stopEvent = extractStateEventTime(evt,"running",instanceId) 
-#                 if stopEvent is not None:
-#                     eventData.append({'s': 'StopInstances', 'x': stopEvent })
- 
-#     data_points = sorted(eventData, key=lambda k : k['x'])
-    
-#     dtStartEvent = None
-#     dtStopEvent = None
-#     for point in data_points:
-#         if point['s'] == "StartInstances":
-#             dtStartEvent = datetime.fromisoformat(point['x'].replace("Z", "+00:00"))
-#             continue
-#         elif point['s'] == "StopInstances":
-#             if isinstance(dtStartEvent, datetime):
-#                 dtStopEvent = datetime.fromisoformat(point['x'].replace("Z", "+00:00"))
-#             else:
-#                 # Instance started before the beginning of the month
-#                 dtStartEvent = datetime.now().replace(day=1,hour=0,minute=0,second=0)
-#                 dtStopEvent = datetime.fromisoformat(point['x'].replace("Z", "+00:00")).replace(tzinfo=None)
-
-#         if isinstance(dtStartEvent, datetime) and isinstance(dtStopEvent, datetime):
-#             delta = dtStopEvent.replace(tzinfo=None) - dtStartEvent.replace(tzinfo=None)
-#             #print(instanceId + ' s:' + dtStartEvent.strftime("%m/%d/%Y - %H:%M:%S") + ' - e:' + dtStopEvent.strftime("%m/%d/%Y - %H:%M:%S") + ' = ' + str(round(delta.total_seconds()/60,2)))
-#             totalMinutes = totalMinutes + round(delta.total_seconds()/60,2)
-#             dtStartEvent = None
-#             dtStopEvent = None
-
-#     # in case the instance is still running
-#     if isinstance(dtStartEvent, datetime) and not isinstance(dtStopEvent, datetime):
-#             dtStopEvent = datetime.utcnow()
-#             delta = dtStopEvent.replace(tzinfo=None) - dtStartEvent.replace(tzinfo=None)
-#             #print(instanceId + ' s:' + dtStartEvent.strftime("%m/%d/%Y - %H:%M:%S") + ' - e:' + dtStopEvent.strftime("%m/%d/%Y - %H:%M:%S") + ' = ' + str(round(delta.total_seconds()/60,2)))
-#             totalMinutes = totalMinutes + round(delta.total_seconds()/60,2)
-#             dtStartEvent = None
-#             dtStopEvent = None                               
-                    
-#     return totalMinutes
-
 def handler(event, context):
       
     try:
@@ -170,7 +95,6 @@ def handler(event, context):
 
         pstLaunchTime = launchTime.astimezone(pst)        
         runningMinutes = utl.get_total_hours_running_per_month(instance_id)
-        groupMembers = []
 
         listServer_result.append({
             'id': instance_id,
@@ -185,8 +109,7 @@ def handler(event, context):
             'initStatus': status['initStatus'].lower(),
             'iamStatus': status['iamStatus'].lower(),
             'launchTime': pstLaunchTime.strftime("%m/%d/%Y - %H:%M:%S"),
-            'runningMinutes': runningMinutes,
-            'groupMembers': groupMembers
+            'runningMinutes': runningMinutes
         })
 
     logger.info(listServer_result)

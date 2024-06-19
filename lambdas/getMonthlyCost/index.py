@@ -110,6 +110,7 @@ def getUsageCost(granularity,startDate,endDate,tagValue):
                     "usageQuantity": float(results['Total']['UsageQuantity']['Amount'])
                 })
             return usageDays
+
                 
     except Exception as e:
         logger.error(str(e))

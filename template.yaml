@@ -216,24 +216,6 @@ Resources:
         client_secret: '{{resolve:ssm:/minecraft/GOOGLE_SECRET}}'
         authorize_scopes: email profile openid
 
-  InstancesTable:
-    Type: AWS::DynamoDB::Table
-    Properties:
-      BillingMode: PAY_PER_REQUEST
-      AttributeDefinitions:
-        - AttributeName: region
-          AttributeType: S
-        - AttributeName: id
-          AttributeType: S
-      KeySchema:
-        - AttributeName: id
-          KeyType: HASH
-        - AttributeName: region
-          KeyType: RANGE
-      TimeToLiveSpecification:
-        AttributeName: expiration
-        Enabled: true
-
   LogAuditTable:
     Type: AWS::DynamoDB::Table
     Properties:
@@ -263,9 +245,6 @@ Resources:
           - Type: AWS_IAM
       DataSources:
         DynamoDb:
-          InstancesTable:
-            TableName: !Ref InstancesTable
-            TableArn: !GetAtt InstancesTable.Arn
           LogAuditTable:
             TableName: !Ref LogAuditTable
             TableArn: !GetAtt LogAuditTable.Arn
@@ -277,24 +256,6 @@ Resources:
           GetMonthlyCostDataSource:
             FunctionArn: !GetAtt GetMonthlyCost.Arn
       Functions:
-        getServerById:
-          Runtime:
-            Name: APPSYNC_JS
-            Version: "1.0.0"
-          DataSource: InstancesTable
-          CodeUri: ./appsync/resolvers/getById.js
-        putServerById:
-          Runtime:
-            Name: APPSYNC_JS
-            Version: "1.0.0"
-          DataSource: InstancesTable
-          CodeUri: ./appsync/resolvers/putById.js
-        updateServerById:
-          Runtime:
-            Name: APPSYNC_JS
-            Version: "1.0.0"
-          DataSource: InstancesTable
-          CodeUri: ./appsync/resolvers/updateById.js
         serverListFunction:
           Runtime:
             Name: APPSYNC_JS
@@ -332,13 +293,13 @@ Resources:
               Name: APPSYNC_JS
               Version: "1.0.0"
             Pipeline:
-              - putServerById
+              - triggerServerActionFunction
           updateServerConfig:
             Runtime:
               Name: APPSYNC_JS
               Version: "1.0.0"
             Pipeline:
-              - updateServerById
+              - triggerServerActionFunction
           startServer:
             Runtime:
               Name: APPSYNC_JS
@@ -387,7 +348,7 @@ Resources:
               Name: APPSYNC_JS
               Version: "1.0.0"
             Pipeline:
-              - getServerById
+              - triggerServerActionFunction
           getMonthlyCost:
             Runtime:
               Name: APPSYNC_JS
@@ -617,7 +578,7 @@ Resources:
           TAG_APP_VALUE: !Ref AppValue
           APPSYNC_URL: !GetAtt GraphQLAPI.GraphQLUrl
           COGNITO_USER_POOL_ID: !Ref CognitoUserPool
-          INSTANCES_TABLE_NAME: !Ref InstancesTable
+          #INSTANCES_TABLE_NAME: !Ref InstancesTable
           EC2_INSTANCE_PROFILE_NAME: !Ref IAMEC2InstanceProfile
           EC2_INSTANCE_PROFILE_ARN: !GetAtt IAMEC2InstanceProfile.Arn
 
@@ -637,14 +598,14 @@ Resources:
         - arn:aws:iam::aws:policy/AmazonCognitoReadOnly
         - SSMParameterReadPolicy:
             ParameterName: "minecraftserverdashboard*"
-        - DynamoDBCrudPolicy:
-            TableName: !Ref InstancesTable
+        # - DynamoDBCrudPolicy:
+        #     TableName: !Ref InstancesTable
       Environment:
         Variables:
           APP_NAME: !Ref ProjectName
           TAG_APP_VALUE: !Ref AppValue
           APPSYNC_URL: !GetAtt GraphQLAPI.GraphQLUrl
-          INSTANCES_TABLE_NAME: !Ref InstancesTable
+          #INSTANCES_TABLE_NAME: !Ref InstancesTable
 
   ListServers:
     Type: AWS::Serverless::Function
@@ -662,14 +623,14 @@ Resources:
         - arn:aws:iam::aws:policy/AmazonCognitoReadOnly
         - SSMParameterReadPolicy:
             ParameterName: !Sub "/${ProjectName}/${EnvironmentName}*"
-        - DynamoDBCrudPolicy:
-            TableName: !Ref InstancesTable
+        # - DynamoDBCrudPolicy:
+        #     TableName: !Ref InstancesTable
       Environment:
         Variables:
           APP_NAME: !Ref ProjectName
           TAG_APP_VALUE: !Ref AppValue
           APPSYNC_URL: !GetAtt GraphQLAPI.GraphQLUrl
-          INSTANCES_TABLE_NAME: !Ref InstancesTable
+          #INSTANCES_TABLE_NAME: !Ref InstancesTable
           EC2_INSTANCE_PROFILE_NAME: !Ref IAMEC2InstanceProfile
           EC2_INSTANCE_PROFILE_ARN: !GetAtt IAMEC2InstanceProfile.Arn
           COGNITO_USER_POOL_ID: !Ref CognitoUserPool
@@ -691,15 +652,20 @@ Resources:
             StateMachineName: !GetAtt StateMachine.Name
         - SSMParameterReadPolicy:
             ParameterName: !Sub "/${ProjectName}/${EnvironmentName}*"
-        - DynamoDBCrudPolicy:
-            TableName: !Ref InstancesTable
+        # - DynamoDBCrudPolicy:
+        #     TableName: !Ref InstancesTable
         - Version: "2012-10-17" # Policy Document
           Statement:
             - Effect: Allow
               Action:
                 - ec2:AssociateIamInstanceProfile
                 - ec2:DisassociateIamInstanceProfile
-              Resource: "*"
+                - ec2:DeleteTags
+                - ec2:CreateTags
+              Resource: 'arn:aws:ec2:*:*:instance/*'
+              Condition:
+                StringEquals:
+                  'ec2:ResourceTag/App': !Ref AppValue
         - Version: "2012-10-17" # Policy Document
           Statement:
             - Effect: Allow
@@ -727,7 +693,6 @@ Resources:
           APP_NAME: !Ref ProjectName
           TAG_APP_VALUE: !Ref AppValue
           APPSYNC_URL: !GetAtt GraphQLAPI.GraphQLUrl
-          INSTANCES_TABLE_NAME: !Ref InstancesTable
           EC2_INSTANCE_PROFILE_NAME: !Ref IAMEC2InstanceProfile
           EC2_INSTANCE_PROFILE_ARN: !GetAtt IAMEC2InstanceProfile.Arn
           CONFIG_SERVER_LAMBDA_NAME: !Ref ConfigServer
@@ -747,8 +712,8 @@ Resources:
         - arn:aws:iam::aws:policy/AmazonCognitoReadOnly
         - SSMParameterReadPolicy:
             ParameterName: "minecraftserverdashboard*"
-        - DynamoDBCrudPolicy:
-            TableName: !Ref InstancesTable
+        # - DynamoDBCrudPolicy:
+        #     TableName: !Ref InstancesTable
         - Version: "2012-10-17" # Policy Document
           Statement:
             - Effect: Allow
@@ -763,7 +728,7 @@ Resources:
           TAG_APP_VALUE: !Ref AppValue
           APPSYNC_URL: !GetAtt GraphQLAPI.GraphQLUrl
           COGNITO_USER_POOL_ID: !Ref CognitoUserPool
-          INSTANCES_TABLE_NAME: !Ref InstancesTable
+          #INSTANCES_TABLE_NAME: !Ref InstancesTable
 
   ConfigServer:
     Type: AWS::Serverless::Function
@@ -779,8 +744,8 @@ Resources:
         - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
         - SSMParameterReadPolicy:
             ParameterName: "minecraftserverdashboard*"
-        - DynamoDBCrudPolicy:
-            TableName: !Ref InstancesTable
+        # - DynamoDBCrudPolicy:
+        #     TableName: !Ref InstancesTable
         - Version: "2012-10-17" # Policy Document
           Statement:
             - Effect: Allow
@@ -805,7 +770,7 @@ Resources:
           APP_NAME: !Ref ProjectName
           TAG_APP_VALUE: !Ref AppValue
           APPSYNC_URL: !GetAtt GraphQLAPI.GraphQLUrl
-          INSTANCES_TABLE_NAME: !Ref InstancesTable
+          #INSTANCES_TABLE_NAME: !Ref InstancesTable
 
   StateMachineLogGroup:
     Type: AWS::Logs::LogGroup

@@ -78,7 +78,48 @@ export const useServerStore = defineStore("server", {
             } else {
                 console.warn(`Server with ID ${server.id} not found in serversDict`);
             }
-        }
+        },
+
+        async getServerConfig(instanceId) {
+            try {
+                const results = await client.graphql({
+                    query: queries.getServerConfig,
+                    variables: { instanceId: instanceId }
+                });
+
+                if (results.data.getServerConfig === null) {
+                    console.log(`Server with ID ${instanceId} not found`);
+                    return null;
+                }
+
+                return results.data.getServerConfig;
+
+            } catch (error) {
+                console.error(error);
+                throw error;
+            }
+        },
+
+        async putServerConfig(input) {
+            try {
+                console.log(input);
+                const results = await client.graphql({
+                    query: mutations.putServerConfig,
+                    variables: { input: input }
+                });
+
+                if (results.data.putServerConfig === null) {
+                    console.log(results);
+                    return null;
+                }
+
+                return results.data.putServerConfig;
+
+            } catch (error) {
+                console.error(error);
+                throw error;
+            }
+        },
     }
 
 })
