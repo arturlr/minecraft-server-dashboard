@@ -81,12 +81,12 @@ async function triggerAction(action) {
   }
 
   if (rsp.statusCode == 200) {
-    snackText.value = rsp.body.msg;
+    snackText.value = rsp.body;
     snackbar.value = true;
     snackColor.value = "primary"
   }
   else {
-    snackText.value = rsp.body.err;
+    snackText.value = rsp.body;
     snackbar.value = true;
     snackColor.value = "error"
   }
@@ -109,8 +109,25 @@ async function triggerAction(action) {
       </v-snackbar>
 
       <div v-if="serverStore.selectedServer.id != null">
-        <v-card class="pa-6" max-width="600"  :title="serverName" :subtitle="serverStore.selectedServer.id">
-          <v-alert v-if="!iamServerCompliant" closable dense type="error">
+        <v-card class="pa-6" max-width="600">
+
+          <v-card-item>
+
+          <v-card-title>{{ serverName }}</v-card-title>
+
+          <v-card-subtitle>
+            {{ serverStore.selectedServer.id }}
+            <v-chip
+              size="small"
+              :color="serverStore.selectedServer.initStatus === 'ok' ? 'success' : 'warning'"
+              variant="text"
+            >
+            <v-icon icon="mdi-check-circle" start></v-icon>
+          </v-chip>
+          </v-card-subtitle>
+        </v-card-item>
+
+          <v-alert v-if="!iamServerCompliant" closable dense type="error"> 
             <v-row align="center">
               <v-col class="grow">
                 This server does not have the correct IAM role and permissions to execute.
@@ -122,6 +139,7 @@ async function triggerAction(action) {
               </v-col>
             </v-row>
           </v-alert>
+          
           <v-text-field 
             class="pb-5" 
             label="Public IP" 
@@ -145,9 +163,9 @@ async function triggerAction(action) {
 
           </v-text-field>
 
-          <ServerCharts />
+          <ServerCharts /> 
           
-          <ServerSettings />
+          <ServerSettings /> 
 
           <span class="text-caption">Hours running: {{ (serverStore.selectedServer.runningMinutes / 60).toFixed(1)
             }}</span>

@@ -52,8 +52,14 @@ echo -e "- Cognito identity pool id: ${YELLOW}${IDENTITYPOOLID}${SET}"
 COGNITODOMAINNAME=$(aws cloudformation describe-stacks --stack-name $STACKNAME --query "Stacks[0].Outputs[?OutputKey=='CognitoDomainName'].OutputValue" --output text --region $AWSREGION)
 echo -e "- Cognito domain name: ${YELLOW}${COGNITODOMAINNAME}${SET}"
 
-S3WEBBUCKETNAME=$(aws cloudformation describe-stacks --stack-name $STACKNAME --query "Stacks[0].Outputs[?OutputKey=='S3WebBucketName'].OutputValue" --output text --region $AWSREGION)
-echo -e "- S3 Web bucket name: ${YELLOW}${S3WEBBUCKETNAME}${SET}"
+WEBBUCKETNAME=$(aws cloudformation describe-stacks --stack-name $STACKNAME --query "Stacks[0].Outputs[?OutputKey=='WebAppBucketName'].OutputValue" --output text --region $AWSREGION)
+echo -e "- S3 Web bucket name: ${YELLOW}${WEBBUCKETNAME}${SET}"
+
+SUPPORTBUCKETNAME=$(aws cloudformation describe-stacks --stack-name $STACKNAME --query "Stacks[0].Outputs[?OutputKey=='SupportBucketName'].OutputValue" --output text --region $AWSREGION)
+echo -e "- S3 Support bucket name: ${YELLOW}${SUPPORTBUCKETNAME}${SET}"
+
+echo -e "${WHITE}---- Uploading cloudwath agent config file to S3 ${WHITE}${SET}"
+aws s3 cp amazon-cloudwatch-agent.json "s3://${SUPPORTBUCKETNAME}/amazon-cloudwatch-agent.json" --region $AWSREGION
 
 echo -e "-- Creating .env file"
 
@@ -66,7 +72,7 @@ echo "VITE_IDENTITY_POOL_ID=${IDENTITYPOOLID}" >> dashboard/.env
 echo "VITE_COGNITO_USER_POOL_CLIENT_ID=${COGNITOUSERPOOLCLIENTID}" >> dashboard/.env
 echo "VITE_COGNITO_USER_POOL_ID=${COGNITOUSERPOOLID}" >> dashboard/.env
 echo "VITE_COGNITO_DOMAIN=${COGNITODOMAINNAME}.auth.${AWSREGION}.amazoncognito.com" >> dashboard/.env
-echo "VITE_BUCKET_NAME=${S3WEBBUCKETNAME}" >> dashboard/.env
+echo "VITE_BUCKET_NAME=${WEBBUCKETNAME}" >> dashboard/.env
 
 echo "VITE_ADMIN_GROUP_NAME=admin" >> dashboard/.env
 echo "VITE_I18N_LOCALE=en" >> dashboard/.env
@@ -75,7 +81,7 @@ echo "VITE_I18N_FALLBACK_LOCALE=en" >> dashboard/.env
 # cd dashboard
 # npm install
 # npm run build
-# aws s3 cp dist "s3://${S3WEBBUCKETNAME}" --recursive
+# aws s3 cp dist "s3://${WEBBUCKETNAME}" --recursive
 # cd ..
 
 # echo -e "- Web App available at: ${YELLOW}https://${CLOUDFRONT}${SET}" 

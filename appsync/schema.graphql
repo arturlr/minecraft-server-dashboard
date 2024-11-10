@@ -6,16 +6,22 @@ input AddUserToServerInput {
 type LogAudit @aws_iam
 @aws_cognito_user_pools {
 	id: ID!
-	email: AWSEmail!
+	actionUser: AWSEmail!
 	action: String!
+	instanceId: String!
+	inviteeEmail: AWSEmail	
 	expirationEpoch: AWSTimestamp
+	createdAt: AWSDateTime
 }
 
 input LogAuditInput {
 	id: ID!
-	email: AWSEmail!
+	actionUser: AWSEmail!
 	action: String!
+	instanceId: String!
+	inviteeEmail: AWSEmail	
 	expirationEpoch: AWSTimestamp
+	createdAt: AWSDateTime
 }
 
 type MonthlyCost @aws_iam
@@ -122,36 +128,38 @@ type Mutation {
 	stopServer(instanceId: String!): AWSJSON
 		@aws_cognito_user_pools
 	fixServerRole(instanceId: String!): AWSJSON
+		@aws_cognito_user_pools  
+	verifyUserEmail(id: String!): AWSJSON
 		@aws_cognito_user_pools
 	addUserToServer(userEmail: AWSEmail, instanceId: String!): AWSJSON
 		@aws_cognito_user_pools
-	putServerConfig(input: ServerConfigInput!): ServerConfig
+	putServerConfig(input: ServerConfigInput!): ServerConfig  
 		@aws_cognito_user_pools
 	updateServerConfig(input: ServerConfigInput!): ServerConfig
-		@aws_cognito_user_pools
-	putLogAudit(input: LogAuditInput!): AWSJSON
-		@aws_iam
+		@aws_cognito_user_pools 
+	putLogAudit(input: LogAuditInput!): LogAudit
+		@aws_iam @aws_cognito_user_pools
 }
 
 type Query {
-	listServers: [ServerInfo]
+	listServers: [ServerInfo]  
 		@aws_cognito_user_pools
 	getMonthlyCost(instanceId: String!): MonthlyCost
 		@aws_cognito_user_pools
-	getServerConfig(instanceId: String!): ServerConfig
+	getServerConfig(id: String!): ServerConfig
 		@aws_cognito_user_pools
-	getLogAudit(instanceId: String!): [LogAudit]
-		@aws_cognito_user_pools
+	getLogAudit(id: String!): [LogAudit]
+		@aws_cognito_user_pools  
 }
 
 type Subscription {
-	onPutServerMetric(id: String!): ServerMetric
+	onPutServerMetric(id: String!): ServerMetric  
 		@aws_subscribe(mutations: ["putServerMetric"])
 @aws_cognito_user_pools
 @aws_iam
 
 	onChangeState: ServerInfo
-		@aws_subscribe(mutations: ["changeServerState"])
+		@aws_subscribe(mutations: ["changeServerState"])  
 @aws_cognito_user_pools
 @aws_iam
 }

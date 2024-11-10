@@ -91,13 +91,9 @@ class Dyn:
 
 class Utils:
     def __init__(self):
-        logger.info("------- Utils Class Initialization")
-        self.ec2_client = boto3.client('ec2')
+        logger.info("------- Ec2Utils Class Initialization")
         self.ssm = boto3.client('ssm')        
-        self.ct_client = boto3.client('cloudtrail')
-        self.appValue = os.getenv('TAG_APP_VALUE')
-        self.ec2InstanceProfileArn = os.getenv('EC2_INSTANCE_PROFILE_ARN')
-
+    
     def capitalize_first_letter(self, text):
         """
         Capitalizes the first letter of each word in the given text, while preserving the original case of the remaining letters.
@@ -111,15 +107,98 @@ class Utils:
         words = text.split()
         capitalized_words = [word[0].upper() + word[1:] for word in words]
         return ' '.join(capitalized_words)
-
-
+    
     def response(self, status_code, body, headers={}):
+        """
+        Returns a dictionary containing the status code, body, and headers.
+
+        Args:
+            status_code (int): The HTTP status code.
+            body (str): The response body.
+            headers (dict, optional): The response headers. Defaults to {}.
+
+        Returns:
+            dict: A dictionary containing the status code, body, and headers.
+        """
         if bool(headers): # Return True if dictionary is not empty # use json.dumps for body when using with API GW
             return {"statusCode": status_code, "body": body, "headers": headers}
         else:
             return {"statusCode": status_code, "body": body }
-        
+
+    def get_ssm_param(self, paramKey, isEncrypted=False):
+        try:
+            ssmResult = self.ssm.get_parameter(
+                Name=paramKey,
+                WithDecryption=isEncrypted
+            )
+
+            if (ssmResult["ResponseMetadata"]["HTTPStatusCode"] == 200):
+                return ssmResult["Parameter"]["Value"]
+            else:
+                return None
+
+        except Exception as e:
+            logger.warning(str(e) + " for " + paramKey)
+            return None
+
+    def get_ssm_parameters(self, paramKeys, isEncrypted=False):
+        try:
+            resp=[]
+            paramArray=paramKeys.split(",")            
+            ssmResult = self.ssm.get_parameters(
+                Names=paramArray,
+                WithDecryption=isEncrypted
+            )           
+            if ssmResult["Parameters"]:
+                for entry in ssmResult["Parameters"]:
+                    resp.append({
+                        "Name":entry["Name"],
+                        "Value":entry["Value"]
+                    })
+
+                return resp
+            else:
+                return None
+
+        except Exception as e:
+            logger.warning(str(e) + " for " + paramKeys)
+            return None
+
+    def put_ssm_param(self, paramKey, paramValue, paramType):
+        try:
+            ssmResult = self.ssm.put_parameter(
+                Name=paramKey,
+                Value=paramValue,
+                Type=paramType,
+                Overwrite=True
+            )
+
+            return ssmResult
+
+        except Exception as e:
+            logger.warning(str(e) + " for " + paramKey)
+            return None
+                
+class Ec2Utils:
+    def __init__(self):
+        logger.info("------- Ec2Utils Class Initialization")
+        self.ec2_client = boto3.client('ec2')
+        self.ssm = boto3.client('ssm')        
+        self.ct_client = boto3.client('cloudtrail')
+        self.cw_client = boto3.client('cloudwatch')
+        self.appValue = os.getenv('TAG_APP_VALUE')
+        self.ec2InstanceProfileArn = os.getenv('EC2_INSTANCE_PROFILE_ARN')
+
     def get_instance_attributes(self,instance_id):
+        """
+        Retrieves the instance attributes from the EC2 tags.
+
+        Args:
+            instance_id (str): The ID of the EC2 instance.
+
+        Returns:
+            dict: A dictionary containing the instance attributes.
+        """
         logger.info("Getting instance attributes for " + instance_id)
         try:        
             # Get existing tags
@@ -132,10 +211,10 @@ class Utils:
             tag_mapping = {}
             
             for tag in existing_tags:
+                logger.info(f"Tag: {tag['Key']} = {tag['Value']}")
                 tag_mapping[tag['Key'].lower()] = tag['Value']
 
-            logger.info(f"Existing tags: {tag_mapping}")
-
+            logger.info(f"Tag Mapping: {tag_mapping}")
 
             # returning following the Appsync Schema for ServerConfig
             return {
@@ -150,8 +229,8 @@ class Utils:
         
         except Exception as e:
             logger.error(f"Error getting tags: {e}")
+            return None  # or handle this error as appropriate
         
-
     def set_instance_attributes(self,input):
         instance_id = input.get('id')
 
@@ -268,63 +347,32 @@ class Utils:
                             if item.get('instanceId') == instanceId and item['previousState']['name'] == previousState:
                                 return ct_event['eventTime']
         return None
-        
-    def get_ssm_param(self, paramKey, isEncrypted=False):
-        try:
-            ssmResult = self.ssm.get_parameter(
-                Name=paramKey,
-                WithDecryption=isEncrypted
-            )
-
-            if (ssmResult["ResponseMetadata"]["HTTPStatusCode"] == 200):
-                return ssmResult["Parameter"]["Value"]
+    
+    def process_user_instances_by_group(self, user_groups):
+        user_instances = []
+        for group in user_groups:
+            # check if groups starts with i- (instanceId)
+            if not group.startswith("i-"):
+                continue
+            response = self.ec2_client.describe_instances(InstanceIds=[group])
+            if not response["Reservations"]:
+                continue
             else:
-                return None
+                reservations = response["Reservations"]
+                user_instances.extend([user_instances for reservation in reservations for user_instances in reservation["Instances"]])
 
-        except Exception as e:
-            logger.warning(str(e) + " for " + paramKey)
-            return None
+        # Get the total number of instances
+        total_instances = len(user_instances)
 
-    def get_ssm_parameters(self, paramKeys, isEncrypted=False):
-        try:
-            resp=[]
-            paramArray=paramKeys.split(",")            
-            ssmResult = self.ssm.get_parameters(
-                Names=paramArray,
-                WithDecryption=isEncrypted
-            )           
-            if ssmResult["Parameters"]:
-                for entry in ssmResult["Parameters"]:
-                    resp.append({
-                        "Name":entry["Name"],
-                        "Value":entry["Value"]
-                    })
+        # Log the total number of instances
+        logger.info(f"Total instances: {total_instances}")
 
-                return resp
-            else:
-                return None
+        return {
+            "Reservations": user_instances,
+            "TotalInstances": total_instances
+        }
 
-        except Exception as e:
-            logger.warning(str(e) + " for " + paramKeys)
-            return None
-
-    def putSsmParam(self, paramKey, paramValue, paramType):
-        try:
-            ssmResult = self.ssm.put_parameter(
-                Name=paramKey,
-                Value=paramValue,
-                Type=paramType,
-                Overwrite=True
-            )
-
-            return ssmResult
-
-        except Exception as e:
-            logger.warning(str(e) + " for " + paramKey)
-            return None
-        
-
-    def list_server_by_id(self,instanceId):
+    def list_server_by_id(self, instanceId):
         response = self.ec2_client.describe_instances(InstanceIds=[instanceId])
 
         if not response["Reservations"]:
@@ -335,7 +383,6 @@ class Utils:
             "TotalInstances": 1
         }
 
-
     def list_servers_by_user(self, email, page=1, results_per_page=10):
         filters = [
             {"Name": "tag:App", "Values": [self.appValue]},
@@ -345,11 +392,19 @@ class Utils:
 
         return self.paginate_instances(filters, page, results_per_page)
 
-
     def list_servers_by_state(self, state, page=1, results_per_page=10):
         filters = [
             {"Name": "tag:App", "Values": [self.appValue]},
             {"Name": "instance-state-name", "Values": [state]}
+        ]
+
+        return self.paginate_instances(filters, page, results_per_page)
+
+    def list_servers_by_group(self, group, page=1, results_per_page=10):
+        filters = [
+            {"Name": "tag:App", "Values": [self.appValue]},
+            {"Name": "instance-state-name", "Values": ["pending", "running", "stopping", "stopped"]},
+            {"Name": "tag:Group", "Values": [group]}
         ]
 
         return self.paginate_instances(filters, page, results_per_page)
@@ -361,7 +416,6 @@ class Utils:
         ]
 
         return self.paginate_instances(filters, page, results_per_page)
-
 
     def paginate_instances(self, filters, page=1, results_per_page=10):
         instances = []
@@ -428,8 +482,7 @@ class Utils:
         ), None)
 
         return matching_association
-
-                    
+                 
     def describe_instance_status(self, instance_id):
         iamStatus = 'Fail'
         initStatus = 'Fail'
@@ -451,6 +504,57 @@ class Utils:
             iamStatus = 'ok'
         
         return { 'instanceId': instance_id, 'initStatus': initStatus, 'iamStatus': iamStatus }
+
+    def describe_instance_attributes(self, instanceId):
+        response = self.ec2_client.describe_instance_attribute(
+            Attribute='userData',
+            InstanceId=instanceId
+        )
+
+    def update_alarm(self, instanceId):
+        logger.info("updateAlarm: " + instanceId)
+        instanceInfo = self.get_instance_attributes(instanceId)
+        # Default values
+        alarmMetric = "CPUUtilization"
+        alarmThreshold = "10"
+
+        if not instanceInfo:
+            logger.warning("No Instance found, using default values for alarming")
+
+        alarmMetric = instanceInfo.get('alarmmetric','CPUUtilization')
+        alarmThreshold = instanceInfo.get('alarmthreshold','25')
+        alarmEvaluationPeriod = instanceInfo.get('alarmEvaluationPeriod', '35')
+        
+        dimensions=[]
+        statistic="Average"
+        namespace="CWAgent"
+        dimensions.append({'Name': 'InstanceId','Value': instanceId})
+        if alarmMetric == "CPUUtilization":
+            alarmMetricName = "cpu_usage_active"        
+            dimensions.append({'Name': 'cpu','Value': "cpu-total"})
+        elif alarmMetric == "Connections":
+            alarmMetricName = "UserCount"
+            statistic="Maximum"
+            namespace="MinecraftDashboard"
+        
+        self.cw_client.put_metric_alarm(
+                AlarmName=instanceId + "-" + "minecraft-server",
+                ActionsEnabled=True,
+                AlarmActions=["arn:aws:automate:" + aws_region + ":ec2:stop"],
+                InsufficientDataActions=[],
+                MetricName=alarmMetricName,
+                Namespace=namespace,
+                Statistic=statistic,
+                Dimensions=dimensions,
+                Period=60,
+                EvaluationPeriods=alarmEvaluationPeriod,
+                DatapointsToAlarm=alarmEvaluationPeriod,
+                Threshold=int(alarmThreshold),
+                TreatMissingData="missing",
+                ComparisonOperator="LessThanOrEqualToThreshold"   
+            )
+
+        logger.info("Alarm configured to " + alarmMetric + " and " + alarmThreshold)
 
 class Auth:
     def __init__(self,cognito_pool_id):
@@ -528,7 +632,7 @@ class Auth:
                 user_attributes[att["Name"].lower()] = att["Value"]
 
         return user_attributes
-    
+
     def group_exists(self, instanceId):
         try:
             grpRsp = self.cognito_idp.get_group(
@@ -564,7 +668,7 @@ class Auth:
                     Filter="email = '" + userEmail + "'"
                 )
 
-                if len(user['Users']) == 0:
+                if not len(user['Users']):
                     logger.error("Unable to find user: " + userEmail + ". User has to create a profile by login in this website")
                     return {"err": "Unable to find user: " + userEmail + ". User has to create a profile by login in this website" }
 
@@ -581,28 +685,63 @@ class Auth:
                 logger.warning(str(e))
                 return { "err": str(e) } 
             
-    def list_users_in_group(self,instance_id):
+    def list_users_for_group(self, instance_id):
         try:
-            response = self.cognito_idp.list_users_in_group(
-                UserPoolId=self.cognito_pool_id,
-                GroupName=instance_id
-            )
+            groupMembers = []
+            pagination_token = None
 
-            groupMembers = [
-                    {
-                        "id": user_attrs.get("sub"),
-                        "email": user_attrs.get("email"),
-                        "fullname": f"{user_attrs.get('given_name')} {user_attrs.get('family_name')}"
-                    }
-                    for user in response["Users"]
-                    if (user_attrs := {attr["Name"]: attr["Value"] for attr in user["Attributes"]})
-                ]
-        
+            while True:
+                if pagination_token:
+                    response = self.cognito_idp.list_users_in_group(
+                        UserPoolId=self.cognito_pool_id,
+                        GroupName=instance_id,
+                        NextToken=pagination_token
+                    )
+                else:
+                    groupMembers.extend([
+                        {
+                            "id": user_attrs.get("sub"),
+                            "email": user_attrs.get("email"),
+                            "fullname": f"{user_attrs.get('given_name')} {user_attrs.get('family_name')}"
+                        }
+                        for user in response["Users"]
+                        if (user_attrs := {attr["Name"]: attr["Value"] for attr in user["Attributes"]})
+                    ])
+
+                    pagination_token = response.get('NextToken')
+                    if not pagination_token:
+                        break
+
             return groupMembers
 
         except Exception as e:
             logger.info("Exception list_users_in_group")
             logger.warning(str(e))
             return []
+      
+    def list_groups_for_user(self, username):
+        groups = []
+        next_token = None
 
-     
+        while True:
+            if next_token:
+                response = self.cognito_idp.admin_list_groups_for_user(
+                    Username=username,
+                    UserPoolId=self.cognito_pool_id,
+                    NextToken=next_token
+                )
+            else:
+                response = self.cognito_idp.admin_list_groups_for_user(
+                    Username=username,
+                    UserPoolId=self.cognito_pool_id
+                )
+
+            # extract the group names from the response
+            groups.extend([group['GroupName'] for group in response.get('Groups', [])])
+
+            next_token = response.get('NextToken')
+            if not next_token:
+                break
+
+        return groups
+        

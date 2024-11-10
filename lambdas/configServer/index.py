@@ -5,6 +5,7 @@ import logging
 import os
 import json
 import time
+import uuid
 from datetime import datetime
 from jsonpath_ng.ext import parse
 import helpers
@@ -12,111 +13,45 @@ import helpers
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
+session = botocore.session.get_session()
+aws_region = session.region_name
+sts = boto3.client('sts')
+aws_account_id = sts.get_caller_identity()['Account']
+
 utl = helpers.Utils()
 
 ssm = boto3.client('ssm')
 ec2 = boto3.client('ec2')
+lambda_client = boto3.client('lambda')
+
 appValue = os.getenv('TAG_APP_VALUE')
 appName = os.getenv('APP_NAME') 
+event_response_lambda = os.getenv('EVENT_RESPONSE_LAMBDA')
 
-def packages_installation(instance_id):
-    logger.info("------- packages_installation :" + instance_id)
 
-    parameters={
-        'commands':[
-            """#!/bin/bash
-            APT=$(which apt)
-            YUM=$(which yum)
-            case $APT in /usr*)
-            sudo apt-get -y install jq zip unzip net-tools 
-            esac
-            case $YUM in /usr*)
-            sudo yum -y install jq zip unzip
-            esac
-            if [ ! -f /usr/share/collectd/types.db ]; then
-                sudo mkdir -p /usr/share/collectd
-                sudo touch /usr/share/collectd/types.db
-            fi
-            if ! command -v aws >/dev/null 2>&1; then
-                curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-                unzip awscliv2.zip
-                sudo ./aws/install
-                echo "AWS CLI installed successfully"
-            else
-                echo "AWS CLI is already installed"
-            fi"""
-        ]
-    }
-    
-     # Installing packages
-    ssm_rsp = ssm_exec_commands(
-        instance_id,
-        "AWS-RunShellScript",
-        parameters
-    )
+def event_response_payload(instance_id):
+    logger.info("------- event_response_payload : " + instance_id)
 
-    logger.info(ssm_rsp)
+    # create a uuid
+    event_id = str(uuid.uuid4())
 
-def config_cron(instance_id):
-    logger.info("------- config_cron : " + instance_id)
-
-    parameters={
-        'commands':[
-            """#!/bin/bash
-            # check if port_count.sh exists.
-            if [ ! -f /usr/local/port_count.sh ]; then
-
-            # Get instance metadata
-            INSTANCE_ID=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)
-            REGION=$(curl -s http://169.254.169.254/latest/meta-data/local-hostname | cut -d . -f 2)
-
-            # Count established connections on port 25565
-            PORT_COUNT=$(netstat -an | grep ESTABLISHED | grep ':25565' | wc -l)
-
-            # Create the script file
-            echo "#!/bin/bash" > /usr/local/port_count.sh
-            echo "INSTANCE_ID=\"$INSTANCE_ID\"" >> /usr/local/port_count.sh
-            echo "PORT_COUNT=\$(netstat -an | grep ESTABLISHED | grep ':25565' | wc -l)" >> /usr/local/port_count.sh
-            echo "REGION=\"$REGION\"" >> /usr/local/port_count.sh
-            echo "aws cloudwatch put-metric-data --metric-name UserCount --dimensions InstanceId=\$INSTANCE_ID --namespace 'MinecraftDashboard' --value \$PORT_COUNT --region \$REGION" >> /usr/local/port_count.sh
-
-            # Make the script executable
-            chmod +x /usr/local/port_count.sh
-
-            # Schedule the script to run every minute
-            (sudo crontab -l 2>/dev/null; echo "* * * * * /usr/local/port_count.sh >/dev/null 2>&1") | crontab -         
-            fi      
-            """
-        ]
+    payload = {
+        "id": event_id,
+        "detail-type": "EC2 Instance State-change Notification", 
+        "source": "aws.ec2",
+        "account": aws_account_id,
+        "time": datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "region": aws_region,
+        "resources": [
+            "arn:aws:ec2:" + aws_region + ":" + aws_account_id + ":instance/" + instance_id
+        ],
+        "detail": {
+            "instance-id": instance_id,
+            "state": "fake"
+        }
     }
 
-     # Installing packages
-    ssm_rsp = ssm_exec_commands(
-        instance_id,
-        "AWS-RunShellScript",
-        parameters
-    )
-
-    logger.info(ssm_rsp)
-
-def get_nic_information(instance_id):
-    logger.info("------- get_nic_information : " + instance_id)
-
-    parameters={
-        'commands':[
-            "NIC=$(ip route get 1.1.1.1 | awk '{print $5; exit}');aws ssm put-parameter --name '/minecraftserverdashboard/" + instance_id + "/nic' --type 'String' --value $NIC --overwrite"
-        ]
-    }
-
-    # getting the NIC information
-    ssm_rsp = ssm_exec_commands(
-        instance_id,
-        'AWS-RunShellScript',
-        parameters
-    )    
-
-    logger.info(ssm_rsp)
- 
+    return payload
 
 def minecraft_init(instance_id):
     logger.info(f"------- minecraft_init: {instance_id}")
@@ -126,7 +61,7 @@ def minecraft_init(instance_id):
         logger.warning("Instance data does not exist")
         return False
     
-    if 'runCommand' not in instance_attributes:
+    if 'runCommand' not in instance_attributes or len(instance_attributes["runCommand"]) < 2:
         logger.warning("RunCommand or Working Directories are not defined")
         return False
     
@@ -196,10 +131,6 @@ def cw_agent_config(instance_id):
     else:
         logger.warning("Agent configuration failed")
          
-# def scriptExec(instance):
-#     ssmRunScript = ssm_exec_commands(instance,"AWS-RunRemoteScript",{"sourceType": ["GitHub"],"sourceInfo": ["{\"owner\":\"arturlr\", \"repository\": \"minecraft-server-dashboard\", \"path\": \"scripts/adding_cron.sh\", \"getOptions\": \"branch:dev\" }"],"commandLine": ["bash adding_cron.sh"]})
-#     logger.info(ssmRunScript)
-
 def ssm_exec_commands(instance_id: str, doc_name: str, params: Dict[str, Any], max_retries: int = 10, sleep_time: int = 5) -> Optional[Dict[str, Any]]:
     """
     Execute an SSM command on an EC2 instance and wait for its completion.
@@ -216,13 +147,14 @@ def ssm_exec_commands(instance_id: str, doc_name: str, params: Dict[str, Any], m
     """
     logger.info(f"Executing SSM command {doc_name} on instance {instance_id}")
     try:
+        instance_ids = [instance_id]
         response = ssm.send_command(
-            InstanceIds=[instance_id],
+            InstanceIds=instance_ids,
             DocumentName=doc_name,
             Parameters=params
         )
         command_id = response['Command']['CommandId']
-
+    
         waiter = ssm.get_waiter('command_executed')
         waiter.wait(
             CommandId=command_id,
@@ -233,23 +165,23 @@ def ssm_exec_commands(instance_id: str, doc_name: str, params: Dict[str, Any], m
             }
         )
 
-    except botocore.exceptions.WaiterError as e:
-        logger.error(f"Command failed: {e.last_response['Status']}")
-        return { "Status": e.last_response['Status'] }
+        # Get the command output
+        output = ssm.get_command_invocation(
+            CommandId=command_id,
+            InstanceId=instance_id
+        )
+
+        # logger.info(output)
+        return output
     
     except botocore.exceptions.ClientError as e:
         logger.error(f"Unexpected error: {e}")
-        return { "Status": e.last_response['Status'] }
-
-    # Get the command output
-    output = ssm.get_command_invocation(
-        CommandId=command_id,
-        InstanceId=instance_id
-    )
-
-    # logger.info(output)
-    return output
-
+        raise botocore.exceptions.ClientError(f"Unexpected error: {e}") from e
+    
+    except botocore.exceptions.WaiterError as e:
+        logger.error(f"Command failed: {e.last_response['Status']}")
+        return {"Status": e.last_response['Status']}
+    
 
 def handler(event, context):
 
@@ -258,14 +190,22 @@ def handler(event, context):
     # Execute minecraft initialization
     minecraft_init(instance_id)
 
-    # Nic Value
-    get_nic_information(instance_id)
+    # making sure the alarm is on
+    utl.update_alarm(instance_id)
 
-    # install packages
-    packages_installation(instance_id)
+    # invoke event_response_lambda to force iamstatus update
+    payload = event_response_payload(instance_id)
+    response = lambda_client.invoke(
+        FunctionName=event_response_lambda,
+        InvocationType='RequestResponse', # 'Event' for asynchronous invocation
+        Payload=bytes(json.dumps(payload), encoding='utf-8')
+    )
 
-    # Adding Cron Jobs
-    config_cron(instance_id)
+    # Get the response payload
+    payload = response.get('Payload').read()
+
+    # Print the response
+    print(payload)
 
     ## CloudWatch Agent Steps 
     cwAgentStatus = cw_agent_status_check(instance_id)
@@ -275,6 +215,3 @@ def handler(event, context):
     else:
         return cwAgentStatus
 
-    # except Exception as e:
-    #     logger.error('Something went wrong: ' + str(e))
-    #     return { "code": 500, "msg": str(e) }

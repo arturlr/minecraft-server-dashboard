@@ -13,7 +13,7 @@ export const useUserStore = defineStore("user", {
     userTokens: null
   }),
 
-  getters: { 
+  getters: {
     isAuthenticated: (state) => !!state.user,
     userId: (state) => state.userAttributes?.sub,
     email: (state) => state.userAttributes?.email,
@@ -21,15 +21,16 @@ export const useUserStore = defineStore("user", {
   },
   actions: {
     async getSession() {
-        try {
-            this.user = await getCurrentUser();
-            this.userAttributes = await fetchUserAttributes();
-            console.groupEnd();
-          } catch (err) {
-            console.error(err);
-            console.log("isAuthenticated: " + !!this.user);
-            throw new Error(err);
-          }
-    },
-  },
+      try {
+        // Attempt to get the current user
+        this.user = await getCurrentUser();
+        this.userAttributes = await fetchUserAttributes();
+        console.log("User authenticated and attributes fetched successfully");
+        return true
+      } catch (err) {  
+        console.log("User is not authenticated");     
+        return false
+      }
+    }
+  }
 });

@@ -11,7 +11,6 @@ appValue = os.getenv('TAG_APP_VALUE')
 cognito_pool_id = os.getenv('COGNITO_USER_POOL_ID')
 
 utl = helpers.Utils()
-dyn = helpers.Dyn()
 auth = helpers.Auth(cognito_pool_id)
 ec2_client = boto3.client('ec2')
 

@@ -1,10 +1,13 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from "vue";
 import { useServerStore } from "../stores/server";
+import { useUserStore } from "../stores/user";
 
 const serverStore = useServerStore()
+const userStore = useUserStore();
 
 const settingsForm = ref();
+const addUserForm = ref();
 const snackbar = ref(false)
 const snackText = ref(null)
 const snackColor = ref(null)
@@ -19,6 +22,8 @@ const alarmMetricItems = ref([
     { metric: 'Connections', abbr: '# Users' },
 ]);
 const alarmThreshold = ref(null);
+
+const inviteeEmail = ref()
 
 const settingsDialogLoading = ref(false);
 
@@ -49,12 +54,20 @@ const alphaNumericRules = [
     },
 ]
 
+function generateUniqueId() {
+  const timestamp = Date.now();
+  const randomNumber = Math.random();
+  const hexadecimalString = randomNumber.toString(16).substring(2, 8);
+
+  return `${timestamp}-${hexadecimalString}`;
+}
+
 onMounted(async () => {
     const serverSettings = await serverStore.getServerConfig(serverStore.selectedServer.id);
-    console.log(serverSettings)
+    // console.log(serverSettings)
     alarmThreshold.value = serverSettings.alarmThreshold;
     alarmEvaluationPeriod.value = serverSettings.alarmEvaluationPeriod
-})
+});
 
 const groupMembers = computed(() => {
     if (
@@ -67,28 +80,33 @@ const groupMembers = computed(() => {
     }
 });
 
+function getEpochTime (days) {
+    const currentTime = new Date().getTime(); // Get the current time in milliseconds
+    const epochTime = currentTime + (days * 24 * 60 * 60 * 1000); // Calculate the future time by adding the number of milliseconds for the given days
+    return epochTime;
+}
 
 function resetForm() {
     alarmThreshold.value = null
     alarmEvaluationPeriod.value = null
 }
 
-async function submit() {
+async function onSubmit() {
     settingsForm.value?.validate().then(async ({ valid: isValid }) => {
         if (isValid) {
             const input = {
                 id: serverStore.selectedServer.id,
                 alarmType: alarmMetric.value.metric,
                 alarmThreshold: parseFloat(alarmThreshold.value),
-                alarmEvaluationPeriod: parseInt(alarmEvaluationPeriod.value,10),
+                alarmEvaluationPeriod: parseInt(alarmEvaluationPeriod.value, 10),
                 runCommand: runCommand.value ?? '',
                 workDir: workDir.value ?? ''
             }
             const serverSettings = await serverStore.putServerConfig(input);
-            if (serverSettings === serverStore.selectedServer.id){
+            if (serverSettings === serverStore.selectedServer.id) {
                 snackText.value = "Setting Updated Successfuly";
                 snackbar.value = true;
-                snackColor.value = "primary"                
+                snackColor.value = "primary"
             }
         }
     })
@@ -109,40 +127,27 @@ async function writeLog(msg) {
 
 async function addUser() {
 
-    if (action == 'add_user') {
-        addUserEmail.validate();
-        if (addUserEmail.hasError) {
-            snackbar.value = true
-            snackText.value = "Only provide your google username"
-            snackColor.value = "error"
-            return false
+    addUserForm.value?.validate().then(async ({ valid: isValid }) => {
+        if (isValid) {
+
+            //powerButtonDialog.value = false;
+            //addUserDialog.value = false;
+
+            const input = {
+                id: generateUniqueId(),
+                actionUser: userStore.email,
+                action: "add_user",
+                instanceId: serverStore.selectedServer.id,
+                inviteeEmail: inviteeEmail.value + "@gmail.com",
+                expirationEpoch: getEpochTime(1)
+            };
+
+            const result = await serverStore.putLogAudit(input);
+
+            console.log(result)
+
         }
-
-    }
-    //powerButtonDialog.value = false;
-    //addUserDialog.value = false;
-
-    let jsonParams = null;
-    if (typeof SignUpParams == "string" && param.startsWith('i-')) {
-        jsonParams = JSON.parse('{ "instanceId":"' + param + '"}')
-    }
-    else {
-        jsonParams = JSON.stringify(param);
-    }
-
-    const input = {
-        instanceId: this.serverId,
-        action: action,
-        params: jsonParams
-    };
-
-    // const actionResult = await graphQlClient.graphql({
-    //     query: triggerServerAction,
-    //     variables: { input: input },
-    // });
-
-    const rsp = JSON.parse(actionResult.data.triggerServerAction);
-
+    })
 }
 
 </script>
@@ -159,10 +164,12 @@ async function addUser() {
                     <v-container>
                         <v-row>
                             <v-col cols="12">
-                                <span class="font-weight-light">The alarm configuration evaluates if the CPU% utilization is under the threshold for the specified number of evaluation periods to shutdown the instance.</span>
+                                <span class="font-weight-light">The alarm configuration evaluates if the CPU%
+                                    utilization is under the threshold for the specified number of evaluation periods to
+                                    shutdown the instance.</span>
                             </v-col>
                         </v-row>
-                        
+
                         <v-row>
                             <v-col cols="4">
                                 <v-select :items="alarmMetricItems" item-title="abbr" item-value="metric"
@@ -172,31 +179,32 @@ async function addUser() {
                                 </v-select>
                             </v-col>
                             <v-col cols="4">
-                                <v-text-field dense label="Threshold" hint="Number of %CPU the instance has to be below to alarm" v-model="alarmThreshold"
+                                <v-text-field dense label="Threshold"
+                                    hint="Number of %CPU the instance has to be below to alarm" v-model="alarmThreshold"
                                     :rules="onlyNumbersRules"></v-text-field>
                             </v-col>
                             <v-col cols="4">
-                                <v-text-field dense label="Evaluation Period" hint="Number of data points per minute to evaluate." v-model="alarmEvaluationPeriod"
+                                <v-text-field dense label="Evaluation Period"
+                                    hint="Number of data points per minute to evaluate." v-model="alarmEvaluationPeriod"
                                     :rules="onlyNumbersRules"></v-text-field>
                             </v-col>
                         </v-row>
-                      
+
 
                         <v-row>
                             <v-col cols="12">
-                                <span class="font-weight-light">The minecraft run command and the directorty it executes. Leave it blank if you want to do it manually</span>
+                                <span class="font-weight-light">The minecraft run command and the directorty it
+                                    executes. Leave it blank if you want to do it manually</span>
                             </v-col>
                             <v-col cols="6">
-                                <v-text-field dense v-model="workingDir" label="Working directory"
-                                    ></v-text-field>
+                                <v-text-field dense v-model="workingDir" label="Working directory"></v-text-field>
                             </v-col>
                             <v-col cols="6">
-                                <v-text-field dense v-model="runCommand" label="Run command"
-                                    ></v-text-field>
+                                <v-text-field dense v-model="runCommand" label="Run command"></v-text-field>
                             </v-col>
-                            
+
                         </v-row>
-                        <v-btn v-if="!settingsDialogLoading" color="primary" text @click="submit">
+                        <v-btn v-if="!settingsDialogLoading" color="primary" text @click="onSubmit">
                             Save
                         </v-btn>
 
@@ -206,55 +214,47 @@ async function addUser() {
             </v-expansion-panel-text>
         </v-expansion-panel>
         <v-expansion-panel>
-        <v-expansion-panel-title>Users</v-expansion-panel-title>
-        <v-expansion-panel-text>
-          Some content
-        </v-expansion-panel-text>
-      </v-expansion-panel>
+            <v-expansion-panel-title>Users</v-expansion-panel-title>
+            <v-expansion-panel-text>
+                <v-container>
+                    <v-row>
+                        <v-col cols="8">
+                            <v-list two-line>
+                                <v-list-header>Current Members</v-list-header>
+                                <v-list-item v-for="user in groupMembers" :key="user.id">
+                                    <v-list-item-content>
+                                        <v-list-item-title v-text="user.fullname"></v-list-item-title>
+                                        <v-list-item-subtitle v-text="user.email"></v-list-item-subtitle>
+                                    </v-list-item-content>
+                                </v-list-item>
+                            </v-list>
+                        </v-col>
+                    </v-row>
+                    <v-row>
+                        <v-col cols="8">
+                            <v-form ref="addUserForm">
+                                <v-text-field dense label="Email address" v-model="inviteeEmail" suffix="@gmail.com"
+                                    :rules="alphaNumericRules"></v-text-field>
+                            </v-form>
+                        </v-col>
+                    </v-row>
+                    <v-btn color="primary" text @click="addUser()">
+                        Add
+                    </v-btn>
+                </v-container>
+            </v-expansion-panel-text>
+        </v-expansion-panel>
     </v-expansion-panels>
 
     <v-snackbar v-model="snackbar" :timeout="snackTimeout" :color="snackColor" outlined left centered text>
         {{ snackText }}
 
         <template v-slot:actions>
-          <v-btn color="white" variant="text" @click="snackbar = false">
-            Close
-          </v-btn>
+            <v-btn color="white" variant="text" @click="snackbar = false">
+                Close
+            </v-btn>
         </template>
-      </v-snackbar>
+    </v-snackbar>
 
-    <v-dialog v-model="addUserDialog" max-width="300px">
-        <v-card>
-            <v-card-title> Add user to start/stop </v-card-title>
-            <v-card-subtitle>
-                <strong>{{ serverName }}</strong>
-            </v-card-subtitle>
-            <v-card-text>
-                <v-row>
-                    <v-text-field dense label="Email address" v-model="addUserEmail" suffix="@gmail.com"
-                        ref="addUserEmail" :rules="[rules.alphanumeric]"></v-text-field>
-                </v-row>
-                <v-row>
-                    <v-list two-line>
-                        <v-list-header>Current Members</v-list-header>
-                        <v-list-item v-for="user in groupMembers" :key="user.id">
-                            <v-list-item-content>
-                                <v-list-item-title v-text="user.fullname"></v-list-item-title>
-                                <v-list-item-subtitle v-text="user.email"></v-list-item-subtitle>
-                            </v-list-item-content>
-                        </v-list-item>
-                    </v-list>
-                </v-row>
-            </v-card-text>
-            <v-card-actions>
-                <v-btn color="primary" text @click="triggerAction('add_user', { 'email': addUserEmail })">
-                    Add
-                </v-btn>
-                <v-btn color="warning" text @click="addUserDialog = false">
-                    Cancel
-                </v-btn>
-            </v-card-actions>
-        </v-card>
-    </v-dialog>
 
 </template>

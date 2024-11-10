@@ -17,25 +17,11 @@ appValue = os.getenv('TAG_APP_VALUE')
 cognito_pool_id = os.getenv('COGNITO_USER_POOL_ID')
 
 auth = helpers.Auth(cognito_pool_id)
-utl = helpers.Utils()
+ec2_utils = helpers.Ec2Utils()
 utc = pytz.utc
 pst = pytz.timezone('US/Pacific')
 
-def group_exists(instanceId, poolId):
-    try:
-        grpRsp = cognito_idp.get_group(
-                GroupName=instanceId,
-                UserPoolId=poolId
-            )
-            
-        return True
-        
-    except cognito_idp.exceptions.ResourceNotFoundException:
-        logger.warning("Group does not exist.")
-        return False
-
-def handler(event, context):
-      
+def handler(event, context): 
     try:
         if 'request' in event:
             if 'headers' in event['request']:
@@ -63,9 +49,12 @@ def handler(event, context):
         logger.error("Invalid Token")
         return "Invalid Token"
 
-    # Get all servers in a single API call
-    all_servers = utl.list_all_servers()  
-    reservations = all_servers["Reservations"]
+    # Get all instances the user has access
+    user_instances_by_group = auth.list_groups_for_user(user_attributes['username'])
+    user_instances = ec2_utils.process_user_instances_by_group(user_instances_by_group)
+
+    reservations = user_instances["Reservations"]
+    logger.info(reservations)
 
     if not reservations["Instances"]:
         logger.error("No Instances Found")
@@ -74,7 +63,7 @@ def handler(event, context):
     # Fetch instance types and status in parallel
     with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
         instance_types = {executor.submit(ec2_client.describe_instance_types, InstanceTypes=[instance['InstanceType']]): instance for instance in [server for server in reservations["Instances"]]}
-        instance_status = {executor.submit(utl.describe_instance_status, instance['InstanceId']): instance for instance in [server for server in reservations["Instances"]]}
+        instance_status = {executor.submit(ec2_utils.describe_instance_status, instance['InstanceId']): instance for instance in [server for server in reservations["Instances"]]}
 
     listServer_result = []
     for server in reservations["Instances"]:
@@ -94,7 +83,7 @@ def handler(event, context):
         volume = ec2.Volume(volume_id)
 
         pstLaunchTime = launchTime.astimezone(pst)        
-        runningMinutes = utl.get_total_hours_running_per_month(instance_id)
+        runningMinutes = ec2_utils.get_total_hours_running_per_month(instance_id)
 
         listServer_result.append({
             'id': instance_id,

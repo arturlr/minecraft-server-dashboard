@@ -34,11 +34,11 @@ export const getLoginAudit = /* GraphQL */ `
   query GetLoginAudit($id: ID!) {
     getLoginAudit(id: $id) {
       id
-      email
+      actionUser
       action
+      instanceId
       expirationEpoch
       createdAt
-      updatedAt
     }
   }
 `;

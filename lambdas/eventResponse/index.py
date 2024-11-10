@@ -185,66 +185,6 @@ def schedule_event_response():
     return instances_payload
 
 
-# def get_metrics_data(instance_id, namespace, metric_name, unit, stat_type, start_time, end_time, period):
-#     logger.info(f"get_metrics_data: {metric_name} - {instance_id}")
-
-#     dimensions = [
-#         {'Name': 'InstanceId', 'Value': instance_id}
-#     ]
-
-#     if metric_name == "cpu_usage_active":
-#         dimensions.append({'Name': 'cpu', 'Value': "cpu-total"})
-#     elif metric_name == "net_bytes_sent":
-#         dimensions.append({'Name': 'interface', 'Value': 'nic'})
-
-#     try:
-#         metric_data = cw_client.get_metric_data(
-#             MetricDataQueries=[
-#                 {
-#                     'Id': 'query1',
-#                     'MetricStat': {
-#                         'Metric': {
-#                             'Namespace': namespace,
-#                             'MetricName': metric_name,
-#                             'Dimensions': dimensions
-#                         },
-#                         'Period': period,
-#                         'Stat': stat_type,
-#                         'Unit': unit
-#                     },
-#                     'ReturnData': True
-#                 }
-#             ],
-#             StartTime=start_time,
-#             EndTime=end_time
-#         )
-
-#         if not metric_data['MetricDataResults']:
-#             logger.warning(f'No Datapoint for namespace: {metric_name} - InstanceId: {instance_id}')
-#             return "[]"
-
-#         data_points = []
-#         for result in metric_data['MetricDataResults']:
-#             for datapoint in result['Values']:
-#                 if metric_name == "net_bytes_sent":
-#                     # Converting to Gbit per Second - Divide by 60 to convert from 1 minute to 1 second - Divide by 1024/1024*8 to convert Byte in Mbps.
-#                     data_points.append({
-#                         'y': round(datapoint * 8 / 1024 / 1024, 2),
-#                         'x': datapoint['Timestamp'].strftime("%Y/%m/%dT%H:%M:%S")
-#                     })
-#                 else:
-#                     data_points.append({
-#                         'y': round(datapoint, 2),
-#                         'x': datapoint['Timestamp'].strftime("%Y/%m/%dT%H:%M:%S")
-#                     })
-
-#         return json.dumps(sorted(data_points, key=lambda x: x['x']))
-
-#     except Exception as e:
-#         logger.error(f'Something went wrong: {str(e)}')
-#         return "[]"
-
-
 def get_metrics_data(instance_id, namespace, metric_name, unit, stat_type, start_time, end_time, period):
     logger.info(f"get_metrics_data: {metric_name} - {instance_id}")
 

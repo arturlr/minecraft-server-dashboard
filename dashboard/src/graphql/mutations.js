@@ -52,48 +52,44 @@ export const restartServer = /* GraphQL */ `
     restartServer(instanceId: $instanceId) 
   }
 `;
-export const createLoginAudit = /* GraphQL */ `
-  mutation CreateLoginAudit(
-    $input: CreateLoginAuditInput!
-    $condition: ModelLoginAuditConditionInput
+
+export const PutLogAudit = /* GraphQL */ `
+  mutation putLogAudit(
+    $input: LogAuditInput!
   ) {
-    createLoginAudit(input: $input, condition: $condition) {
+    putLogAudit(input: $input) {
       id
-      email
+      actionUser
       action
+      instanceId
       expirationEpoch
       createdAt
-      updatedAt
     }
   }
 `;
-export const updateLoginAudit = /* GraphQL */ `
-  mutation UpdateLoginAudit(
-    $input: UpdateLoginAuditInput!
-    $condition: ModelLoginAuditConditionInput
+
+export const PutLogAuditWithInviteeEmail = /* GraphQL */ `
+  mutation putLogAudit(
+    $input: LogAuditInput!
   ) {
-    updateLoginAudit(input: $input, condition: $condition) {
+    putLogAudit(input: $input) {
       id
-      email
+      actionUser
       action
+      instanceId
+      inviteeEmail
       expirationEpoch
       createdAt
-      updatedAt
     }
   }
 `;
+
 export const deleteLoginAudit = /* GraphQL */ `
   mutation DeleteLoginAudit(
-    $input: DeleteLoginAuditInput!
-    $condition: ModelLoginAuditConditionInput
+    $input: id!
   ) {
-    deleteLoginAudit(input: $input, condition: $condition) {
+    deleteLoginAudit(input: $input) {
       id
-      email
-      action
-      expirationEpoch
-      createdAt
-      updatedAt
     }
   }
 `;

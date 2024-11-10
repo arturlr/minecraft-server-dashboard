@@ -63,7 +63,9 @@ export const useServerStore = defineStore("server", {
                 this.serversDict[server.id] = { 
                     ...serverAttributes, 
                     state: server.state,
-                    initStatus: server.initStatus                
+                    initStatus: server.initStatus,  
+                    publicIp: server.publicIp,
+                    runningMinutes: server.runningMinutes        
                 };
 
                 // If selectedServer is populated, update state
@@ -71,7 +73,9 @@ export const useServerStore = defineStore("server", {
                     this.selectedServer = {
                         ...serverAttributes, 
                         state: server.state,
-                        initStatus: server.initStatus                    
+                        initStatus: server.initStatus,
+                        publicIp: server.publicIp,
+                        runningMinutes: server.runningMinutes                  
                     }
                 }
                 
@@ -114,6 +118,80 @@ export const useServerStore = defineStore("server", {
                 }
 
                 return results.data.putServerConfig;
+
+            } catch (error) {
+                console.error(error);
+                throw error;
+            }
+        },
+
+        async verifyEmail(code, email) {
+            const verifyEmailQuery = `
+              mutation VerifyUserEmail($code: String!) {
+                verifyUserEmail(id: $code) 
+              }
+            `
+            
+            try {
+                const results = await client.graphql({
+                    query: verifyEmailQuery,
+                    variables: { code: code }
+                });
+
+                if (results.data.verifyUserEmail) {
+                    const record = JSON.parse(results.data.verifyUserEmail);
+                    if (record.inviteeEmail == email)
+                        return true                    
+                }
+                return false
+            } catch (err) {
+              this.message = 'Error verifying email'
+              console.error('error verifying email', err) 
+              return false
+            }
+          },
+
+        async getLogAudit(id) {
+            try {
+                const results = await client.graphql({
+                    query: queries.getLogAudit,
+                    variables: { id: id }
+                });
+
+                if (results.data.getLogAudit === null) {
+                    console.log(results.data.getLogAudit);
+                    return null;
+                }
+
+                return results.data.getLogAudit;
+
+            } catch (error) {
+                console.error(error);
+                throw error;
+            }
+        },
+
+        async putLogAudit(input) {
+            let results = null;
+            try {
+                if (input.inviteeEmail) {
+                    results = await client.graphql({
+                        query: mutations.PutLogAuditWithInviteeEmail,
+                        variables: { input: input }
+                    });
+                }
+                else {
+                    results = await client.graphql({
+                        query: mutations.PutLogAudit,
+                        variables: { input: input }
+                    });
+                }
+
+                if (results.data.putLogAudit === null) {
+                    return null;
+                }
+
+                return results.data.putLogAudit;
 
             } catch (error) {
                 console.error(error);

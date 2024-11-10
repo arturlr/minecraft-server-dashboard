@@ -19,12 +19,9 @@ ssm = boto3.client('ssm')
 sfn = boto3.client('stepfunctions')
 ec2 = boto3.client('ec2')
 lambda_client = boto3.client('lambda')
-cw_client = boto3.client('cloudwatch')
 auth = helpers.Auth(cognito_pool_id)
 
 sftArn = os.getenv('StepFunctionsArn')
-botoSession = boto3.session.Session()
-awsRegion = botoSession.region_name
 
 def manage_iam_profile(instance_id):
     iam_profile = utl.describe_iam_profile(instance_id, "associated")
@@ -82,55 +79,6 @@ def retry_operation(operation, max_retries, delay):
         time.sleep(delay)
     return False
 
-def update_alarm(instanceId):
-    logger.info("updateAlarm: " + instanceId)
-    instanceInfo = utl.get_instance_attributes(instanceId)
-    # Default values
-    alarmMetric = "CPUUtilization"
-    alarmThreshold = "10"
-    
-    if instanceInfo and instanceInfo['code'] == 200:
-        alarmMetric = instanceInfo.get('alarmmetric')
-        alarmThreshold = instanceInfo.get('alarmthreshold')
-
-    elif instanceInfo and instanceInfo['code'] == 400:
-        logger.info("Using Default values for Alarming")
-
-    else:
-        logger.error(instanceInfo)
-        return False
-
-    dimensions=[]
-    statistic="Average"
-    namespace="CWAgent"
-    dimensions.append({'Name': 'InstanceId','Value': instanceId})
-    if alarmMetric == "CPUUtilization":
-        alarmMetricName = "cpu_usage_active"        
-        dimensions.append({'Name': 'cpu','Value': "cpu-total"})
-    elif alarmMetric == "Connections":
-        alarmMetricName = "UserCount"
-        statistic="Maximum"
-        namespace="MinecraftDashboard"
-    
-    cw_client.put_metric_alarm(
-            AlarmName=instanceId + "-" + "minecraft-server",
-            ActionsEnabled=True,
-            AlarmActions=["arn:aws:automate:" + awsRegion + ":ec2:stop"],
-            InsufficientDataActions=[],
-            MetricName=alarmMetricName,
-            Namespace=namespace,
-            Statistic=statistic,
-            Dimensions=dimensions,
-            Period=60,
-            EvaluationPeriods=35,
-            DatapointsToAlarm=35,
-            Threshold=int(alarmThreshold),
-            TreatMissingData="missing",
-            ComparisonOperator="LessThanOrEqualToThreshold"   
-        )
-
-    logger.info("Alarm configured to " + alarmMetric + " and " + alarmThreshold)
-
 def invoke_step_functions(instanceId,action):
     # Invoking Step-Functions to change EC2 Stage
     sfn_rsp = sfn.start_execution(
@@ -177,12 +125,12 @@ def action_process(action,instance_id,arguments=None):
             return None
                 
         response = utl.set_instance_attributes(arguments)
+        utl.update_alarm(instance_id)
         return response
 
     else:
         return utl.response(400, {"err": f"Invalid action: {action}"})
                 
-
 def handle_local_invocation(event, context):
     # Handle local invocations here
     return action_process(event["action"], event["instanceId"])

@@ -7,7 +7,7 @@ export function request(ctx) {
     const timeStamp = util.time.nowISO8601()
     
     values.createdAt = ctx.args.input.createdAt ?? timeStamp
-	values.updatedAt = timeStamp
+	// values.updatedAt = timeStamp
 
 	return {
 		operation: 'PutItem',

@@ -1,5 +1,5 @@
 <script setup>
-import { reactive, ref, onMounted, onUnmounted, watchEffect } from "vue";
+import { reactive, ref, onMounted } from "vue";
 import { useUserStore } from "../stores/user";
 import { useServerStore } from "../stores/server";
 import { signOut } from 'aws-amplify/auth';

@@ -216,6 +216,20 @@ Resources:
         client_secret: '{{resolve:ssm:/minecraft/GOOGLE_SECRET}}'
         authorize_scopes: email profile openid
 
+  ServersTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: expiration
+        Enabled: true
+
   LogAuditTable:
     Type: AWS::DynamoDB::Table
     Properties:
@@ -248,6 +262,9 @@ Resources:
           LogAuditTable:
             TableName: !Ref LogAuditTable
             TableArn: !GetAtt LogAuditTable.Arn
+          ServersTable:
+            TableName: !Ref ServersTable
+            TableArn: !GetAtt ServersTable.Arn
         Lambda:
           ListServersDataSource:
             FunctionArn: !GetAtt ListServers.Arn
@@ -286,14 +303,32 @@ Resources:
             Version: "1.0.0"
           DataSource: LogAuditTable
           CodeUri: ./appsync/resolvers/getById.js
+        putServerRecordFunction:
+          Runtime:
+            Name: APPSYNC_JS
+            Version: "1.0.0"
+          DataSource: ServersTable
+          CodeUri: ./appsync/resolvers/putById.js
+        getServerRecordFunction:
+          Runtime:
+            Name: APPSYNC_JS
+            Version: "1.0.0"
+          DataSource: ServersTable
+          CodeUri: ./appsync/resolvers/getById.js
       Resolvers:
         Mutation: 
+          # putServerConfig:
+          #   Runtime:
+          #     Name: APPSYNC_JS
+          #     Version: "1.0.0"
+          #   Pipeline:
+          #     - triggerServerActionFunction
           putServerConfig:
             Runtime:
               Name: APPSYNC_JS
               Version: "1.0.0"
             Pipeline:
-              - triggerServerActionFunction
+              - putServerRecordFunction
           updateServerConfig:
             Runtime:
               Name: APPSYNC_JS
@@ -336,6 +371,12 @@ Resources:
               Version: "1.0.0"
             Pipeline:
               - putLogAuditFunction
+          verifyUserEmail:
+            Runtime:
+              Name: APPSYNC_JS
+              Version: "1.0.0"
+            Pipeline:
+              - getLogAuditFunction
         Query:
           listServers:
             Runtime:
@@ -343,12 +384,18 @@ Resources:
               Version: "1.0.0"
             Pipeline:
               - serverListFunction     
+          # getServerConfig:
+          #   Runtime:
+          #     Name: APPSYNC_JS
+          #     Version: "1.0.0"
+          #   Pipeline:
+          #     - triggerServerActionFunction
           getServerConfig:
             Runtime:
               Name: APPSYNC_JS
               Version: "1.0.0"
             Pipeline:
-              - triggerServerActionFunction
+              - getServerRecordFunction
           getMonthlyCost:
             Runtime:
               Name: APPSYNC_JS
@@ -419,8 +466,7 @@ Resources:
         }
       ResponseMappingTemplate: $util.toJson($ctx.result)
 
-
-  S3WebAppBucket:
+  SupportBucket:
     Type: AWS::S3::Bucket
     Properties:
       AccessControl: Private
@@ -430,15 +476,25 @@ Resources:
               SSEAlgorithm: AES256
     DeletionPolicy: Delete
 
-  S3WebAppBucketPolicy:
+  WebAppBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      AccessControl: Private
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+    DeletionPolicy: Delete
+
+  WebAppBucketPolicy:
     Type: AWS::S3::BucketPolicy
     Properties:
-      Bucket: !Ref S3WebAppBucket
+      Bucket: !Ref WebAppBucket
       PolicyDocument:
         Statement:
           - Action: s3:GetObject
             Effect: Allow
-            Resource: !Sub ${S3WebAppBucket.Arn}/*
+            Resource: !Sub ${WebAppBucket.Arn}/*
             Principal:
               Service: cloudfront.amazonaws.com
             Condition:
@@ -461,7 +517,7 @@ Resources:
       DistributionConfig:
         Origins:
           - Id: S3Origin
-            DomainName: !GetAtt S3WebAppBucket.DomainName
+            DomainName: !GetAtt WebAppBucket.DomainName
             S3OriginConfig:
               OriginAccessIdentity: ""
             OriginAccessControlId: !GetAtt OriginAccessControl.Id
@@ -482,6 +538,181 @@ Resources:
             QueryString: false
             Cookies:
               Forward: none
+
+  MinecraftResourceGroup:
+    Type: 'AWS::ResourceGroups::Group'
+    Properties:
+      Name: minecraft-servers
+      Description: 'Resource group for Minecraft servers'
+      ResourceQuery:
+        Type: TAG_FILTERS_1_0
+        Query:
+          ResourceTypeFilters: 
+            - 'AWS::EC2::Instance'
+          TagFilters:
+            - Key: App
+              Values: 
+                - !Ref AppValue
+
+  MineDashSSMDoc:
+    Type: AWS::SSM::Document
+    Properties:
+      DocumentType: Command
+      Content:
+        schemaVersion: '2.2'
+        description: Bootstrap instance
+        parameters:
+          ConfigLocation:
+            type: String
+            description: 'S3 location of the CloudWatch agent configuration file'
+            default: !Sub "s3://${SupportBucket}/amazon-cloudwatch-agent.json"
+        mainSteps:
+          - action: aws:downloadContent
+            name: downloadConfiguration
+            inputs:
+              sourceType: S3
+              sourceInfo:
+                path: '{{ ConfigLocation }}'
+          - action: aws:runShellScript
+            name: installAndConfigureCloudWatchAgent
+            inputs:
+              runCommand:
+                - '#!/bin/bash'
+                - !Sub |
+                  # Function to detect the Linux distribution
+                  detect_distro() {
+                      if [ -f /etc/os-release ]; then
+                          . /etc/os-release
+                          DISTRO=$ID
+                      elif [ -f /etc/lsb-release ]; then
+                          . /etc/lsb-release
+                          DISTRO=$DISTRIB_ID
+                      elif [ -f /etc/debian_version ]; then
+                          DISTRO="debian"
+                      elif [ -f /etc/redhat-release ]; then
+                          DISTRO="rhel"
+                      else
+                          DISTRO=$(uname -s)
+                      fi
+                      echo $DISTRO
+                  }
+                  # Function to install CloudWatch agent on Amazon Linux, RHEL, or CentOS
+                  install_rpm() {
+                      yum install -y amazon-cloudwatch-agent
+                  }
+                  # Function to install CloudWatch agent on Ubuntu or Debian
+                  install_deb() {
+                      apt-get update
+                      apt-get install -y wget
+                      wget https://amazoncloudwatch-agent.s3.amazonaws.com/debian/amd64/latest/amazon-cloudwatch-agent.deb
+                      dpkg -i -E ./amazon-cloudwatch-agent.deb
+                      rm amazon-cloudwatch-agent.deb
+                  }
+                  # Main installation function
+                  install_cloudwatch_agent() {
+                      local distro=$(detect_distro)
+                      case $distro in
+                          amzn*|rhel*|centos*)
+                              install_rpm
+                              ;;
+                          ubuntu*|debian*)
+                              install_deb
+                              ;;
+                          *)
+                              echo "Unsupported distribution: $distro"
+                              exit 1
+                              ;;
+                      esac
+                  }
+
+                  install_cloudwatch_agent
+
+                  echo "CloudWatch agent installed successfully"
+                  # Start the CloudWatch agent
+                  /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -s -c file:amazon-cloudwatch-agent.json
+                  echo "CloudWatch agent started"
+
+          - action: aws:runShellScript
+            name: InstallPackages
+            inputs:
+              runCommand:
+                - '#!/bin/bash'
+                - !Sub |
+                  APT=$(which apt)
+                  YUM=$(which yum)
+                  case $APT in /usr*)
+                  sudo apt-get -y install jq zip unzip net-tools 
+                  esac
+                  case $YUM in /usr*)
+                  sudo yum -y install jq zip unzip
+                  esac
+                  if [ ! -f /usr/share/collectd/types.db ]; then
+                      sudo mkdir -p /usr/share/collectd
+                      sudo touch /usr/share/collectd/types.db
+                  fi
+                  if ! command -v aws >/dev/null 2>&1; then
+                      curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+                      unzip awscliv2.zip
+                      sudo ./aws/install
+                      echo "AWS CLI installed successfully"
+                  else
+                      echo "AWS CLI is already installed"
+                  fi         
+                - echo "AWS CLI installed. Checking configuration"
+                - aws --version       
+
+          - action: aws:runShellScript
+            name: Cron
+            inputs:
+              runCommand:
+                - '#!/bin/bash'
+                - !Sub |
+                  if [ ! -f /usr/local/port_count.sh ]; then
+                  # Get instance metadata
+                  INSTANCE_ID=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)
+                  REGION=$(curl -s http://169.254.169.254/latest/meta-data/local-hostname | cut -d . -f 2)
+                  # Count established connections on port 25565
+                  PORT_COUNT=$(netstat -an | grep ESTABLISHED | grep ':25565' | wc -l)
+                  # Create the script file
+                  echo "#!/bin/bash" > /usr/local/port_count.sh
+                  echo "INSTANCE_ID=\"$INSTANCE_ID\"" >> /usr/local/port_count.sh
+                  echo "PORT_COUNT=\$(netstat -an | grep ESTABLISHED | grep ':25565' | wc -l)" >> /usr/local/port_count.sh
+                  echo "REGION=\"$REGION\"" >> /usr/local/port_count.sh
+                  echo "aws cloudwatch put-metric-data --metric-name UserCount --dimensions InstanceId=\$INSTANCE_ID --namespace 'MinecraftDashboard' --value \$PORT_COUNT --region \$REGION" >> /usr/local/port_count.sh
+                  # Make the script executable
+                  chmod +x /usr/local/port_count.sh
+                  # Schedule the script to run every minute
+                  (sudo crontab -l 2>/dev/null; echo "*/1 * * * * /usr/local/port_count.sh >/dev/null 2>&1") | crontab -         
+                  fi  
+          - action: aws:runShellScript
+            name: NICSSM
+            inputs:
+              runCommand:
+                - echo "Get NIC"
+                - NIC=$(ip route get 1.1.1.1 | awk '{print $5; exit}')
+                - INSTANCEID=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)
+                - REGION=$(curl -s http://169.254.169.254/latest/meta-data/placement/region)
+                - PARAM_NAME="/minecraftserverdashboard/${INSTANCEID}/nic"
+                - !Sub |
+                  if aws ssm get-parameter --name "$PARAM_NAME" 2>/dev/null; then
+                    echo "Parameter already exists"
+                  else
+                    echo "Parameter does not exist, creating it"
+                    aws ssm put-parameter --name "$PARAM_NAME" --type 'String' --value "$NIC"
+                  fi
+         
+  MineDashSSMAssociation:
+    Type: AWS::SSM::Association
+    Properties:
+      Name: !Ref MineDashSSMDoc
+      OutputLocation:
+        S3Location:
+          OutputS3BucketName: !Ref SupportBucket
+          OutputS3KeyPrefix: bootstrap
+        Targets:
+          - Key: ResourceGroup
+            Values:
+              - !GetAtt MinecraftResourceGroup.Arn
 
   ScheduledRule: 
     Type: AWS::Events::Rule
@@ -743,7 +974,9 @@ Resources:
         - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess
         - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
         - SSMParameterReadPolicy:
-            ParameterName: "minecraftserverdashboard*"
+            ParameterName: "minecraft*"
+        - LambdaInvokePolicy:
+            FunctionName: !Ref EventResponse
         # - DynamoDBCrudPolicy:
         #     TableName: !Ref InstancesTable
         - Version: "2012-10-17" # Policy Document
@@ -770,6 +1003,7 @@ Resources:
           APP_NAME: !Ref ProjectName
           TAG_APP_VALUE: !Ref AppValue
           APPSYNC_URL: !GetAtt GraphQLAPI.GraphQLUrl
+          EVENT_RESPONSE_LAMBDA: !Ref EventResponse
           #INSTANCES_TABLE_NAME: !Ref InstancesTable
 
   StateMachineLogGroup:
@@ -853,6 +1087,10 @@ Outputs:
     Description: AppSync Url
     Value: !GetAtt GraphQLAPI.GraphQLUrl
 
-  S3WebBucketName:
+  WebAppBucketName:
     Description: S3 Web Bucket Name
-    Value: !Ref S3WebAppBucket
+    Value: !Ref WebAppBucket
+
+  SupportBucketName:
+    Description: S3 Support Bucket Name
+    Value: !Ref SupportBucket
