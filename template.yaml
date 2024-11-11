@@ -539,25 +539,28 @@ Resources:
             Cookies:
               Forward: none
 
-  MinecraftResourceGroup:
-    Type: 'AWS::ResourceGroups::Group'
-    Properties:
-      Name: minecraft-servers
-      Description: 'Resource group for Minecraft servers'
-      ResourceQuery:
-        Type: TAG_FILTERS_1_0
-        Query:
-          ResourceTypeFilters: 
-            - 'AWS::EC2::Instance'
-          TagFilters:
-            - Key: App
-              Values: 
-                - !Ref AppValue
+  # MinecraftResourceGroup:
+  #   Type: 'AWS::ResourceGroups::Group'
+  #   DeletionPolicy: Delete
+  #   UpdateReplacePolicy: Retain
+  #   Properties:
+  #     Name: Minecraft-Servers
+  #     Description: 'Resource group for Minecraft servers'
+  #     ResourceQuery:
+  #       Type: TAG_FILTERS_1_0
+  #       Query:
+  #         ResourceTypeFilters: 
+  #           - 'AWS::EC2::Instance'
+  #         TagFilters:
+  #           - Key: App
+  #             Values: 
+  #               - !Ref AppValue
 
   MineDashSSMDoc:
     Type: AWS::SSM::Document
     Properties:
       DocumentType: Command
+      TargetType: /AWS::EC2::Instance
       Content:
         schemaVersion: '2.2'
         description: Bootstrap instance
@@ -614,9 +617,11 @@ Resources:
                       case $distro in
                           amzn*|rhel*|centos*)
                               install_rpm
+                              yum -y install jq zip unzip
                               ;;
                           ubuntu*|debian*)
                               install_deb
+                              apt-get -y install jq zip unzip net-tools
                               ;;
                           *)
                               echo "Unsupported distribution: $distro"
@@ -638,14 +643,6 @@ Resources:
               runCommand:
                 - '#!/bin/bash'
                 - !Sub |
-                  APT=$(which apt)
-                  YUM=$(which yum)
-                  case $APT in /usr*)
-                  sudo apt-get -y install jq zip unzip net-tools 
-                  esac
-                  case $YUM in /usr*)
-                  sudo yum -y install jq zip unzip
-                  esac
                   if [ ! -f /usr/share/collectd/types.db ]; then
                       sudo mkdir -p /usr/share/collectd
                       sudo touch /usr/share/collectd/types.db
@@ -701,18 +698,18 @@ Resources:
                     aws ssm put-parameter --name "$PARAM_NAME" --type 'String' --value "$NIC"
                   fi
          
-  MineDashSSMAssociation:
-    Type: AWS::SSM::Association
-    Properties:
-      Name: !Ref MineDashSSMDoc
-      OutputLocation:
-        S3Location:
-          OutputS3BucketName: !Ref SupportBucket
-          OutputS3KeyPrefix: bootstrap
-        Targets:
-          - Key: ResourceGroup
-            Values:
-              - !GetAtt MinecraftResourceGroup.Arn
+  # MineDashSSMAssociation:
+  #   Type: AWS::SSM::Association
+  #   Properties:
+  #     Name: !Ref MineDashSSMDoc
+  #     OutputLocation:
+  #       S3Location:
+  #         OutputS3BucketName: !Ref SupportBucket
+  #         OutputS3KeyPrefix: bootstrap
+  #     Targets:
+  #     - Key: resource-groups:name
+  #       Values:
+  #           - !Ref MinecraftResourceGroup
 
   ScheduledRule: 
     Type: AWS::Events::Rule
