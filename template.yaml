@@ -539,23 +539,6 @@ Resources:
             Cookies:
               Forward: none
 
-  # MinecraftResourceGroup:
-  #   Type: 'AWS::ResourceGroups::Group'
-  #   DeletionPolicy: Delete
-  #   UpdateReplacePolicy: Retain
-  #   Properties:
-  #     Name: Minecraft-Servers
-  #     Description: 'Resource group for Minecraft servers'
-  #     ResourceQuery:
-  #       Type: TAG_FILTERS_1_0
-  #       Query:
-  #         ResourceTypeFilters: 
-  #           - 'AWS::EC2::Instance'
-  #         TagFilters:
-  #           - Key: App
-  #             Values: 
-  #               - !Ref AppValue
-
   MineDashSSMDoc:
     Type: AWS::SSM::Document
     Properties:
@@ -565,19 +548,17 @@ Resources:
         schemaVersion: '2.2'
         description: Bootstrap instance
         parameters:
-          ConfigLocation:
+          S3BucketName:
             type: String
-            description: 'S3 location of the CloudWatch agent configuration file'
-            default: !Sub "s3://${SupportBucket}/amazon-cloudwatch-agent.json"
-        mainSteps:
-          - action: aws:downloadContent
-            name: downloadConfiguration
-            inputs:
-              sourceType: S3
-              sourceInfo:
-                path: '{{ ConfigLocation }}'
+            default: !Ref SupportBucket
+            description: 'Name of the S3 bucket'
+          S3KeyPrefix:
+            type: String 
+            default: amazon-cloudwatch-agent.json
+            description: 'S3 key prefix for the script'
+        mainSteps:              
           - action: aws:runShellScript
-            name: installAndConfigureCloudWatchAgent
+            name: installPackages
             inputs:
               runCommand:
                 - '#!/bin/bash'
@@ -600,27 +581,43 @@ Resources:
                       echo $DISTRO
                   }
                   # Function to install CloudWatch agent on Amazon Linux, RHEL, or CentOS
-                  install_rpm() {
+                  install_cloudwatch_rpm() {
                       yum install -y amazon-cloudwatch-agent
+                      echo "CloudWatch installed"
                   }
                   # Function to install CloudWatch agent on Ubuntu or Debian
-                  install_deb() {
+                  install_cloudwatch_deb() {
                       apt-get update
                       apt-get install -y wget
                       wget https://amazoncloudwatch-agent.s3.amazonaws.com/debian/amd64/latest/amazon-cloudwatch-agent.deb
                       dpkg -i -E ./amazon-cloudwatch-agent.deb
                       rm amazon-cloudwatch-agent.deb
+                      echo "CloudWatch installed"
+                  }
+                  install_awscli() {
+                      if [ ! -f /usr/share/collectd/types.db ]; then
+                        sudo mkdir -p /usr/share/collectd
+                        sudo touch /usr/share/collectd/types.db
+                      fi
+                      if ! command -v aws >/dev/null 2>&1; then
+                        curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+                        unzip awscliv2.zip
+                        sudo ./aws/install
+                      echo "AWS CLI installed successfully"
+                      else
+                          echo "AWS CLI is already installed"
+                      fi 
                   }
                   # Main installation function
-                  install_cloudwatch_agent() {
+                  install_packages() {
                       local distro=$(detect_distro)
                       case $distro in
                           amzn*|rhel*|centos*)
-                              install_rpm
+                              install_cloudwatch_rpm
                               yum -y install jq zip unzip
                               ;;
                           ubuntu*|debian*)
-                              install_deb
+                              install_cloudwatch_deb
                               apt-get -y install jq zip unzip net-tools
                               ;;
                           *)
@@ -629,35 +626,18 @@ Resources:
                               ;;
                       esac
                   }
+                  
+                  install_packages
+                  install_awscli
 
-                  install_cloudwatch_agent
-
-                  echo "CloudWatch agent installed successfully"
-                  # Start the CloudWatch agent
-                  /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -s -c file:amazon-cloudwatch-agent.json
-                  echo "CloudWatch agent started"
-
+                  echo "Packages installed successfully" 
           - action: aws:runShellScript
-            name: InstallPackages
+            name: CloudWatchStart
             inputs:
               runCommand:
-                - '#!/bin/bash'
-                - !Sub |
-                  if [ ! -f /usr/share/collectd/types.db ]; then
-                      sudo mkdir -p /usr/share/collectd
-                      sudo touch /usr/share/collectd/types.db
-                  fi
-                  if ! command -v aws >/dev/null 2>&1; then
-                      curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-                      unzip awscliv2.zip
-                      sudo ./aws/install
-                      echo "AWS CLI installed successfully"
-                  else
-                      echo "AWS CLI is already installed"
-                  fi         
-                - echo "AWS CLI installed. Checking configuration"
-                - aws --version       
-
+                - sudo aws s3 cp s3://${S3BucketName}/${S3KeyPrefix} /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json                  
+                - sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -s -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
+                - sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -m ec2 -a status      
           - action: aws:runShellScript
             name: Cron
             inputs:
@@ -665,51 +645,38 @@ Resources:
                 - '#!/bin/bash'
                 - !Sub |
                   if [ ! -f /usr/local/port_count.sh ]; then
-                  # Get instance metadata
-                  INSTANCE_ID=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)
-                  REGION=$(curl -s http://169.254.169.254/latest/meta-data/local-hostname | cut -d . -f 2)
-                  # Count established connections on port 25565
-                  PORT_COUNT=$(netstat -an | grep ESTABLISHED | grep ':25565' | wc -l)
-                  # Create the script file
-                  echo "#!/bin/bash" > /usr/local/port_count.sh
-                  echo "INSTANCE_ID=\"$INSTANCE_ID\"" >> /usr/local/port_count.sh
-                  echo "PORT_COUNT=\$(netstat -an | grep ESTABLISHED | grep ':25565' | wc -l)" >> /usr/local/port_count.sh
-                  echo "REGION=\"$REGION\"" >> /usr/local/port_count.sh
-                  echo "aws cloudwatch put-metric-data --metric-name UserCount --dimensions InstanceId=\$INSTANCE_ID --namespace 'MinecraftDashboard' --value \$PORT_COUNT --region \$REGION" >> /usr/local/port_count.sh
-                  # Make the script executable
-                  chmod +x /usr/local/port_count.sh
-                  # Schedule the script to run every minute
-                  (sudo crontab -l 2>/dev/null; echo "*/1 * * * * /usr/local/port_count.sh >/dev/null 2>&1") | crontab -         
+                    # Get instance metadata
+                    INSTANCE_ID=$(ec2metadata --instance-id)
+                    REGION=$(curl -s http://169.254.169.254/latest/meta-data/local-hostname | cut -d . -f 2)
+                    # Count established connections on port 25565
+                    PORT_COUNT=$(netstat -an | grep ESTABLISHED | grep ':25565' | wc -l)
+                    # Create the script file
+                    echo "#!/bin/bash" > /usr/local/port_count.sh
+                    echo "INSTANCE_ID=\"$INSTANCE_ID\"" >> /usr/local/port_count.sh
+                    echo "PORT_COUNT=\$(netstat -an | grep ESTABLISHED | grep ':25565' | wc -l)" >> /usr/local/port_count.sh
+                    echo "REGION=\"$REGION\"" >> /usr/local/port_count.sh
+                    echo "aws cloudwatch put-metric-data --metric-name UserCount --dimensions InstanceId=\$INSTANCE_ID --namespace 'MinecraftDashboard' --value \$PORT_COUNT --region \$REGION" >> /usr/local/port_count.sh
+                    # Make the script executable
+                    chmod +x /usr/local/port_count.sh
+                    # Schedule the script to run every minute
+                    (sudo crontab -l 2>/dev/null; echo "*/1 * * * * /usr/local/port_count.sh >/dev/null 2>&1") | crontab -         
                   fi  
+                - sudo crontab -l
           - action: aws:runShellScript
             name: NICSSM
             inputs:
               runCommand:
                 - echo "Get NIC"
                 - NIC=$(ip route get 1.1.1.1 | awk '{print $5; exit}')
-                - INSTANCEID=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)
-                - REGION=$(curl -s http://169.254.169.254/latest/meta-data/placement/region)
-                - PARAM_NAME="/minecraftserverdashboard/${INSTANCEID}/nic"
+                - INSTANCE_ID=$(ec2metadata --instance-id)                
+                - PARAM_NAME="/minecraftserverdashboard/$INSTANCE_ID/nic"
                 - !Sub |
                   if aws ssm get-parameter --name "$PARAM_NAME" 2>/dev/null; then
                     echo "Parameter already exists"
                   else
-                    echo "Parameter does not exist, creating it"
+                    echo "Parameter does not exist, creating $PARAM_NAME"
                     aws ssm put-parameter --name "$PARAM_NAME" --type 'String' --value "$NIC"
                   fi
-         
-  # MineDashSSMAssociation:
-  #   Type: AWS::SSM::Association
-  #   Properties:
-  #     Name: !Ref MineDashSSMDoc
-  #     OutputLocation:
-  #       S3Location:
-  #         OutputS3BucketName: !Ref SupportBucket
-  #         OutputS3KeyPrefix: bootstrap
-  #     Targets:
-  #     - Key: resource-groups:name
-  #       Values:
-  #           - !Ref MinecraftResourceGroup
 
   ScheduledRule: 
     Type: AWS::Events::Rule

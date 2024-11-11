@@ -120,12 +120,28 @@ def cw_agent_install(instance_id):
         # AmazonCloudWatch Agent configuration 
         cw_agent_config(instance_id)
 
-def cw_agent_config(instance_id):
-    # AmazonCloudWatch Agent configuration  
-    logger.info("------- cw_agent_config :" + instance_id)
+def cw_agent_config(instance_id: str) -> None:
+    """Configure the CloudWatch agent on an EC2 instance.
+    
+    Args:
+        instance_id (str): The ID of the EC2 instance to configure
+    """
+    logger.info(f"------- cw_agent_config: {instance_id}")
 
-    ssm_agent_config = ssm_exec_commands(instance_id,"AmazonCloudWatch-ManageAgent",{"action": ["configure"],"mode": ["ec2"],"optionalConfigurationLocation": ["/minecraftserverdashboard/amazoncloudwatch-linux"],"optionalConfigurationSource": ["ssm"],"optionalRestart": ["yes"]})
-    logger.info(ssm_agent_config)
+    config_params = {
+        "action": ["configure"],
+        "mode": ["ec2"], 
+        "optionalConfigurationLocation": ["/minecraftserverdashboard/amazoncloudwatch-linux"],
+        "optionalConfigurationSource": ["ssm"],
+        "optionalRestart": ["yes"]
+    }
+
+    ssm_agent_config = ssm_exec_commands(
+        instance_id,
+        "AmazonCloudWatch-ManageAgent", 
+        config_params
+    )
+
     if ssm_agent_config["Status"] == "Success":
         logger.info("Agent is configured successfully")
     else:
