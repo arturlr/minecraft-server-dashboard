@@ -635,9 +635,10 @@ Resources:
             name: CloudWatchStart
             inputs:
               runCommand:
-                - sudo aws s3 cp s3://${S3BucketName}/${S3KeyPrefix} /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json                  
-                - sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -s -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
-                - sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -m ec2 -a status      
+                - |
+                  sudo aws s3 cp "s3://{{ S3BucketName }}/{{ S3KeyPrefix }}" /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
+                  sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -s -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
+                  sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -m ec2 -a status      
           - action: aws:runShellScript
             name: Cron
             inputs:
