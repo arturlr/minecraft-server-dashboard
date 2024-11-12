@@ -184,7 +184,6 @@ def schedule_event_response():
 
     return instances_payload
 
-
 def get_metrics_data(instance_id, namespace, metric_name, unit, stat_type, start_time, end_time, period):
     logger.info(f"get_metrics_data: {metric_name} - {instance_id}")
 
@@ -232,7 +231,6 @@ def get_metrics_data(instance_id, namespace, metric_name, unit, stat_type, start
     except Exception as e:
         logger.error(f'Something went wrong: {str(e)}')
         return "[]"
-
 
 def enable_scheduled_rule():    
     evtRule = eb_client.describe_rule(Name=scheduled_event_bridge_rule)

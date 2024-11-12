@@ -6,7 +6,7 @@ import os
 import json
 import time
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from jsonpath_ng.ext import parse
 import helpers
 
@@ -27,7 +27,7 @@ lambda_client = boto3.client('lambda')
 appValue = os.getenv('TAG_APP_VALUE')
 appName = os.getenv('APP_NAME') 
 event_response_lambda = os.getenv('EVENT_RESPONSE_LAMBDA')
-
+ssm_doc_name = os.getenv('SSM_DOC_NAME')
 
 def event_response_payload(instance_id):
     logger.info("------- event_response_payload : " + instance_id)
@@ -40,7 +40,7 @@ def event_response_payload(instance_id):
         "detail-type": "EC2 Instance State-change Notification", 
         "source": "aws.ec2",
         "account": aws_account_id,
-        "time": datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "time": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "region": aws_region,
         "resources": [
             "arn:aws:ec2:" + aws_region + ":" + aws_account_id + ":instance/" + instance_id
@@ -99,54 +99,7 @@ def cw_agent_status_check(instance_id):
             return { "code": 500, "msg": "Detailed information not available"}
     else:
         return { "code": 500, "msg": "Failed" }
-
-def cw_agent_install(instance_id):
-    logger.info("------- cw_agent_install : " + instance_id)
-
-    ssm_install_agent = ssm_exec_commands(instance_id,"AWS-ConfigureAWSPackage",
-        {'action': ['Install'],
-            'installationType': ['Uninstall and reinstall'],
-            'name': ['AmazonCloudWatchAgent']
-        })
-    logger.info(ssm_install_agent)
-
-    # Checking Agent Status if Success. Failed messages occurs when the CloudWatch Agent is not installed. 
-    if ssm_install_agent["Status"] == "Success":
-        # AmazonCloudWatch Agent installation 
-        jpexpr = parse("$.pluginsDetails[?(@.Name[:] == 'configurePackage')].Output")
-        for i in jpexpr.find(ssm_install_agent):
-            agent_details = i.value
-            logger.info(agent_details)
-        # AmazonCloudWatch Agent configuration 
-        cw_agent_config(instance_id)
-
-def cw_agent_config(instance_id: str) -> None:
-    """Configure the CloudWatch agent on an EC2 instance.
-    
-    Args:
-        instance_id (str): The ID of the EC2 instance to configure
-    """
-    logger.info(f"------- cw_agent_config: {instance_id}")
-
-    config_params = {
-        "action": ["configure"],
-        "mode": ["ec2"], 
-        "optionalConfigurationLocation": ["/minecraftserverdashboard/amazoncloudwatch-linux"],
-        "optionalConfigurationSource": ["ssm"],
-        "optionalRestart": ["yes"]
-    }
-
-    ssm_agent_config = ssm_exec_commands(
-        instance_id,
-        "AmazonCloudWatch-ManageAgent", 
-        config_params
-    )
-
-    if ssm_agent_config["Status"] == "Success":
-        logger.info("Agent is configured successfully")
-    else:
-        logger.warning("Agent configuration failed")
-         
+        
 def ssm_exec_commands(instance_id: str, doc_name: str, params: Dict[str, Any], max_retries: int = 10, sleep_time: int = 5) -> Optional[Dict[str, Any]]:
     """
     Execute an SSM command on an EC2 instance and wait for its completion.
@@ -198,7 +151,6 @@ def ssm_exec_commands(instance_id: str, doc_name: str, params: Dict[str, Any], m
         logger.error(f"Command failed: {e.last_response['Status']}")
         return {"Status": e.last_response['Status']}
     
-
 def handler(event, context):
 
     instance_id = event["instanceId"]
@@ -226,8 +178,7 @@ def handler(event, context):
     ## CloudWatch Agent Steps 
     cwAgentStatus = cw_agent_status_check(instance_id)
     if cwAgentStatus['code'] != 200:
-        cw_agent_install(instance_id)
-        return { "code": 200, "msg": "CW Agent installed and Script executed"}
+        logger.warning("CloudWatch Agent is not running")
     else:
         return cwAgentStatus
 

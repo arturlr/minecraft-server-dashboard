@@ -2,7 +2,8 @@ import boto3
 import logging
 import os
 import concurrent.futures
-import helpers
+import authHelper
+import ec2Helper
 import pytz
 
 logger = logging.getLogger()
@@ -16,8 +17,8 @@ ENCODING = 'utf-8'
 appValue = os.getenv('TAG_APP_VALUE')
 cognito_pool_id = os.getenv('COGNITO_USER_POOL_ID')
 
-auth = helpers.Auth(cognito_pool_id)
-ec2_utils = helpers.Ec2Utils()
+auth = authHelper.Auth(cognito_pool_id)
+ec2_utils = ec2Helper.Ec2Utils()
 utc = pytz.utc
 pst = pytz.timezone('US/Pacific')
 
@@ -51,22 +52,24 @@ def handler(event, context):
 
     # Get all instances the user has access
     user_instances_by_group = auth.list_groups_for_user(user_attributes['username'])
-    user_instances = ec2_utils.process_user_instances_by_group(user_instances_by_group)
+    if not user_instances_by_group:
+        logger.error("User does not have any server associated")
+        return "No Instances Found"
+    
+    user_instances = ec2_utils.list_instances_by_user_group(user_instances_by_group)
+    logger.info(user_instances)
 
-    reservations = user_instances["Reservations"]
-    logger.info(reservations)
-
-    if not reservations["Instances"]:
-        logger.error("No Instances Found")
+    if user_instances["TotalInstances"] == 0:
+        logger.error("No Servers Found")
         return "No Instances Found"
 
     # Fetch instance types and status in parallel
     with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
-        instance_types = {executor.submit(ec2_client.describe_instance_types, InstanceTypes=[instance['InstanceType']]): instance for instance in [server for server in reservations["Instances"]]}
-        instance_status = {executor.submit(ec2_utils.describe_instance_status, instance['InstanceId']): instance for instance in [server for server in reservations["Instances"]]}
+        instance_types = {executor.submit(ec2_client.describe_instance_types, InstanceTypes=[instance['InstanceType']]): instance for instance in [server for server in user_instances["Instances"]]}
+        instance_status = {executor.submit(ec2_utils.describe_instance_status, instance['InstanceId']): instance for instance in [server for server in user_instances["Instances"]]}
 
     listServer_result = []
-    for server in reservations["Instances"]:
+    for server in user_instances["Instances"]:
         instance_id = server['InstanceId']
         logger.info(instance_id)
         launchTime = server["LaunchTime"]

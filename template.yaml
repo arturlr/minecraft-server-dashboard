@@ -707,11 +707,44 @@ Resources:
       SourceArn: 
         !GetAtt ScheduledRule.Arn
 
-  HelperLayer:
+  AuthLayer:
     Type: AWS::Serverless::LayerVersion
     Properties:
       Description: MinecraftDashboardHelper
-      ContentUri: ./layers/helpers/
+      ContentUri: ./layers/authHelper/
+      CompatibleRuntimes:
+        - python3.10
+      RetentionPolicy: Delete
+    Metadata:
+      BuildMethod: makefile
+
+  DynLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      Description: MinecraftDashboardHelpers
+      ContentUri: ./layers/dynHelper/
+      CompatibleRuntimes:
+        - python3.10
+      RetentionPolicy: Delete
+    Metadata:
+      BuildMethod: makefile
+
+  UtilLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      Description: MinecraftDashboardHelper
+      ContentUri: ./layers/utilHelper/
+      CompatibleRuntimes:
+        - python3.10
+      RetentionPolicy: Delete
+    Metadata:
+      BuildMethod: makefile
+
+  Ec2Layer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      Description: MinecraftDashboardHelpers
+      ContentUri: ./layers/ec2Helper/
       CompatibleRuntimes:
         - python3.10
       RetentionPolicy: Delete
@@ -724,7 +757,7 @@ Resources:
       FunctionName: !Sub "${ProjectName}-${EnvironmentName}-eventResponse"
       CodeUri: ./lambdas/eventResponse/
       Layers:
-        - !Ref HelperLayer
+        - !Ref AuthLayer
       Events:
         EC2StateTrigger:
           Type: CloudWatchEvent 
@@ -784,7 +817,7 @@ Resources:
       FunctionName: !Sub "${ProjectName}-${EnvironmentName}-getMonthlyCost"
       CodeUri: ./lambdas/getMonthlyCost/
       Layers:
-        - !Ref HelperLayer        
+        - !Ref AuthLayer        
       Policies:
         - CostExplorerReadOnlyPolicy: {}
         - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
@@ -809,7 +842,9 @@ Resources:
       FunctionName: !Sub "${ProjectName}-${EnvironmentName}-listServers"
       CodeUri: ./lambdas/listServers/
       Layers:
-        - !Ref HelperLayer
+        - !Ref AuthLayer
+        - !Ref UtilLayer
+        - !Ref Ec2Layer
       Policies:
         - CostExplorerReadOnlyPolicy: {}
         - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
@@ -838,7 +873,7 @@ Resources:
       FunctionName: !Sub "${ProjectName}-${EnvironmentName}-triggerServerAction"
       CodeUri: ./lambdas/triggerServerAction/
       Layers:
-        - !Ref HelperLayer        
+        - !Ref AuthLayer        
       Policies:
         - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
         - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess
@@ -900,7 +935,7 @@ Resources:
       FunctionName: !Sub "${ProjectName}-${EnvironmentName}-changeServerState"
       CodeUri: ./lambdas/changeServerState/
       Layers:
-        - !Ref HelperLayer
+        - !Ref AuthLayer
       Policies:
         - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
         - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess
@@ -932,7 +967,7 @@ Resources:
       FunctionName: !Sub "${ProjectName}-${EnvironmentName}-configServer"
       CodeUri: ./lambdas/configServer/
       Layers:
-        - !Ref HelperLayer
+        - !Ref AuthLayer
       Timeout: 300
       Policies:
         - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
@@ -969,12 +1004,13 @@ Resources:
           TAG_APP_VALUE: !Ref AppValue
           APPSYNC_URL: !GetAtt GraphQLAPI.GraphQLUrl
           EVENT_RESPONSE_LAMBDA: !Ref EventResponse
+          SSM_DOC_NAME: !Ref MineDashSSMDoc
           #INSTANCES_TABLE_NAME: !Ref InstancesTable
 
   StateMachineLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: !Sub "/aws/states/${ProjectName}-StateMachine-LogGroup-${AWS::Region}"
+      LogGroupName: /aws/vendedlogs/states/minecraft-dashboard-logs
       RetentionInDays: 7
 
   StateMachine:
