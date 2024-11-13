@@ -548,10 +548,10 @@ Resources:
         schemaVersion: '2.2'
         description: Bootstrap instance
         parameters:
-          SSMParameterName:
+          SSMParameterPrefix:
             type: String
-            description: 'SSM parameter that holds SSM agent config'
-            default: !Sub ${ProjectName}-${EnvironmentName}-cloudwatch-agent-config
+            description: 'SSM parameter prefix'
+            default: !Sub ${ProjectName}-${EnvironmentName}
         mainSteps:              
           - action: aws:runShellScript
             name: installPackages
@@ -632,7 +632,7 @@ Resources:
             inputs:
               runCommand:
                 - |
-                  sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -s -c ssm:{{ SSMParameterName }}
+                  sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -s -c ssm:{{ SSMParameterPrefix }}--cloudwatch-agent-config
                   sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -m ec2 -a status      
           - action: aws:runShellScript
             name: Cron
@@ -665,7 +665,7 @@ Resources:
                 - echo "Get NIC"
                 - NIC=$(ip route get 1.1.1.1 | awk '{print $5; exit}')
                 - INSTANCE_ID=$(ec2metadata --instance-id)                
-                - PARAM_NAME="/minecraftserverdashboard/$INSTANCE_ID/nic"
+                - PARAM_NAME="{{ SSMParameterPrefix }}/$INSTANCE_ID/nic"
                 - !Sub |
                   if aws ssm get-parameter --name "$PARAM_NAME" 2>/dev/null; then
                     echo "Parameter already exists"
@@ -772,7 +772,7 @@ Resources:
         - arn:aws:iam::aws:policy/AWSCloudTrail_ReadOnlyAccess
         - arn:aws:iam::aws:policy/AmazonCognitoReadOnly
         - SSMParameterReadPolicy:
-            ParameterName: !Sub "${ProjectName}/*"
+            ParameterName: !Sub "${ProjectName}*"
         - Version: '2012-10-17' # Policy Document
           Statement:
             - Effect: Allow
@@ -826,7 +826,7 @@ Resources:
         - arn:aws:iam::aws:policy/AWSCloudTrail_ReadOnlyAccess
         - arn:aws:iam::aws:policy/AmazonCognitoReadOnly
         - SSMParameterReadPolicy:
-            ParameterName: !Sub "${ProjectName}/*"
+            ParameterName: !Sub "${ProjectName}*"
         # - DynamoDBCrudPolicy:
         #     TableName: !Ref InstancesTable
       Environment:
@@ -853,7 +853,7 @@ Resources:
         - arn:aws:iam::aws:policy/AWSCloudTrail_ReadOnlyAccess
         - arn:aws:iam::aws:policy/AmazonCognitoReadOnly
         - SSMParameterReadPolicy:
-            ParameterName: !Sub "${ProjectName}/*"
+            ParameterName: !Sub "${ProjectName}*"
         # - DynamoDBCrudPolicy:
         #     TableName: !Ref InstancesTable
       Environment:
@@ -884,7 +884,7 @@ Resources:
         - StepFunctionsExecutionPolicy:
             StateMachineName: !GetAtt StateMachine.Name
         - SSMParameterReadPolicy:
-            ParameterName: !Sub "${ProjectName}/*"
+            ParameterName: !Sub "${ProjectName}*"
         # - DynamoDBCrudPolicy:
         #     TableName: !Ref InstancesTable
         - Version: "2012-10-17" # Policy Document
@@ -946,7 +946,7 @@ Resources:
         - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
         - arn:aws:iam::aws:policy/AmazonCognitoReadOnly
         - SSMParameterReadPolicy:
-            ParameterName: !Sub "${ProjectName}/*"
+            ParameterName: !Sub "${ProjectName}*"
         # - DynamoDBCrudPolicy:
         #     TableName: !Ref InstancesTable
         - Version: "2012-10-17" # Policy Document
@@ -980,7 +980,7 @@ Resources:
         - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess
         - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
         - SSMParameterReadPolicy:
-            ParameterName: !Sub "${ProjectName}/*"
+            ParameterName: !Sub "${ProjectName}*"
         - LambdaInvokePolicy:
             FunctionName: !Ref EventResponse
         # - DynamoDBCrudPolicy:

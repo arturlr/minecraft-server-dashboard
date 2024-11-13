@@ -33,7 +33,8 @@ ec2_utils = ec2Helper.Ec2Utils()
 utc = pytz.utc
 pst = pytz.timezone('US/Pacific')
 
-scheduled_event_bridge_rule = utl.get_ssm_param(appName + "/" + envName + "/" + "scheduledrule")
+scheduled_event_bridge_rule = utl.get_ssm_param(f"/{appName}/{envName}/scheduledrule")
+logger.info(f"Scheduled EventBridge Rule: {scheduled_event_bridge_rule}")
 
 boto3_session = boto3.Session()
 credentials = boto3_session.get_credentials()
