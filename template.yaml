@@ -76,7 +76,7 @@ Resources:
   AmazonCloudWatchLinuxParameter:
     Type: AWS::SSM::Parameter
     Properties:
-      Name: /minecraftserverdashboard/amazoncloudwatch-linux
+      Name: !Sub /${ProjectName}/${EnvironmentName}/cloudwatch-agent-config
       Type: String
       Value: '{ "agent": { "metrics_collection_interval": 60, "run_as_user": "root" }, "logs": { "logs_collected": { "files": { "collect_list": [ { "file_path": "/opt/minecraft/server/logs/latest.log", "log_group_name": "/minecraft/serverlog/{instance_id}", "retention_in_days": 3, "filters": [ { "type": "include", "expression": "Server thread/INFO" } ] } ] } } }, "metrics": { "append_dimensions": { "AutoScalingGroupName": "${aws:AutoScalingGroupName}", "InstanceId": "${aws:InstanceId}" }, "metrics_collected": { "collectd": { "metrics_aggregation_interval": 60 }, "cpu": { "measurement": [ "cpu_usage_active" ], "resources": [ "*" ], "metrics_collection_interval": 60 }, "net": { "measurement": [ "net_bytes_sent" ], "metrics_collection_interval": 60 }, "mem": { "measurement": [ "mem_used_percent" ], "metrics_collection_interval": 60 }, "statsd": { "metrics_aggregation_interval": 60, "metrics_collection_interval": 10, "service_address": ":8125" } } } }'
       Description: Amazon CloudWatch agent config
@@ -269,7 +269,7 @@ Resources:
           ListServersDataSource:
             FunctionArn: !GetAtt ListServers.Arn
           ServerActionDataSource:
-            FunctionArn: !GetAtt TriggerServerAction.Arn
+            FunctionArn: !GetAtt ServerAction.Arn
           GetMonthlyCostDataSource:
             FunctionArn: !GetAtt GetMonthlyCost.Arn
       Functions:
@@ -279,7 +279,7 @@ Resources:
             Version: "1.0.0"
           DataSource: ListServersDataSource
           CodeUri: ./appsync/resolvers/lambdaInvoker.js
-        triggerServerActionFunction:
+        serverActionFunction:
           Runtime:
             Name: APPSYNC_JS
             Version: "1.0.0"
@@ -322,7 +322,7 @@ Resources:
           #     Name: APPSYNC_JS
           #     Version: "1.0.0"
           #   Pipeline:
-          #     - triggerServerActionFunction
+          #     - serverActionFunction
           putServerConfig:
             Runtime:
               Name: APPSYNC_JS
@@ -334,37 +334,37 @@ Resources:
               Name: APPSYNC_JS
               Version: "1.0.0"
             Pipeline:
-              - triggerServerActionFunction
+              - serverActionFunction
           startServer:
             Runtime:
               Name: APPSYNC_JS
               Version: "1.0.0"
             Pipeline:
-              - triggerServerActionFunction
+              - serverActionFunction
           stopServer:
             Runtime:
               Name: APPSYNC_JS
               Version: "1.0.0"
             Pipeline:
-              - triggerServerActionFunction
+              - serverActionFunction
           restartServer:
             Runtime:
               Name: APPSYNC_JS
               Version: "1.0.0"
             Pipeline:
-              - triggerServerActionFunction
+              - serverActionFunction
           fixServerRole:
             Runtime:
               Name: APPSYNC_JS
               Version: "1.0.0"
             Pipeline:
-              - triggerServerActionFunction
+              - serverActionFunction
           addUserToServer:
             Runtime:
               Name: APPSYNC_JS
               Version: "1.0.0"
             Pipeline:
-              - triggerServerActionFunction
+              - serverActionFunction
           putLogAudit:
             Runtime:
               Name: APPSYNC_JS
@@ -384,18 +384,18 @@ Resources:
               Version: "1.0.0"
             Pipeline:
               - serverListFunction     
-          # getServerConfig:
-          #   Runtime:
-          #     Name: APPSYNC_JS
-          #     Version: "1.0.0"
-          #   Pipeline:
-          #     - triggerServerActionFunction
           getServerConfig:
             Runtime:
               Name: APPSYNC_JS
               Version: "1.0.0"
             Pipeline:
-              - getServerRecordFunction
+              - serverActionFunction
+          # getServerConfig:
+          #   Runtime:
+          #     Name: APPSYNC_JS
+          #     Version: "1.0.0"
+          #   Pipeline:
+          #     - getServerRecordFunction
           getMonthlyCost:
             Runtime:
               Name: APPSYNC_JS
@@ -548,14 +548,10 @@ Resources:
         schemaVersion: '2.2'
         description: Bootstrap instance
         parameters:
-          S3BucketName:
+          SSMParameterName:
             type: String
-            default: !Ref SupportBucket
-            description: 'Name of the S3 bucket'
-          S3KeyPrefix:
-            type: String 
-            default: amazon-cloudwatch-agent.json
-            description: 'S3 key prefix for the script'
+            description: 'SSM parameter that holds SSM agent config'
+            default: !Sub ${ProjectName}-${EnvironmentName}-cloudwatch-agent-config
         mainSteps:              
           - action: aws:runShellScript
             name: installPackages
@@ -636,8 +632,7 @@ Resources:
             inputs:
               runCommand:
                 - |
-                  sudo aws s3 cp "s3://{{ S3BucketName }}/{{ S3KeyPrefix }}" /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
-                  sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -s -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
+                  sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -s -c ssm:{{ SSMParameterName }}
                   sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -m ec2 -a status      
           - action: aws:runShellScript
             name: Cron
@@ -693,7 +688,7 @@ Resources:
   ScheduledRuleParameter:
     Type: AWS::SSM::Parameter
     Properties:
-      Name: /minecraftserverdashboard/scheduledrule
+      Name: !Sub /${ProjectName}/${EnvironmentName}/scheduledrule
       Type: String
       Value: !Ref ScheduledRule
       Description: ScheduledRule
@@ -758,6 +753,8 @@ Resources:
       CodeUri: ./lambdas/eventResponse/
       Layers:
         - !Ref AuthLayer
+        - !Ref UtilLayer
+        - !Ref Ec2Layer 
       Events:
         EC2StateTrigger:
           Type: CloudWatchEvent 
@@ -775,7 +772,7 @@ Resources:
         - arn:aws:iam::aws:policy/AWSCloudTrail_ReadOnlyAccess
         - arn:aws:iam::aws:policy/AmazonCognitoReadOnly
         - SSMParameterReadPolicy:
-            ParameterName: "minecraftserverdashboard*"
+            ParameterName: !Sub "${ProjectName}/*"
         - Version: '2012-10-17' # Policy Document
           Statement:
             - Effect: Allow
@@ -804,6 +801,7 @@ Resources:
       Environment:
         Variables:
           APP_NAME: !Ref ProjectName
+          ENVIRONMENT_NAME: !Ref EnvironmentName
           TAG_APP_VALUE: !Ref AppValue
           APPSYNC_URL: !GetAtt GraphQLAPI.GraphQLUrl
           COGNITO_USER_POOL_ID: !Ref CognitoUserPool
@@ -817,7 +815,9 @@ Resources:
       FunctionName: !Sub "${ProjectName}-${EnvironmentName}-getMonthlyCost"
       CodeUri: ./lambdas/getMonthlyCost/
       Layers:
-        - !Ref AuthLayer        
+        - !Ref AuthLayer
+        - !Ref UtilLayer
+        - !Ref Ec2Layer         
       Policies:
         - CostExplorerReadOnlyPolicy: {}
         - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
@@ -826,7 +826,7 @@ Resources:
         - arn:aws:iam::aws:policy/AWSCloudTrail_ReadOnlyAccess
         - arn:aws:iam::aws:policy/AmazonCognitoReadOnly
         - SSMParameterReadPolicy:
-            ParameterName: "minecraftserverdashboard*"
+            ParameterName: !Sub "${ProjectName}/*"
         # - DynamoDBCrudPolicy:
         #     TableName: !Ref InstancesTable
       Environment:
@@ -853,7 +853,7 @@ Resources:
         - arn:aws:iam::aws:policy/AWSCloudTrail_ReadOnlyAccess
         - arn:aws:iam::aws:policy/AmazonCognitoReadOnly
         - SSMParameterReadPolicy:
-            ParameterName: !Sub "/${ProjectName}/${EnvironmentName}*"
+            ParameterName: !Sub "${ProjectName}/*"
         # - DynamoDBCrudPolicy:
         #     TableName: !Ref InstancesTable
       Environment:
@@ -866,14 +866,16 @@ Resources:
           EC2_INSTANCE_PROFILE_ARN: !GetAtt IAMEC2InstanceProfile.Arn
           COGNITO_USER_POOL_ID: !Ref CognitoUserPool
 
-  TriggerServerAction:
+  ServerAction:
     Type: AWS::Serverless::Function
     Properties:
       Timeout: 300
-      FunctionName: !Sub "${ProjectName}-${EnvironmentName}-triggerServerAction"
-      CodeUri: ./lambdas/triggerServerAction/
+      FunctionName: !Sub "${ProjectName}-${EnvironmentName}-serverAction"
+      CodeUri: ./lambdas/serverAction/
       Layers:
-        - !Ref AuthLayer        
+        - !Ref AuthLayer
+        - !Ref UtilLayer
+        - !Ref Ec2Layer        
       Policies:
         - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
         - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess
@@ -882,7 +884,7 @@ Resources:
         - StepFunctionsExecutionPolicy:
             StateMachineName: !GetAtt StateMachine.Name
         - SSMParameterReadPolicy:
-            ParameterName: !Sub "/${ProjectName}/${EnvironmentName}*"
+            ParameterName: !Sub "${ProjectName}/*"
         # - DynamoDBCrudPolicy:
         #     TableName: !Ref InstancesTable
         - Version: "2012-10-17" # Policy Document
@@ -936,13 +938,15 @@ Resources:
       CodeUri: ./lambdas/changeServerState/
       Layers:
         - !Ref AuthLayer
+        - !Ref UtilLayer
+        - !Ref Ec2Layer 
       Policies:
         - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
         - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess
         - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
         - arn:aws:iam::aws:policy/AmazonCognitoReadOnly
         - SSMParameterReadPolicy:
-            ParameterName: "minecraftserverdashboard*"
+            ParameterName: !Sub "${ProjectName}/*"
         # - DynamoDBCrudPolicy:
         #     TableName: !Ref InstancesTable
         - Version: "2012-10-17" # Policy Document
@@ -968,13 +972,15 @@ Resources:
       CodeUri: ./lambdas/configServer/
       Layers:
         - !Ref AuthLayer
+        - !Ref UtilLayer
+        - !Ref Ec2Layer 
       Timeout: 300
       Policies:
         - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
         - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess
         - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
         - SSMParameterReadPolicy:
-            ParameterName: "minecraft*"
+            ParameterName: !Sub "${ProjectName}/*"
         - LambdaInvokePolicy:
             FunctionName: !Ref EventResponse
         # - DynamoDBCrudPolicy:

@@ -8,7 +8,8 @@ from base64 import b64encode
 from datetime import date, datetime, timezone, timedelta
 import requests
 from requests_aws4auth import AWS4Auth
-import helpers
+import ec2Helper
+import utilHelper
 import pytz
 
 logger = logging.getLogger()
@@ -16,7 +17,6 @@ logger.setLevel(logging.INFO)
 
 ssm = boto3.client('ssm')
 appsync = boto3.client('appsync')
-ec2_client = boto3.client('ec2')
 cw_logs = boto3.client('logs')
 cw_client = boto3.client('cloudwatch')
 eb_client = boto3.client('events')
@@ -24,15 +24,16 @@ ENCODING = 'utf-8'
 
 appValue = os.getenv('TAG_APP_VALUE')
 appName = os.getenv('APP_NAME') 
+envName = os.getenv('ENVIRONMENT_NAME')
 endpoint = os.environ.get('APPSYNC_URL', None) 
 cognito_pool_id = os.environ.get('COGNITO_USER_POOL_ID', None)
 
-utl = helpers.Utils()
+utl = utilHelper.Utils()
+ec2_utils = ec2Helper.Ec2Utils()
 utc = pytz.utc
 pst = pytz.timezone('US/Pacific')
-cog_auth = helpers.Auth(cognito_pool_id)
 
-scheduled_event_bridge_rule = utl.get_ssm_param("/minecraftserverdashboard/scheduledrule")
+scheduled_event_bridge_rule = utl.get_ssm_param(appName + "/" + envName + "/" + "scheduledrule")
 
 boto3_session = boto3.Session()
 credentials = boto3_session.get_credentials()
@@ -158,10 +159,9 @@ def send_to_appsync(payload):
 def schedule_event_response():
 
     # Check for instances running to update their stats. It can only be a Schedule Event
-    instances_running = utl.list_servers_by_state("running")
+    instances_running = ec2_utils.list_servers_by_state("running")
     
-    reservations = instances_running["Reservations"]
-    if not reservations["Instances"]:  
+    if not instances_running["Instances"]:  
         logger.error("No Instances Found for updating")
         eb_client.disable_rule(Name=scheduled_event_bridge_rule)
         logger.info("Disabled Evt Bridge Rule")
@@ -171,7 +171,7 @@ def schedule_event_response():
     dt_4_four_hours_before = datetime.now(tz=timezone.utc) - timedelta(hours=4)
     dt_now = datetime.now(tz=timezone.utc)
 
-    for instance in reservations["Instances"]:
+    for instance in instances_running["Instances"]:
         instance_info = {
             'id': instance["InstanceId"],
             'memStats': get_metrics_data(instance["InstanceId"], 'CWAgent', 'mem_used_percent', 'Percent', 'Average', dt_4_four_hours_before, dt_now, 300),
@@ -240,9 +240,9 @@ def enable_scheduled_rule():
 
 def state_change_response(instance_id):
 
-    reservation_instance = utl.list_server_by_id(instance_id)
-    instance_info = reservation_instance["Reservations"]["Instances"][0]
-    ec2Status = utl.describe_instance_status(instance_id)
+    server_info = ec2_utils.list_server_by_id(instance_id)
+    instance_info = server_info['Instances'][0]
+    ec2Status = ec2_utils.describe_instance_status(instance_id)
     launchTime = instance_info["LaunchTime"]
     if "Association" in instance_info["NetworkInterfaces"][0]:
         publicIp = instance_info["NetworkInterfaces"][0]["Association"]["PublicIp"]
@@ -250,7 +250,6 @@ def state_change_response(instance_id):
         publicIp = "none"
 
     tags = {tag['Key']: tag['Value'] for tag in instance_info["Tags"]}
-
     
     userEmail = 'minecraft-dashboard@maildrop.cc'
 
@@ -273,7 +272,7 @@ def state_change_response(instance_id):
         "iamStatus": ec2Status["iamStatus"].lower(),
         "launchTime": pstLaunchTime.strftime("%m/%d/%Y - %H:%M:%S"),
         "publicIp": publicIp,
-        "runningMinutes": utl.get_total_hours_running_per_month(instance_id)
+        "runningMinutes": ec2_utils.get_total_hours_running_per_month(instance_id)
     }
 
     return input

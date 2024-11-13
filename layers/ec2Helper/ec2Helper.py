@@ -215,7 +215,7 @@ class Ec2Utils:
             return []
         else:
             return {
-            "Instances": response["Reservations"][0],
+            "Instances": response["Reservations"][0]["Instances"],
             "TotalInstances": 1
         }
 

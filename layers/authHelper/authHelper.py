@@ -122,29 +122,20 @@ class Auth:
                 logger.error(str(e))
                 return False
             
-    def add_user_to_group(self,instance_id,userEmail):
-            try:
-                user = self.cognito_idp.list_users(
-                    UserPoolId=self.cognito_pool_id,
-                    Filter="email = '" + userEmail + "'"
-                )
-
-                if not len(user['Users']):
-                    logger.error("Unable to find user: " + userEmail + ". User has to create a profile by login in this website")
-                    return {"err": "Unable to find user: " + userEmail + ". User has to create a profile by login in this website" }
-
+    def add_user_to_group(self,instance_id,userName):
+            try:                
                 userRsp = self.cognito_idp.admin_add_user_to_group(
                     UserPoolId=self.cognito_pool_id,
-                    Username=user['Users'][0]["Username"],
+                    Username=userName,
                     GroupName=instance_id
                 )
 
-                return {"msg": "User added to the group"}
+                logger.info("User added to the group")
+                return True
         
             except Exception as e:
-                logger.info("Exception admin_add_user_to_group")
                 logger.warning(str(e))
-                return { "err": str(e) } 
+                return False
             
     def list_users_for_group(self, instance_id):
         try:

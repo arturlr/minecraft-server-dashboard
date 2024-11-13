@@ -2,7 +2,9 @@ import boto3
 import logging
 import os
 from base64 import b64encode
-import helpers
+import ec2Helper
+import utilHelper
+import authHelper
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -10,75 +12,94 @@ logger.setLevel(logging.INFO)
 appValue = os.getenv('TAG_APP_VALUE')
 cognito_pool_id = os.getenv('COGNITO_USER_POOL_ID')
 
-utl = helpers.Utils()
-auth = helpers.Auth(cognito_pool_id)
+utl = utilHelper.Utils()
+auth = authHelper.Auth(cognito_pool_id)
+ec2_utils = ec2Helper.Ec2Utils()
 ec2_client = boto3.client('ec2')
+
+def handle_start(instanceId, state, steps, launchTime):
+    instanceStatus = utl.describe_instance_status(instanceId)
+    IsInstanceReady = instanceStatus["initStatus"] == "ok"
+
+    if state == "stopped":
+        ec2_client.start_instances(InstanceIds=[instanceId])
+        # check for Cognito Group for instanceId
+        # add group if does not exit with the admin user                
+
+    if steps > 5:
+        logger.error('max steps reached')
+        return {
+            'isSuccessful': False, 
+            'err': 'Timeout', 
+            'state': state, 
+            'isInstanceReady': IsInstanceReady
+        }
+    
+    return { 
+        'isSuccessful': True, 
+        'action': 'start',
+        'instanceId': instanceId, 
+        'isInstanceReady': IsInstanceReady,
+        'launchTime': launchTime.strftime("%m/%d/%Y - %H:%M:%S"),
+        'state': state, 
+        'steps': steps + 1
+    }
+
+def handle_stop(instanceId, state):
+    if state == "running":
+        ec2_client.stop_instances(InstanceIds=[instanceId])
+    else:
+        logger.error(f'Stop instance {instanceId} not possible - current state: {state}')
+
+def handle_restart(instanceId, state):
+    if state == "running":
+        ec2_client.reboot_instances(InstanceIds=[instanceId])
+    else:
+        logger.error(f'Restart instance {instanceId} not possible - current state: {state}')
+
 
 def handler(event, context):
     try:   
-        instanceId = event["instanceId"]
-        action = event["action"]
-        if 'steps' in event:
-            steps = event['steps']
-        else:
-            steps = 0
+        # Extract and validate required parameters
+        instanceId = event.get("instanceId")
+        action = event.get("action")
+        if not instanceId or not action:
+            raise ValueError("Missing required parameters: instanceId and action")
+            
+        steps = event.get('steps', 0)
 
-        instanceInfo = utl.list_server_by_id(instanceId)
+        # Get instance details
+        instance = ec2_utils.list_server_by_id(instanceId)
+        if not instance.get('Instances'):
+            raise ValueError(f"Instance {instanceId} not found")
+            
+        instance_info = instance['Instances'][0]
 
-        launchTime = instanceInfo["Reservations"]["Instances"][0]["LaunchTime"]            
-        state = instanceInfo["Reservations"]["Instances"][0]["State"]["Name"]
+        launchTime = instance_info["LaunchTime"]            
+        state = instance_info["State"]["Name"]
 
-        if action == "start":
-            instanceStatus = utl.describe_instance_status(instanceId)
-            IsInstanceReady = False
-            if instanceStatus["initStatus"] == "ok":
-                IsInstanceReady = True
+        # Define allowed actions
+        actions = {
+            "start": lambda: handle_start(instanceId, state, steps, launchTime),
+            "stop": lambda: handle_stop(instanceId, state),
+            "restart": lambda: handle_restart(instanceId, state)
+        }
 
-            if (state == "stopped"):
-                rsp = ec2_client.start_instances(
-                    InstanceIds=[ instanceId ]
-                )
-                # check for Cognito Group for instanceId
-                # add group if does not exit with the admin user                
+        # Execute requested action if valid
+        if action not in actions:
+            raise ValueError(f"Invalid action: {action}")
+            
+        result = actions[action]()
+        if result:
+            return result
 
-            if steps > 5 :
-                logger.error('max steps reached')
-                return {'isSuccessful': False, 'err': 'Timeout', 'state': state, 'isInstanceReady': IsInstanceReady,}
-            else:
-                steps = steps + 1
-
-            return { 
-                        'isSuccessful': True, 
-                        'action': action,
-                        'instanceId': instanceId, 
-                        'isInstanceReady': IsInstanceReady,
-                        'launchTime': launchTime.strftime("%m/%d/%Y - %H:%M:%S"),
-                        'state': state, 
-                        'steps': steps
-                    }
-
-        elif action == "stop":
-            if (state == "running"):
-                rsp = ec2_client.stop_instances(
-                    InstanceIds=[ instanceId ]
-                )
-            else:
-                logger.error('Stop instance ' + instanceId + ' was not possible as the instance status was ' + state)
-
-        elif action == "restart":
-            if (state == "running"):
-                rsp = ec2_client.reboot_instances(
-                    InstanceIds=[ instanceId ]
-                )
-            else:
-                logger.error('Restart instance ' + instanceId + ' was not possible as the instance status was ' + state)
-        
         return { 
-                 'isSuccessful': True, 
-                 'action': action,
-                 'instanceId': instanceId                
-                }
+            'isSuccessful': True, 
+            'action': action,
+            'instanceId': instanceId                
+        }
             
     except Exception as e:
-        logger.error('Something went wrong: ' + str(e))
+        logger.error(f'Error processing request: {str(e)}')
         return {'isSuccessful': False, 'msg': str(e)}
+

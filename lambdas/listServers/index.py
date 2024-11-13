@@ -49,15 +49,15 @@ def handler(event, context):
     if user_attributes is None:
         logger.error("Invalid Token")
         return "Invalid Token"
-
-    # Get all instances the user has access
-    user_instances_by_group = auth.list_groups_for_user(user_attributes['username'])
-    if not user_instances_by_group:
-        logger.error("User does not have any server associated")
-        return "No Instances Found"
     
-    user_instances = ec2_utils.list_instances_by_user_group(user_instances_by_group)
-    logger.info(user_instances)
+    # Get all instances the user has access from token
+    cognitoGroups = event["identity"].get("groups") 
+    if cognitoGroups:
+        user_instances = ec2_utils.list_instances_by_user_group(cognitoGroups)
+        logger.info(user_instances)
+    else:
+        logger.error("No Cognito Groups found")
+        return "No Instances Found"
 
     if user_instances["TotalInstances"] == 0:
         logger.error("No Servers Found")

@@ -1,6 +1,6 @@
 import boto3
 import logging
-import os
+import time
 from botocore.exceptions import ClientError
 from boto3.dynamodb.conditions import Key, Attr
 
@@ -46,6 +46,15 @@ class Utils:
             return {"statusCode": status_code, "body": body, "headers": headers}
         else:
             return {"statusCode": status_code, "body": body }
+
+    def retry_operation(self, operation, max_retries, delay):
+        retries = 0
+        while retries < max_retries:
+            if operation():
+                return True
+            retries += 1
+            time.sleep(delay)
+        return False
 
     def get_ssm_param(self, paramKey, isEncrypted=False):
         try:
