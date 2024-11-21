@@ -84,22 +84,25 @@ export const useServerStore = defineStore("server", {
             }
         },
 
-        async getServerConfig(instanceId) {
+        async getServerConfig() {
+            console.group("getServerConfig");
             try {
                 const results = await client.graphql({
                     query: queries.getServerConfig,
-                    variables: { instanceId: instanceId }
+                    variables: { id: this.selectedServer.id }
                 });
 
                 if (results.data.getServerConfig === null) {
-                    console.log(`Server with ID ${instanceId} not found`);
+                    console.log(`Server with ID ${this.selectedServer.id} not found`);
                     return null;
                 }
 
+                console.groupEnd();
                 return results.data.getServerConfig;
 
             } catch (error) {
                 console.error(error);
+                console.groupEnd();
                 throw error;
             }
         },

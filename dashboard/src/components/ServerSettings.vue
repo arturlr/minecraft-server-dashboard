@@ -15,6 +15,7 @@ const snackTimeout = ref(3500)
 const workDir = ref(null);
 const runCommand = ref(null);
 const workingDir = ref(null);
+const groupMembers = ref(null);
 const alarmMetric = ref({ metric: 'CPUUtilization', abbr: '% CPU' });
 const alarmEvaluationPeriod = ref();
 const alarmMetricItems = ref([
@@ -63,22 +64,19 @@ function generateUniqueId() {
 }
 
 onMounted(async () => {
-    const serverSettings = await serverStore.getServerConfig(serverStore.selectedServer.id);
-    // console.log(serverSettings)
-    alarmThreshold.value = serverSettings.alarmThreshold;
-    alarmEvaluationPeriod.value = serverSettings.alarmEvaluationPeriod
+    await getServerSettings();
 });
 
-const groupMembers = computed(() => {
-    if (
-        serverStore.selectedServer.groupMembers &&
-        serverStore.selectedServer.groupMembers.length > 0
-    ) {
-        return JSON.parse(serverStore.selectedServer.groupMembers);
-    } else {
-        return [];
-    }
-});
+// const groupMembers = computed(() => {
+//     if (
+//         serverStore.selectedServer.groupMembers &&
+//         serverStore.selectedServer.groupMembers.length > 0
+//     ) {
+//         return JSON.parse(serverStore.selectedServer.groupMembers);
+//     } else {
+//         return [];
+//     }
+// });
 
 function getEpochTime (days) {
     const currentTime = new Date().getTime(); // Get the current time in milliseconds
@@ -86,9 +84,21 @@ function getEpochTime (days) {
     return epochTime;
 }
 
+async function getServerSettings() {
+    const serverSettings = await serverStore.getServerConfig();
+    // console.log(serverSettings)
+    alarmThreshold.value = serverSettings?.alarmThreshold || null;
+    alarmEvaluationPeriod.value = serverSettings?.alarmEvaluationPeriod || null;
+    runCommand.value = serverSettings?.runCommand || null;
+    workingDir.value = serverSettings?.workDir || null;  
+    groupMembers.value = JSON.parse(serverSettings.groupMembers)
+}
+
 function resetForm() {
     alarmThreshold.value = null
     alarmEvaluationPeriod.value = null
+    runCommand.value = null;
+    workingDir.value = null; 
 }
 
 async function onSubmit() {
@@ -96,7 +106,7 @@ async function onSubmit() {
         if (isValid) {
             const input = {
                 id: serverStore.selectedServer.id,
-                alarmType: alarmMetric.value.metric,
+                alarmMetric: alarmMetric.value.metric,
                 alarmThreshold: parseFloat(alarmThreshold.value),
                 alarmEvaluationPeriod: parseInt(alarmEvaluationPeriod.value, 10),
                 runCommand: runCommand.value ?? '',
@@ -208,7 +218,8 @@ async function addUser() {
                             Save
                         </v-btn>
 
-                        <v-btn text @click="resetForm"> Close </v-btn>
+                        <v-btn text @click="resetForm"> Clear </v-btn>
+                        <v-btn text @click="getServerSettings"> Reload </v-btn>
                     </v-container>
                 </v-form>
             </v-expansion-panel-text>

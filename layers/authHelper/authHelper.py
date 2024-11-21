@@ -138,33 +138,70 @@ class Auth:
                 return False
             
     def list_users_for_group(self, instance_id):
+        """
+        Lists all users in a specified Cognito user pool group with pagination handling.
+        
+        Args:
+            instance_id (str): The group name to list users from
+            
+        Returns:
+            list: List of dictionaries containing user information
+        """
         try:
-            groupMembers = []
-            pagination_token = None
+            group_members = []
+            paginator = self.cognito_idp.get_paginator('list_users_in_group')
+            
+            page_iterator = paginator.paginate(
+                GroupName=instance_id,
+                UserPoolId=self.cognito_pool_id
+            )   
 
-            while True:
-                if pagination_token:
-                    response = self.cognito_idp.list_users_in_group(
-                        UserPoolId=self.cognito_pool_id,
-                        GroupName=instance_id,
-                        NextToken=pagination_token
-                    )
-                else:
-                    groupMembers.extend([
-                        {
-                            "id": user_attrs.get("sub"),
-                            "email": user_attrs.get("email"),
-                            "fullname": f"{user_attrs.get('given_name')} {user_attrs.get('family_name')}"
+            logger.info(page_iterator)
+
+            # Process each page of results
+            for page in page_iterator:
+                logger.info(page)
+                for user in page.get('Users', []):
+                    try:
+                        # Convert user attributes to dictionary
+                        user_attrs = {
+                            attr['Name']: attr['Value'] 
+                            for attr in user.get('Attributes', [])
                         }
-                        for user in response["Users"]
-                        if (user_attrs := {attr["Name"]: attr["Value"] for attr in user["Attributes"]})
-                    ])
+                        
+                        # Only add users with required attributes
+                        if all(key in user_attrs for key in ['sub', 'email', 'given_name', 'family_name']):
+                            group_members.append({
+                                'id': user_attrs['sub'],
+                                'email': user_attrs['email'],
+                                'fullname': f"{user_attrs['given_name']} {user_attrs['family_name']}"
+                            })
+                        else:
+                            logger.warning(
+                                f"Skipping user due to missing attributes: {user_attrs.get('sub', 'Unknown ID')}"
+                            )
+                            
+                    except KeyError as ke:
+                        logger.error(f"Error processing user attributes: {ke}")
+                    except Exception as e:
+                        logger.error(f"Unexpected error processing user: {str(e)}")
+                        continue
+                        
+            return group_members
+            
+        except self.cognito_idp.exceptions.ResourceNotFoundException:
+            logger.error(f"Group {instance_id} not found in user pool {self.cognito_pool_id}")
+            return []
+        except self.cognito_idp.exceptions.InvalidParameterException as e:
+            logger.error(f"Invalid parameters provided: {str(e)}")
+            return []
+        except self.cognito_idp.exceptions.TooManyRequestsException:
+            logger.error("Rate limit exceeded when querying Cognito")
+            return []
+        except Exception as e:
+            logger.error(f"Unexpected error in list_users_for_group: {str(e)}")
+            return []
 
-                    pagination_token = response.get('NextToken')
-                    if not pagination_token:
-                        break
-
-            return groupMembers
 
         except Exception as e:
             logger.info("Exception list_users_in_group")

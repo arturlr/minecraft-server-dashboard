@@ -63,14 +63,13 @@ export const listLoginAudits = /* GraphQL */ `
 `;
 
 export const getServerConfig = /* GraphQL */ `
-query GetServerConfig($instanceId: String!) {
-  getServerConfig(instanceId: $instanceId) {
-    id
+query GetServerConfig($id: String!) {
+  getServerConfig(id: $id) {
+    runCommand
+    workDir
     alarmType
     alarmThreshold
     alarmEvaluationPeriod
-    workDir
-    runCommand
     groupMembers
   }
 }

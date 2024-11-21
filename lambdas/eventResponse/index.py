@@ -20,6 +20,8 @@ appsync = boto3.client('appsync')
 cw_logs = boto3.client('logs')
 cw_client = boto3.client('cloudwatch')
 eb_client = boto3.client('events')
+lambda_client = boto3.client('lambda')
+
 ENCODING = 'utf-8'
 
 appValue = os.getenv('TAG_APP_VALUE')
@@ -27,6 +29,7 @@ appName = os.getenv('APP_NAME')
 envName = os.getenv('ENVIRONMENT_NAME')
 endpoint = os.environ.get('APPSYNC_URL', None) 
 cognito_pool_id = os.environ.get('COGNITO_USER_POOL_ID', None)
+config_server_lambda = os.getenv('CONFIG_SERVER_LAMBDA')
 
 utl = utilHelper.Utils()
 ec2_utils = ec2Helper.Ec2Utils()
@@ -160,13 +163,11 @@ def send_to_appsync(payload):
 def schedule_event_response():
 
     # Check for instances running to update their stats. It can only be a Schedule Event
-    instances_running = ec2_utils.list_servers_by_state("running")
-    
-    if not instances_running["Instances"]:  
+    instances_running = ec2_utils.list_servers_by_state("running")    
+
+    if instances_running["TotalInstances"] == 0:  
         logger.error("No Instances Found for updating")
-        eb_client.disable_rule(Name=scheduled_event_bridge_rule)
-        logger.info("Disabled Evt Bridge Rule")
-        return "No Instances Found for updating"
+        return None
 
     instances_payload = []
     dt_4_four_hours_before = datetime.now(tz=timezone.utc) - timedelta(hours=4)
@@ -239,6 +240,17 @@ def enable_scheduled_rule():
         eb_client.enable_rule(Name=scheduled_event_bridge_rule)
         logger.info("Enabled Evt Bridge Rule")
 
+def disable_scheduled_rule():
+    # Check for instances running
+    instances_running = ec2_utils.list_servers_by_state("running")
+    
+    if instances_running["TotalInstances"] == 0:  
+        logger.error("No Instances running. Disabling Scheduled Event")
+        evtRule = eb_client.describe_rule(Name=scheduled_event_bridge_rule)
+        if evtRule["State"] == "ENABLED":
+            eb_client.disable_rule(Name=scheduled_event_bridge_rule)
+            logger.info("Disabled Evt Bridge Rule")
+
 def state_change_response(instance_id):
 
     server_info = ec2_utils.list_server_by_id(instance_id)
@@ -278,6 +290,18 @@ def state_change_response(instance_id):
 
     return input
     
+def config_server(instance_id):
+    logger.info("Configuring Server: " + instance_id)
+
+    payload = {
+        "instanceId": instance_id
+    }
+
+    lambda_client.invoke(
+        FunctionName='my-function-name',
+        InvocationType='Event',
+        Payload=json.dumps(payload)
+    )  
 
 def handler(event, context):     
     
@@ -292,6 +316,9 @@ def handler(event, context):
             
             if event['detail']['state'] == "running" or event['detail']['state'] == "pending":
                 enable_scheduled_rule()
+                config_server(event['detail']['instance-id'])
+            elif event['detail']['state'] == "stopped":
+                disable_scheduled_rule()
 
             input = state_change_response(event['detail']['instance-id'])
             payload={"query": changeServerState, 'variables': { "input": input }}

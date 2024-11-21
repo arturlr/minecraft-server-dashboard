@@ -18,7 +18,7 @@ ec2_utils = ec2Helper.Ec2Utils()
 ec2_client = boto3.client('ec2')
 
 def handle_start(instanceId, state, steps, launchTime):
-    instanceStatus = utl.describe_instance_status(instanceId)
+    instanceStatus = ec2_utils.describe_instance_status(instanceId)
     IsInstanceReady = instanceStatus["initStatus"] == "ok"
 
     if state == "stopped":

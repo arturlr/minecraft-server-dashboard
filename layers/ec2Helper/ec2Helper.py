@@ -17,12 +17,11 @@ class Ec2Utils:
         logger.info("------- Ec2Utils Class Initialization")
         self.ec2_client = boto3.client('ec2')
         self.ssm = boto3.client('ssm')        
-        self.ct_client = boto3.client('cloudtrail')
-        self.cw_client = boto3.client('cloudwatch')
+        self.ct_client = boto3.client('cloudtrail')        
         self.appValue = os.getenv('TAG_APP_VALUE')
         self.ec2InstanceProfileArn = os.getenv('EC2_INSTANCE_PROFILE_ARN')
 
-    def get_instance_attributes(self,instance_id):
+    def get_instance_attributes_from_tags(self,instance_id):
         """
         Retrieves the instance attributes from the EC2 tags.
 
@@ -35,16 +34,17 @@ class Ec2Utils:
         logger.info("Getting instance attributes for " + instance_id)
         try:        
             # Get existing tags
-            existing_tags = self.ec2_client.describe_tags(
+            paginator = self.ec2_client.get_paginator('describe_tags')
+            existing_tags = []
+            for page in paginator.paginate(
                 Filters=[
                     {'Name': 'resource-id', 'Values': [instance_id]}
                 ]
-            )['Tags']
-
-            tag_mapping = {}
+            ):
+                existing_tags.extend(page['Tags'])
             
+            tag_mapping = {}
             for tag in existing_tags:
-                logger.info(f"Tag: {tag['Key']} = {tag['Value']}")
                 tag_mapping[tag['Key'].lower()] = tag['Value']
 
             logger.info(f"Tag Mapping: {tag_mapping}")
@@ -52,7 +52,7 @@ class Ec2Utils:
             # returning following the Appsync Schema for ServerConfig
             return {
                 'id': instance_id,
-                'alarmType': tag_mapping.get('alarmmetric', ''),
+                'alarmType': tag_mapping.get('alarmtype', ''),
                 'alarmThreshold': tag_mapping.get('alarmthreshold', ''),
                 'alarmEvaluationPeriod': tag_mapping.get('alarmevaluationperiod', ''),
                 'runCommand': tag_mapping.get('runcommand', ''),
@@ -64,7 +64,7 @@ class Ec2Utils:
             logger.error(f"Error getting tags: {e}")
             return None  # or handle this error as appropriate
         
-    def set_instance_attributes(self,input):
+    def set_instance_attributes_to_tags(self,input):
         instance_id = input.get('id')
 
         logger.info("Setting instance attributes for " + instance_id)
@@ -256,6 +256,7 @@ class Ec2Utils:
     def paginate_instances(self, filters, page=1, results_per_page=10):
         instances = []
         next_token = None
+        logger.info(f"paginate_instances filter: {filters}")
 
         while True:
             if next_token:
@@ -341,47 +342,4 @@ class Ec2Utils:
             InstanceId=instanceId
         )
 
-    def update_alarm(self, instanceId):
-        logger.info("updateAlarm: " + instanceId)
-        instanceInfo = self.get_instance_attributes(instanceId)
-        # Default values
-        alarmMetric = "CPUUtilization"
-        alarmThreshold = "10"
-
-        if not instanceInfo:
-            logger.warning("No Instance found, using default values for alarming")
-
-        alarmMetric = instanceInfo.get('alarmmetric','CPUUtilization')
-        alarmThreshold = instanceInfo.get('alarmthreshold','25')
-        alarmEvaluationPeriod = instanceInfo.get('alarmEvaluationPeriod', '35')
-        
-        dimensions=[]
-        statistic="Average"
-        namespace="CWAgent"
-        dimensions.append({'Name': 'InstanceId','Value': instanceId})
-        if alarmMetric == "CPUUtilization":
-            alarmMetricName = "cpu_usage_active"        
-            dimensions.append({'Name': 'cpu','Value': "cpu-total"})
-        elif alarmMetric == "Connections":
-            alarmMetricName = "UserCount"
-            statistic="Maximum"
-            namespace="MinecraftDashboard"
-        
-        self.cw_client.put_metric_alarm(
-                AlarmName=instanceId + "-" + "minecraft-server",
-                ActionsEnabled=True,
-                AlarmActions=["arn:aws:automate:" + aws_region + ":ec2:stop"],
-                InsufficientDataActions=[],
-                MetricName=alarmMetricName,
-                Namespace=namespace,
-                Statistic=statistic,
-                Dimensions=dimensions,
-                Period=60,
-                EvaluationPeriods=alarmEvaluationPeriod,
-                DatapointsToAlarm=alarmEvaluationPeriod,
-                Threshold=int(alarmThreshold),
-                TreatMissingData="missing",
-                ComparisonOperator="LessThanOrEqualToThreshold"   
-            )
-
-        logger.info("Alarm configured to " + alarmMetric + " and " + alarmThreshold)
+   

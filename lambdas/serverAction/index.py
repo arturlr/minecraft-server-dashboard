@@ -10,7 +10,7 @@ import utilHelper
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-sfn = boto3.client('stepfunctions')
+ec2_client = boto3.client('ec2')
 
 appValue = os.getenv('TAG_APP_VALUE')
 ec2_instance_profile_name = os.getenv('EC2_INSTANCE_PROFILE_NAME')
@@ -174,7 +174,7 @@ def action_process(action, instance_id, arguments=None):
         "restartserver": lambda: handle_server_action("restart", instance_id), 
         "stopserver": lambda: handle_server_action("stop", instance_id),
         "fixserverrole": lambda: handle_fix_role(instance_id),
-        "getserverconfig": lambda: utl.get_instance_attributes(instance_id),
+        "getserverconfig": lambda: handle_get_server_config(instance_id),
         "putserverconfig": lambda: handle_config_update(instance_id, arguments),
         "updateserverconfig": lambda: handle_config_update(instance_id, arguments)
     }
@@ -186,14 +186,56 @@ def action_process(action, instance_id, arguments=None):
 
     return handler()
 
-def handle_server_action(action_type, instance_id):
-    """Helper function to handle start/stop/restart actions"""
-    sfn_rsp = sfn.start_execution(
-        stateMachineArn=sftArn,
-        input='{\"instanceId\" : \"' + instance_id + '\", \"action\" : \"' + action_type + '\"}'
-    )
-    return utl.response(200, f"{action_type.capitalize()} command submitted")
+def handle_get_server_config(instance_id):
+    """Helper function to handle get server config action"""
+    
+    instance_tags = ec2_utils.get_instance_attributes_from_tags(instance_id)
 
+    instance_tags['groupMembers'] = auth.list_users_for_group(instance_id)
+
+    # Return the tag dictionary
+    return instance_tags
+
+def handle_server_action(action, instance_id):
+
+    try:
+        instance = ec2_utils.list_server_by_id(instance_id)
+        if not instance.get('Instances'):
+            raise ValueError(f"Instance {instance_id} not found")
+            
+        instance_info = instance['Instances'][0]         
+        state = instance_info["State"]["Name"]
+
+        # Handle start action
+        if action == "start":
+            if state == "stopped":
+                ec2_client.start_instances(InstanceIds=[instance_id])
+                logger.info(f'Starting instance {instance_id}')
+            else:
+                logger.warning(f'Start instance {instance_id} not possible - current state: {state}')
+
+        # Handle stop action        
+        elif action == "stop":
+            if state == "running":
+                ec2_client.stop_instances(InstanceIds=[instance_id])
+                logger.info(f'Stopping instance {instance_id}')
+            else:
+                logger.warning(f'Stop instance {instance_id} not possible - current state: {state}')
+
+        # Handle restart action
+        elif action == "restart":
+            if state == "running":
+                ec2_client.reboot_instances(InstanceIds=[instance_id])
+                logger.info(f'Restarting instance {instance_id}')
+            else:
+                logger.warning(f'Restart instance {instance_id} not possible - current state: {state}')                    
+
+        return utl.response(200, f"{action.capitalize()} command submitted")
+    
+    except Exception as e:
+        logger.error(f"Error performing {action} action on instance {instance_id}: {str(e)}")
+        return utl.response(500, {"error": f"Failed to {action} instance: {str(e)}"})
+    
 def handle_fix_role(instance_id):
     """Helper function to handle IAM role fixes"""
     iam_profile = IamProfile(instance_id)
@@ -252,33 +294,29 @@ def handler(event, context):
         logger.error("Invalid Token")
         return "Invalid Token"
 
-    #try:
+    if not event.get("arguments"):
+        logger.error("No arguments found in the event")
+        return {"error": "No arguments found in the event"}
+
+    # Extract instance_id from arguments
+    instance_id = (event["arguments"].get("instanceId") or 
+                  event["arguments"].get("id") or
+                  event["arguments"].get("input", {}).get("id"))
+
+    if not instance_id:
+        logger.error("Instance id is not present in the event") 
+        return {"error": "Instance id is not present in the event"}
+
+    # Extract input arguments if present
     input = None
-    if "arguments" in event:
-        if "instanceId" in event["arguments"]:
-            instance_id = event["arguments"]["instanceId"]
-            # Use instance_id
-        elif "input" in event["arguments"] and "id" in event["arguments"]["input"]:
-            instance_id = event["arguments"]["input"]["id"]
-            input_arguments = event["arguments"]["input"]
-            input = {
-                'id': instance_id,
-                'alarmType': input_arguments.get('alarmType', ''),
-                'alarmThreshold': input_arguments.get('alarmThreshold',''),
-                'alarmEvaluationPeriod': input_arguments.get('alarmEvaluationPeriod', ''),
-                'runCommand': input_arguments.get('runCommand', ''),
-                'workDir': input_arguments.get('workDir', '')
-            }
-            # Use input_id
-        else:
-            # Neither instanceId nor input.id is present
-            return {
-                "error": "Instance id is not present in the event"
-            }
-    else:
-        # No arguments in the event
-        return {
-            "error": "No arguments found in the event"
+    if input_args := event["arguments"].get("input"):
+        input = {
+            'id': instance_id,
+            'alarmType': input_args.get('alarmType', ''),
+            'alarmThreshold': input_args.get('alarmThreshold', ''),
+            'alarmEvaluationPeriod': input_args.get('alarmEvaluationPeriod', ''),
+            'runCommand': input_args.get('runCommand', ''),
+            'workDir': input_args.get('workDir', '')
         }
     
     logger.info(f"Received instanceId: {instance_id}")
