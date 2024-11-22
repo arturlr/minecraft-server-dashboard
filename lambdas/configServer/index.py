@@ -199,7 +199,7 @@ def handler(event, context):
         logger.warning("Instance not found")
         return False
     
-    instance_info = server_info['Instances']
+    instance_info = server_info['Instances'][0]
 
     tags = {tag['Key']: tag['Value'] for tag in instance_info["Tags"]}
     bootstraped = tags.get("Boostraped", False)

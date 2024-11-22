@@ -247,7 +247,6 @@ def disable_scheduled_rule():
     logger.info("disable_scheduled_rule")
     # Check for instances running
     instances_running = ec2_utils.list_servers_by_state("running")
-    logger.info(instances_running)
     
     if instances_running["TotalInstances"] == 0:  
         logger.error("No Instances running. Disabling Scheduled Event")
