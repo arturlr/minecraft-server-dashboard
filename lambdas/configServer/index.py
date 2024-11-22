@@ -14,8 +14,7 @@ import utilHelper
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-session = botocore.session.get_session()
-aws_region = session.region_name
+aws_region = os.getenv('AWS_REGION_NAME', 'us-east-1')  # Provides a default fallback
 sts = boto3.client('sts')
 aws_account_id = sts.get_caller_identity()['Account']
 
@@ -193,10 +192,14 @@ def handler(event, context):
     instance_id = event["instanceId"]
     logger.info("Configuring Server: " + instance_id)
     server_info = ec2_utils.list_server_by_id(instance_id)
-    instance_info = server_info['Instances'][0]
-    if instance_info["TotalInstances"] == 0:
+    
+    logger.info(server_info)
+
+    if server_info["TotalInstances"] == 0:
         logger.warning("Instance not found")
         return False
+    
+    instance_info = server_info['Instances']
 
     tags = {tag['Key']: tag['Value'] for tag in instance_info["Tags"]}
     bootstraped = tags.get("Boostraped", False)

@@ -27,9 +27,9 @@ ENCODING = 'utf-8'
 appValue = os.getenv('TAG_APP_VALUE')
 appName = os.getenv('APP_NAME') 
 envName = os.getenv('ENVIRONMENT_NAME')
-endpoint = os.environ.get('APPSYNC_URL', None) 
-cognito_pool_id = os.environ.get('COGNITO_USER_POOL_ID', None)
-config_server_lambda = os.getenv('CONFIG_SERVER_LAMBDA')
+endpoint = os.getenv('APPSYNC_URL', None) 
+cognito_pool_id = os.getenv('COGNITO_USER_POOL_ID', None)
+config_server_lambda = os.getenv('CONFIG_SERVER_LAMBDA_NAME',None)
 
 utl = utilHelper.Utils()
 ec2_utils = ec2Helper.Ec2Utils()
@@ -161,9 +161,11 @@ def send_to_appsync(payload):
     logger.info(response.json())
     
 def schedule_event_response():
-
+    logger.info("schedule_event_response")
     # Check for instances running to update their stats. It can only be a Schedule Event
     instances_running = ec2_utils.list_servers_by_state("running")    
+
+    logger.info(instances_running)
 
     if instances_running["TotalInstances"] == 0:  
         logger.error("No Instances Found for updating")
@@ -235,14 +237,17 @@ def get_metrics_data(instance_id, namespace, metric_name, unit, stat_type, start
         return "[]"
 
 def enable_scheduled_rule():    
+    logger.info("enable_scheduled_rule")
     evtRule = eb_client.describe_rule(Name=scheduled_event_bridge_rule)
     if evtRule["State"] == "DISABLED":                    
         eb_client.enable_rule(Name=scheduled_event_bridge_rule)
         logger.info("Enabled Evt Bridge Rule")
 
 def disable_scheduled_rule():
+    logger.info("disable_scheduled_rule")
     # Check for instances running
     instances_running = ec2_utils.list_servers_by_state("running")
+    logger.info(instances_running)
     
     if instances_running["TotalInstances"] == 0:  
         logger.error("No Instances running. Disabling Scheduled Event")
@@ -298,7 +303,7 @@ def config_server(instance_id):
     }
 
     lambda_client.invoke(
-        FunctionName='my-function-name',
+        FunctionName=config_server_lambda,
         InvocationType='Event',
         Payload=json.dumps(payload)
     )  

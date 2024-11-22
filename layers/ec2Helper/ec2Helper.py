@@ -271,7 +271,11 @@ class Ec2Utils:
                 break
 
         if not instances:
-            return []
+            logger.info("No instances found")
+            return {
+                "Instances": [],
+                "TotalInstances": 0
+            }
 
         # Get the total number of instances
         total_instances = len(instances)

@@ -804,6 +804,7 @@ Resources:
         Variables:
           APP_NAME: !Ref ProjectName
           ENVIRONMENT_NAME: !Ref EnvironmentName
+          AWS_REGION_NAME: !Sub "${AWS::Region}"
           TAG_APP_VALUE: !Ref AppValue
           APPSYNC_URL: !GetAtt GraphQLAPI.GraphQLUrl
           COGNITO_USER_POOL_ID: !Ref CognitoUserPool
@@ -863,6 +864,7 @@ Resources:
         Variables:
           APP_NAME: !Ref ProjectName
           TAG_APP_VALUE: !Ref AppValue
+          AWS_REGION_NAME: !Sub "${AWS::Region}"
           APPSYNC_URL: !GetAtt GraphQLAPI.GraphQLUrl
           #INSTANCES_TABLE_NAME: !Ref InstancesTable
           EC2_INSTANCE_PROFILE_NAME: !Ref IAMEC2InstanceProfile
@@ -928,45 +930,12 @@ Resources:
           # StepFunctionsArn: !Ref StateMachine
           APP_NAME: !Ref ProjectName
           TAG_APP_VALUE: !Ref AppValue
+          AWS_REGION_NAME: !Sub "${AWS::Region}"
           APPSYNC_URL: !GetAtt GraphQLAPI.GraphQLUrl
           EC2_INSTANCE_PROFILE_NAME: !Ref IAMEC2InstanceProfile
           EC2_INSTANCE_PROFILE_ARN: !GetAtt IAMEC2InstanceProfile.Arn
-          CONFIG_SERVER_LAMBDA_NAME: !Ref ConfigServer
+          # CONFIG_SERVER_LAMBDA_NAME: !Ref ConfigServer
           COGNITO_USER_POOL_ID: !Ref CognitoUserPool
-
-  # ChangeServerState:
-  #   Type: AWS::Serverless::Function
-  #   Properties:
-  #     FunctionName: !Sub "${ProjectName}-${EnvironmentName}-changeServerState"
-  #     CodeUri: ./lambdas/changeServerState/
-  #     Layers:
-  #       - !Ref AuthLayer
-  #       - !Ref UtilLayer
-  #       - !Ref Ec2Layer 
-  #     Policies:
-  #       - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
-  #       - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess
-  #       - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
-  #       - arn:aws:iam::aws:policy/AmazonCognitoReadOnly
-  #       - SSMParameterReadPolicy:
-  #           ParameterName: !Sub "${ProjectName}*"
-  #       # - DynamoDBCrudPolicy:
-  #       #     TableName: !Ref InstancesTable
-  #       - Version: "2012-10-17" # Policy Document
-  #         Statement:
-  #           - Effect: Allow
-  #             Action:
-  #               - ec2:StartInstances
-  #               - ec2:StopInstances
-  #               - ec2:RebootInstances
-  #             Resource: "*"
-  #     Environment:
-  #       Variables:
-  #         APP_NAME: !Ref ProjectName
-  #         TAG_APP_VALUE: !Ref AppValue
-  #         APPSYNC_URL: !GetAtt GraphQLAPI.GraphQLUrl
-  #         COGNITO_USER_POOL_ID: !Ref CognitoUserPool
-  #         #INSTANCES_TABLE_NAME: !Ref InstancesTable
 
   ConfigServer:
     Type: AWS::Serverless::Function
@@ -984,8 +953,6 @@ Resources:
         - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
         - SSMParameterReadPolicy:
             ParameterName: !Sub "${ProjectName}*"
-        # - LambdaInvokePolicy:
-        #     FunctionName: !Ref EventResponse
         # - DynamoDBCrudPolicy:
         #     TableName: !Ref InstancesTable
         - Version: "2012-10-17" # Policy Document
@@ -1012,65 +979,9 @@ Resources:
           APP_NAME: !Ref ProjectName
           TAG_APP_VALUE: !Ref AppValue
           APPSYNC_URL: !GetAtt GraphQLAPI.GraphQLUrl
-          # EVENT_RESPONSE_LAMBDA: !Ref EventResponse
           SSM_DOC_NAME: !Ref MineDashSSMDoc
-          #INSTANCES_TABLE_NAME: !Ref InstancesTable
-
-  # StateMachineLogGroup:
-  #   Type: AWS::Logs::LogGroup
-  #   Properties:
-  #     LogGroupName: /aws/vendedlogs/states/minecraft-dashboard-logs
-  #     RetentionInDays: 7
-
-  # StateMachine:
-  #   Type: AWS::Serverless::StateMachine
-  #   Properties:
-  #     DefinitionUri: ./step-functions.json
-  #     DefinitionSubstitutions:
-  #       changeServerState: !GetAtt ChangeServerState.Arn
-  #       configServer: !GetAtt ConfigServer.Arn
-  #     Role: !GetAtt StatesExecutionRole.Arn
-  #     Logging:
-  #       Level: ALL
-  #       IncludeExecutionData: true
-  #       Destinations:
-  #         - CloudWatchLogsLogGroup:
-  #             LogGroupArn: !GetAtt StateMachineLogGroup.Arn         
-
-  # StatesExecutionRole:
-  #   Type: "AWS::IAM::Role"
-  #   Properties:
-  #     AssumeRolePolicyDocument:
-  #       Version: "2012-10-17"
-  #       Statement:
-  #         - Effect: "Allow"
-  #           Principal:
-  #             Service:
-  #               - !Sub states.${AWS::Region}.amazonaws.com
-  #           Action: "sts:AssumeRole"
-  #     Path: "/"
-  #     ManagedPolicyArns:
-  #       - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess
-  #     Policies:
-  #       - PolicyName: steprolep1
-  #         PolicyDocument:
-  #           Version: "2012-10-17"
-  #           Statement:
-  #             - Effect: Allow
-  #               Action:
-  #                 - lambda:InvokeFunction
-  #                 - ssm:SendCommand
-  #                 - ssm:List*
-  #                 - ssm:Get*
-  #                 - logs:CreateLogDelivery
-  #                 - logs:GetLogDelivery
-  #                 - logs:UpdateLogDelivery
-  #                 - logs:DeleteLogDelivery
-  #                 - logs:ListLogDeliveries
-  #                 - logs:PutResourcePolicy
-  #                 - logs:DescribeResourcePolicies
-  #                 - logs:DescribeLogGroups
-  #               Resource: "*"
+          AWS_REGION_NAME: !Sub "${AWS::Region}"
+          #INSTANCES_TABLE_NAME: !Ref InstancesTable       
 
 Outputs:
   IdentityPoolId:

@@ -31,48 +31,48 @@ Information in how to use and configure the solution at the [User Guide](docs/us
 5. CloudTrail logs EC2 instance state changes, which are used to calculate running time.
 6. The dashboard updates in real-time using AppSync subscriptions for server metrics and state changes.
 
-## Data Flow Diagram
-
-```mermaid
-graph TD
-    A[User] -->|Interacts with| B[Vue.js Frontend]
-    B -->|Uses| C[AWS Amplify]
-    C -->|Authenticates and makes API calls| D[AWS AppSync]
-    D -->|Interfaces with| E[DynamoDB]
-    D -->|Triggers| F[Lambda Functions]
-    F -->|Manages| G[EC2 Instances]
-    G -->|Runs| H[Minecraft Servers]
-    I[CloudWatch] -->|Monitors| G
-    J[CloudTrail] -->|Logs state changes| G
-    D -->|Real-time updates| B
-```
-
 ## Sequence Diagram
 
-```mermaid
-sequenceDiagram
-    participant User
-    participant Frontend as Vue.js Frontend
-    participant Amplify as AWS Amplify
-    participant AppSync as AWS AppSync
-    participant Lambda as Lambda Functions
-    participant DynamoDB
-    participant EC2 as EC2 Instances
-    participant CloudWatch
-    participant CloudTrail
-
-    User->>Frontend: Interacts with dashboard
-    Frontend->>Amplify: Authenticate user
-    Amplify->>AppSync: Make API calls
-    AppSync->>DynamoDB: Query/Mutate data
-    AppSync->>Lambda: Trigger functions
-    Lambda->>EC2: Manage instances
-    EC2->>CloudWatch: Send metrics
-    EC2->>CloudTrail: Log state changes
-    CloudWatch-->>AppSync: Update metrics
-    CloudTrail-->>AppSync: Update state
-    AppSync-->>Frontend: Real-time updates
-    Frontend-->>User: Display updated information
+```
+User        Frontend     Cognito     AppSync     Lambda     DynamoDB    EC2    CloudWatch
+ |             |            |           |           |           |        |          |
+ |  Login      |            |           |           |           |        |          |
+ |------------>|            |           |           |           |        |          |
+ |             |  Auth      |           |           |           |        |          |
+ |             |----------->|           |           |           |        |          |
+ |             |  JWT Token |           |           |           |        |          |
+ |             |<-----------|           |           |           |        |          |
+ |             |                        |           |           |        |          |
+ |  List Servers                        |           |           |        |          |
+ |------------>|  GraphQL Query         |           |           |        |          |
+ |             |----------------------->|           |           |        |          |
+ |             |                        |  Invoke   |           |        |          |
+ |             |                        |---------->|           |        |          |
+ |             |                        |           |  Query    |        |          |
+ |             |                        |           |---------->|        |          |
+ |             |                        |           |  Results  |        |          |
+ |             |                        |           |<----------|        |          |
+ |             |                        |  Response |           |        |          |
+ |             |                        |<----------|           |        |          |
+ |             |  Server List           |           |           |        |          |
+ |<------------|                        |           |           |        |          |
+ |             |                        |           |           |        |          |
+ |  Start Server                        |           |           |        |          |
+ |------------>|  GraphQL Mutation      |           |           |        |          |
+ |             |----------------------->|           |           |        |          |
+ |             |                        |  Invoke   |           |        |          |
+ |             |                        |---------->|           |        |          |
+ |             |                        |           |  Start    |        |          |
+ |             |                        |           |------------------>|          |
+ |             |                        |           |           |        |  Monitor |
+ |             |                        |           |           |        |--------->|
+ |             |                        |           |           |        |          |
+ |  Subscribe to Updates                |           |           |        |          |
+ |------------>|  GraphQL Subscription  |           |           |        |          |
+ |             |----------------------->|           |           |        |          |
+ |             |                        |           |           |        |          |
+ |             |  Real-time Updates     |           |           |        |          |
+ |<------------|                        |           |           |        |          |
 ```
 
 ## Repository Structure
