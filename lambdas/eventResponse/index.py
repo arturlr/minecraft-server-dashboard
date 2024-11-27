@@ -318,7 +318,7 @@ def handler(event, context):
                 logger.error("Scheduled Event Name not registered")
                 return "No Scheduled Event"         
             
-            if event['detail']['state'] == "running" or event['detail']['state'] == "pending":
+            if event['detail']['state'] == "running":
                 enable_scheduled_rule()
                 config_server(event['detail']['instance-id'])
             elif event['detail']['state'] == "stopped":

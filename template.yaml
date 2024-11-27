@@ -643,7 +643,7 @@ Resources:
                   if [ ! -f /usr/local/port_count.sh ]; then
                     # Get instance metadata
                     INSTANCE_ID=$(ec2metadata --instance-id)
-                    REGION=$(curl -s http://169.254.169.254/latest/meta-data/local-hostname | cut -d . -f 2)
+                    REGION=${AWS::Region}
                     # Count established connections on port 25565
                     PORT_COUNT=$(netstat -an | grep ESTABLISHED | grep ':25565' | wc -l)
                     # Create the script file
@@ -665,7 +665,7 @@ Resources:
                 - echo "Get NIC"
                 - NIC=$(ip route get 1.1.1.1 | awk '{print $5; exit}')
                 - INSTANCE_ID=$(ec2metadata --instance-id)                
-                - PARAM_NAME="{{ SSMParameterPrefix }}/$INSTANCE_ID/nic"
+                - PARAM_NAME="/{{ SSMParameterPrefix }}/$INSTANCE_ID/nic"
                 - !Sub |
                   if aws ssm get-parameter --name "$PARAM_NAME" 2>/dev/null; then
                     echo "Parameter already exists"
@@ -896,6 +896,9 @@ Resources:
           Statement:
             - Effect: Allow
               Action:
+                - ec2:StartInstances
+                - ec2:StopInstances
+                - ec2:RebootInstances
                 - ec2:AssociateIamInstanceProfile
                 - ec2:DisassociateIamInstanceProfile
                 - ec2:DeleteTags
@@ -929,6 +932,7 @@ Resources:
         Variables:
           # StepFunctionsArn: !Ref StateMachine
           APP_NAME: !Ref ProjectName
+          ENVIRONMENT_NAME: !Ref EnvironmentName
           TAG_APP_VALUE: !Ref AppValue
           AWS_REGION_NAME: !Sub "${AWS::Region}"
           APPSYNC_URL: !GetAtt GraphQLAPI.GraphQLUrl
@@ -967,6 +971,7 @@ Resources:
                 - ssm:GetCommandInvocation
                 - ec2:AssociateIamInstanceProfile
                 - ec2:DisassociateIamInstanceProfile
+                - cloudwatch:PutMetricAlarm
               Resource: "*"
         - Version: "2012-10-17" # Policy Document
           Statement:
@@ -977,6 +982,7 @@ Resources:
       Environment:
         Variables:
           APP_NAME: !Ref ProjectName
+          ENVIRONMENT_NAME: !Ref EnvironmentName
           TAG_APP_VALUE: !Ref AppValue
           APPSYNC_URL: !GetAtt GraphQLAPI.GraphQLUrl
           SSM_DOC_NAME: !Ref MineDashSSMDoc

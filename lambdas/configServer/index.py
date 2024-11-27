@@ -26,38 +26,14 @@ ec2 = boto3.client('ec2')
 cw_client = boto3.client('cloudwatch')
 lambda_client = boto3.client('lambda')
 
-appValue = os.getenv('TAG_APP_VALUE')
-appName = os.getenv('APP_NAME') 
+app_name = os.getenv('APP_NAME') 
+environment_name = os.getenv('ENVIRONMENT_NAME')
 event_response_lambda = os.getenv('EVENT_RESPONSE_LAMBDA')
 ssm_doc_name = os.getenv('SSM_DOC_NAME')
 
-# def event_response_payload(instance_id):
-#     logger.info("------- event_response_payload : " + instance_id)
-
-#     # create a uuid
-#     event_id = str(uuid.uuid4())
-
-#     payload = {
-#         "id": event_id,
-#         "detail-type": "EC2 Instance State-change Notification", 
-#         "source": "aws.ec2",
-#         "account": aws_account_id,
-#         "time": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-#         "region": aws_region,
-#         "resources": [
-#             "arn:aws:ec2:" + aws_region + ":" + aws_account_id + ":instance/" + instance_id
-#         ],
-#         "detail": {
-#             "instance-id": instance_id,
-#             "state": "fake"
-#         }
-#     }
-
-#     return payload
-
 def minecraft_init(instance_id):
     logger.info(f"------- minecraft_init: {instance_id}")
-    instance_attributes = ec2_utils.get_instance_attributes(instance_id)
+    instance_attributes = ec2_utils.get_instance_attributes_from_tags(instance_id)
 
     if not instance_attributes:
         logger.warning("Instance data does not exist")
@@ -102,9 +78,26 @@ def cw_agent_status_check(instance_id):
     else:
         return { "code": 500, "msg": "Failed" }
         
-def ssm_exec_commands(instance_id: str, doc_name: str, params: Dict[str, Any] = None, max_retries: int = 10, sleep_time: int = 5) -> Optional[Dict[str, Any]]:
+def wait_for_instance_ready(instance_id):
+    try:
+        logger.info("------- wait_for_instance_ready : " + instance_id)
+        waiter = ec2.get_waiter('instance_running')
+        waiter.wait(InstanceIds=[instance_id])
+        
+        # Then wait for the instance status checks to pass
+        waiter = ec2.get_waiter('instance_status_ok')
+        waiter.wait(InstanceIds=[instance_id])
+
+        return True
+        
+    except Exception as e:
+        print(f"Error waiting for instance: {str(e)}")
+        return False
+ 
+def ssm_exec_commands(instance_id: str, doc_name: str, params: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """
     Execute an SSM command on an EC2 instance and wait for its completion.
+    Includes retry logic for InvalidInstanceId exceptions.
 
     Args:
         instance_id (str): The ID of the EC2 instance.
@@ -116,45 +109,89 @@ def ssm_exec_commands(instance_id: str, doc_name: str, params: Dict[str, Any] = 
     Returns:
         Optional[Dict[str, Any]]: The command invocation details if successful, None otherwise.
     """
-    logger.info(f"Executing SSM command {doc_name} on instance {instance_id}")
+    logger.info(f"------- ssm_exec_commands : {doc_name} - {instance_id}")
+
+    is_instance_ready = wait_for_instance_ready(instance_id)
+
+    if not is_instance_ready:
+        logger.error(f"Instance {instance_id} is not in a ready state.") 
+        return False
+
     try:
-        instance_ids = [instance_id]
         response = ssm.send_command(
-            InstanceIds=instance_ids,
+            InstanceIds=[instance_id],
             DocumentName=doc_name,
             Parameters=params
         )
-        command_id = response['Command']['CommandId']
-    
-        waiter = ssm.get_waiter('command_executed')
-        waiter.wait(
-            CommandId=command_id,
-            InstanceId=instance_id,
-            WaiterConfig={
-                'MaxAttempts': max_retries,
-                'DelaySeconds': sleep_time
-            }
-        )
 
-        # Get the command output
-        output = ssm.get_command_invocation(
-            CommandId=command_id,
-            InstanceId=instance_id
-        )
+    except botocore.exceptions.ClientError as error:
+        error_code = error.response['Error']['Code']
+        command_id = response.get('Command', {}).get('CommandId', None) #response['Command']['CommandId']
 
-        # logger.info(output)
-        return output
-    
-    except botocore.exceptions.ClientError as e:
-        logger.error(f"Unexpected error: {e}")
-        raise botocore.exceptions.ClientError(f"Unexpected error: {e}") from e
-    
-    except botocore.exceptions.WaiterError as e:
-        logger.error(f"Command failed: {e.last_response['Status']}")
-        return {"Status": e.last_response['Status']}
-    
+        if error_code == 'InvalidInstanceId':
+            logger.error(f"Instance {instance_id} not in valid state.")
+        else:
+            # If it's a different error, raise it
+            logger.error(f"Unexpected error: {error}")
+            raise
+        
+
+    command_id = response.get('Command', {}).get('CommandId', None) #response['Command']['CommandId']       
+    # Wait for completion
+    command_result = wait_for_command_execution(command_id, instance_id)
+    if command_result:
+        return command_result
+
+    return False
+
+def wait_for_command_execution(command_id, instance_id, max_retries: int = 5, wait_time: int = 10):
+    logger.info(f"------- wait_for_command_execution : {command_id}")
+    if command_id is None:
+        logger.error("Command ID is None. Unable to wait for command execution.")   
+        return False
+    try:
+        retries = 0
+        
+        while True:
+            try:
+                result = ssm.get_command_invocation(
+                    CommandId=command_id,
+                    InstanceId=instance_id
+                )
+                
+                status = result['Status']
+                
+                if status == 'Success':
+                    return True
+                elif status in ['Failed', 'Cancelled', 'TimedOut']:
+                    print(f"Command failed with status: {status}")
+                    print(f"Error message: {result.get('StandardErrorContent', 'No error message')}")
+                    return False
+                
+                if retries >= max_retries:
+                    print(f"Max retries ({max_retries}) reached while waiting for command completion")
+                    return False
+                    
+                time.sleep(wait_time)
+                retries += 1
+                
+            except ssm.exceptions.InvocationDoesNotExist:
+                if retries >= max_retries:
+                    print("Max retries reached waiting for command invocation")
+                    return False
+                time.sleep(wait_time)
+                retries += 1
+                continue
+
+            except Exception as e:
+                print(f"Unexpected error while waiting for command: {str(e)}")
+
+    except Exception as e:
+        print(f"Error while waiting for command: {str(e)}")
+        return False
+
 def update_alarm(instanceId,alarmMetric,alarmThreshold,alarmEvaluationPeriod):
-    logger.info("updateAlarm: " + instanceId)
+    logger.info("------- update_alarm : " + instanceId)
 
     dimensions=[]
     statistic="Average"
@@ -178,8 +215,8 @@ def update_alarm(instanceId,alarmMetric,alarmThreshold,alarmEvaluationPeriod):
             Statistic=statistic,
             Dimensions=dimensions,
             Period=60,
-            EvaluationPeriods=alarmEvaluationPeriod,
-            DatapointsToAlarm=alarmEvaluationPeriod,
+            EvaluationPeriods=int(alarmEvaluationPeriod),
+            DatapointsToAlarm=int(alarmEvaluationPeriod),
             Threshold=int(alarmThreshold),
             TreatMissingData="missing",
             ComparisonOperator="LessThanOrEqualToThreshold"   
@@ -193,8 +230,6 @@ def handler(event, context):
     logger.info("Configuring Server: " + instance_id)
     server_info = ec2_utils.list_server_by_id(instance_id)
     
-    logger.info(server_info)
-
     if server_info["TotalInstances"] == 0:
         logger.warning("Instance not found")
         return False
@@ -204,7 +239,13 @@ def handler(event, context):
     tags = {tag['Key']: tag['Value'] for tag in instance_info["Tags"]}
     bootstraped = tags.get("Boostraped", False)
     if not bootstraped:
-        ssm_exec_commands(instance_id,ssm_doc_name)
+        ssm_param_prefix = app_name + "-" + environment_name 
+        parameters = {
+            'SSMParameterPrefix': [ssm_param_prefix]   
+        }
+        ssm_exec_commands(instance_id,ssm_doc_name,parameters)
+    else:
+        logger.info("Instance already boostraped")
         
     # Execute minecraft initialization
     minecraft_init(instance_id)
