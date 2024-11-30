@@ -1,4 +1,3 @@
 boto3
-requests
 python-jose[cryptography]
 jsonpath_ng

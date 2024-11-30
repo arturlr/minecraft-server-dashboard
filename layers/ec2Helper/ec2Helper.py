@@ -19,7 +19,6 @@ class Ec2Utils:
         self.ssm = boto3.client('ssm')        
         self.ct_client = boto3.client('cloudtrail')        
         self.appValue = os.getenv('TAG_APP_VALUE')
-        self.ec2InstanceProfileArn = os.getenv('EC2_INSTANCE_PROFILE_ARN')
 
     def get_instance_attributes_from_tags(self,instance_id):
         """
@@ -31,9 +30,8 @@ class Ec2Utils:
         Returns:
             dict: A dictionary containing the instance attributes.
         """
-        logger.info("Getting instance attributes for " + instance_id)
         try:        
-            # Get existing tags
+            logger.info("------- get_instance_attributes_from_tags " + instance_id)
             paginator = self.ec2_client.get_paginator('describe_tags')
             existing_tags = []
             for page in paginator.paginate(
@@ -47,7 +45,7 @@ class Ec2Utils:
             for tag in existing_tags:
                 tag_mapping[tag['Key'].lower()] = tag['Value']
 
-            logger.info(f"Tag Mapping: {tag_mapping}")
+            # logger.info(f"Tag Mapping: {tag_mapping}")
 
             # returning following the Appsync Schema for ServerConfig
             return {
@@ -65,7 +63,11 @@ class Ec2Utils:
             return None  # or handle this error as appropriate
         
     def set_instance_attributes_to_tags(self,input):
-        instance_id = input.get('id')
+        logger.info("------- set_instance_attributes_to_tags")
+
+        instance_id = input.get('id', None)
+        if not instance_id:
+            raise ValueError("Instance ID is required")
 
         logger.info("Setting instance attributes for " + instance_id)
 
@@ -74,7 +76,6 @@ class Ec2Utils:
         alarmEvaluationPeriod = input.get('alarmEvaluationPeriod', '35')
         run_command = input.get('runCommand', '')
         work_dir = input.get('workDir', '')
-        group_members = input.get('groupMembers', '')
 
         # Getting current EC2 Tags
         ec2_attrs = self.get_instance_attributes(instance_id)
@@ -119,6 +120,8 @@ class Ec2Utils:
             logger.error(f"Error setting tags: {e}")
         
     def get_total_hours_running_per_month(self, instanceId):
+        logger.info(f"------- get_total_hours_running_per_month {instanceId}")
+
         total_minutes = 0
         event_data = []
 
@@ -167,6 +170,8 @@ class Ec2Utils:
         return total_minutes
 
     def extract_state_event_time(self, evt, previousState, instanceId):
+        logger.info(f"------- extract_state_event_time {instanceId}")
+
         ct_event = evt.get('CloudTrailEvent')
         if ct_event:
             ct_event = json.loads(ct_event)
@@ -292,6 +297,7 @@ class Ec2Utils:
         }
 
     def describe_iam_profile(self, instance_id, status, association_id=None):
+        logger.info(f"------- describe_iam_profile: {instance_id} - {status}")
 
         if association_id:
             response = self.ec2_client.describe_iam_instance_profile_associations(
@@ -319,6 +325,7 @@ class Ec2Utils:
         return matching_association
                  
     def describe_instance_status(self, instance_id):
+        logger.info(f"------- describe_instance_status: {instance_id}") 
         iamStatus = 'Fail'
         initStatus = 'Fail'
 
@@ -341,6 +348,7 @@ class Ec2Utils:
         return { 'instanceId': instance_id, 'initStatus': initStatus, 'iamStatus': iamStatus }
 
     def describe_instance_attributes(self, instanceId):
+        logger.info(f"------- describe_instance_attributes: {instanceId}")
         response = self.ec2_client.describe_instance_attribute(
             Attribute='userData',
             InstanceId=instanceId

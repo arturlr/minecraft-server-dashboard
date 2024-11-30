@@ -1,11 +1,9 @@
 import boto3
 import botocore
-from typing import Optional, Dict, Any
 import logging
 import os
 import json
 import time
-import uuid
 from datetime import datetime, timezone
 from jsonpath_ng.ext import parse
 import ec2Helper
@@ -57,12 +55,10 @@ def minecraft_init(instance_id):
 def cw_agent_status_check(instance_id):
     logger.info("------- cw_agent_status_check : " + instance_id)
     ssm_agent_status = ssm_exec_commands(instance_id,"AmazonCloudWatch-ManageAgent",{"action": ["status"],"mode": ["ec2"]})
-    logger.info(ssm_agent_status)
     agent_details=None
 
     # Checking Agent Status if Success. Failed messages occurs when the CloudWatch Agent is not installed. 
-    if ssm_agent_status["Status"] == "Success":
-        
+    if ssm_agent_status:
         jpexpr = parse("$.pluginsDetails[?(@.Name[:] == 'ControlCloudWatchAgentLinux')].Output")
         for i in jpexpr.find(ssm_agent_status):
             agent_details = i.value
@@ -72,11 +68,11 @@ def cw_agent_status_check(instance_id):
             if agent_details_json["status"] == "running": 
                 logger.info("Agent is already running. Version :" + agent_details_json["version"])
                 logger.info("Agent Status: " + agent_details_json["status"] + " - configuration Status: " + agent_details_json["configstatus"])
-                # call cw_agent_config
+                return True
         else:
-            return { "code": 500, "msg": "Detailed information not available"}
+            return True
     else:
-        return { "code": 500, "msg": "Failed" }
+        return False
         
 def wait_for_instance_ready(instance_id):
     try:
@@ -130,10 +126,11 @@ def ssm_exec_commands(instance_id: str, doc_name: str, params: Dict[str, Any]) -
 
         if error_code == 'InvalidInstanceId':
             logger.error(f"Instance {instance_id} not in valid state.")
+            return False
         else:
             # If it's a different error, raise it
             logger.error(f"Unexpected error: {error}")
-            raise
+            return False
         
 
     command_id = response.get('Command', {}).get('CommandId', None) #response['Command']['CommandId']       
@@ -239,7 +236,7 @@ def handler(event, context):
     tags = {tag['Key']: tag['Value'] for tag in instance_info["Tags"]}
     bootstraped = tags.get("Boostraped", False)
     if not bootstraped:
-        ssm_param_prefix = app_name + "-" + environment_name 
+        ssm_param_prefix = "/" + app_name + "/" + environment_name 
         parameters = {
             'SSMParameterPrefix': [ssm_param_prefix]   
         }
@@ -257,24 +254,8 @@ def handler(event, context):
 
     update_alarm(instance_id,alarmMetric,alarmThreshold,alarmEvaluationPeriod)
 
-    # # invoke event_response_lambda to force iamstatus update
-    # payload = event_response_payload(instance_id)
-    # response = lambda_client.invoke(
-    #     FunctionName=event_response_lambda,
-    #     InvocationType='RequestResponse', # 'Event' for asynchronous invocation
-    #     Payload=bytes(json.dumps(payload), encoding='utf-8')
-    # )
-
-    # # Get the response payload
-    # payload = response.get('Payload').read()
-
-    # # Print the response
-    # print(payload)
-
-    ## CloudWatch Agent Steps 
     cwAgentStatus = cw_agent_status_check(instance_id)
-    if cwAgentStatus['code'] != 200:
-        logger.warning("CloudWatch Agent is not running")
-    else:
-        return cwAgentStatus
+    if not cwAgentStatus:
+        logger.error("CloudWatch Agent is not running")
+ 
 

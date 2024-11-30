@@ -3,8 +3,6 @@ import logging
 import os
 import json
 from time import sleep
-from uuid import uuid4
-from base64 import b64encode
 from datetime import date, datetime, timezone, timedelta
 import requests
 from requests_aws4auth import AWS4Auth
@@ -55,13 +53,6 @@ session = requests.Session()
 session.auth = auth
 session.close()
 
-queryString="""
-fields @message  
-| parse @message ": * joined the game" as @userjoin
-| parse @message ": * left the game" as @userleft
-| parse @message "logged in with entity id *" as @userlogged
-| stats count(@userjoin) as userjoin, count(@userleft) as userleft, count(@userlogged) as userlogged by bin(5m) as t
-"""
 
 putServerMetric = """
 mutation PutServerMetric($input: ServerMetricInput!) {
@@ -94,62 +85,9 @@ changeServerState = """
     }
 }
 """
-    
-def get_connect_minecraft_users(instanceId,startTime):
-    try:
-        queryRsp = cw_logs.start_query(
-            logGroupName='/minecraft/serverlog/' + instanceId,
-            startTime=int(round(startTime.timestamp())),
-            endTime=int(round(datetime.now().timestamp())),
-            queryString=queryString
-        )
 
-        if 'queryId' in queryRsp:
-            timeCount = 0
-            while timeCount < 4:
-                data = cw_logs.get_query_results(
-                    queryId=queryRsp['queryId']
-                )
-                dtY = 0
-                dtX = ""
-                cdata = []
-                if data['status'] == 'Complete':
-                    if data['results']:
-                        for rec in data['results']:
-                            for dt in rec:
-                                if dt['field'] == 'bin(5m)':
-                                    dtX = dt['value']
-                                    continue
-                                elif dt['field'] == 't':
-                                    dtY = dt['value']
-                            cdata.append({'y':dtY, 'x':dtX})
-                        data_points = sorted(cdata, key=lambda k : k['x'])
-                        print(data_points)                    
-                        return data_points
-                    else:
-                        return "[]"
-                elif data['status'] == 'Scheduled' or data['status'] == 'Running':
-                    sleep(5)
-                    timeCount = timeCount + 1
-                    continue
-                elif data['status'] == 'Failed':
-                    raise Exception("Query status: Failed")                    
-                else:
-                    sleep(5)
-                    timeCount = timeCount + 1
-
-            if timeCount >= 4:
-                raise Exception("Query status: Timeout")
-            else:
-                logger.error("start_query: No Data.")
-                return "[]"
-
-
-    except Exception as e:
-        logger.error("start_query: " + str(e) + " occurred.")
-        return "[]"
-    
 def send_to_appsync(payload):
+    logger.info("------- send_to_appsync")
     headers={"Content-Type": "application/json"}
     # sending response to AppSync
     response = requests.post(
@@ -161,7 +99,7 @@ def send_to_appsync(payload):
     logger.info(response.json())
     
 def schedule_event_response():
-    logger.info("schedule_event_response")
+    logger.info("------- schedule_event_response")
     # Check for instances running to update their stats. It can only be a Schedule Event
     instances_running = ec2_utils.list_servers_by_state("running")    
 
@@ -198,7 +136,11 @@ def get_metrics_data(instance_id, namespace, metric_name, unit, stat_type, start
     if metric_name == "cpu_usage_active":
         dimensions.append({'Name': 'cpu', 'Value': "cpu-total"})
     elif metric_name == "net_bytes_sent":
-        dimensions.append({'Name': 'interface', 'Value': 'nic'})
+        nic_name = utl.retrieve_extension_value(f"/{appName}/{envName}/{instance_id}/nic")
+        if nic_name is not None:
+            dimensions.append({'Name': 'interface', 'Value': nic_name})
+        else:
+            logger.warning("No NIC parameter store found for instance: " + instance_id)
 
     try:
         response = cw_client.get_metric_statistics(
@@ -237,14 +179,14 @@ def get_metrics_data(instance_id, namespace, metric_name, unit, stat_type, start
         return "[]"
 
 def enable_scheduled_rule():    
-    logger.info("enable_scheduled_rule")
+    logger.info("------- enable_scheduled_rule")
     evtRule = eb_client.describe_rule(Name=scheduled_event_bridge_rule)
     if evtRule["State"] == "DISABLED":                    
         eb_client.enable_rule(Name=scheduled_event_bridge_rule)
         logger.info("Enabled Evt Bridge Rule")
 
 def disable_scheduled_rule():
-    logger.info("disable_scheduled_rule")
+    logger.info("------- disable_scheduled_rule")
     # Check for instances running
     instances_running = ec2_utils.list_servers_by_state("running")
     
@@ -256,6 +198,7 @@ def disable_scheduled_rule():
             logger.info("Disabled Evt Bridge Rule")
 
 def state_change_response(instance_id):
+    logger.info("------- state_change_response: " + instance_id)
 
     server_info = ec2_utils.list_server_by_id(instance_id)
     instance_info = server_info['Instances'][0]
@@ -295,7 +238,7 @@ def state_change_response(instance_id):
     return input
     
 def config_server(instance_id):
-    logger.info("Configuring Server: " + instance_id)
+    logger.info(f"------- config_server {instance_id}")
 
     payload = {
         "instanceId": instance_id

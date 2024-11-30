@@ -2,7 +2,6 @@ AWSTemplateFormatVersion: "2010-09-09"
 Transform: AWS::Serverless-2016-10-31
 Description: >
   Minecraft Server Dasboard
-
   Root stack for managing resources
 
 Globals:
@@ -29,6 +28,19 @@ Parameters:
     Type: String
     Description: Email (Gmail) that is going to be identified as the app admin
     AllowedPattern: '[^@]+@[^@]+\.[^@]+'
+
+Conditions:
+  IsARM64Architecture: !Equals [ !Ref Architecture, arm64 ]
+
+Mappings:
+  ParametersAndSecretsExtensionArn:
+  # https://docs.aws.amazon.com/systems-manager/latest/userguide/ps-integration-lambda-extensions.html
+    us-east-1:
+      x86: "arn:aws:lambda:us-east-1:177933569100:layer:AWS-Parameters-and-Secrets-Lambda-Extension:12"
+      arm64: "arn:aws:lambda:us-east-1:177933569100:layer:AWS-Parameters-and-Secrets-Lambda-Extension-Arm64:12"
+    us-west-2:
+      x86: "arn:aws:lambda:us-west-2:345057560386:layer:AWS-Parameters-and-Secrets-Lambda-Extension:12"
+      arm64: "arn:aws:lambda:us-west-2:345057560386:layer:AWS-Parameters-and-Secrets-Lambda-Extension-Arm64:12"
 
 Resources:
   Ec2MinecraftDashboardInstanceRole:
@@ -491,6 +503,7 @@ Resources:
     Properties:
       Bucket: !Ref WebAppBucket
       PolicyDocument:
+        Version: '2012-10-17'
         Statement:
           - Action: s3:GetObject
             Effect: Allow
@@ -529,15 +542,12 @@ Resources:
             - GET
             - HEAD
             - OPTIONS
-          CachedMethods:
-            - GET
-            - HEAD
-            - OPTIONS
           TargetOriginId: S3Origin
-          ForwardedValues:
-            QueryString: false
-            Cookies:
-              Forward: none
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6  # CachingOptimized policy ID
+          # ForwardedValues:
+          #   QueryString: false
+          #   Cookies:
+          #     Forward: none
 
   MineDashSSMDoc:
     Type: AWS::SSM::Document
@@ -551,14 +561,14 @@ Resources:
           SSMParameterPrefix:
             type: String
             description: 'SSM parameter prefix'
-            default: !Sub ${ProjectName}-${EnvironmentName}
+            default: !Sub /${ProjectName}/${EnvironmentName}
         mainSteps:              
           - action: aws:runShellScript
             name: installPackages
             inputs:
               runCommand:
                 - '#!/bin/bash'
-                - !Sub |
+                - |
                   # Function to detect the Linux distribution
                   detect_distro() {
                       if [ -f /etc/os-release ]; then
@@ -578,18 +588,94 @@ Resources:
                   }
                   # Function to install CloudWatch agent on Amazon Linux, RHEL, or CentOS
                   install_cloudwatch_rpm() {
-                      yum install -y amazon-cloudwatch-agent
-                      echo "CloudWatch installed"
+                      # Check if CloudWatch agent is already installed
+                      if rpm -q amazon-cloudwatch-agent &> /dev/null; then
+                          echo "CloudWatch agent is already installed"
+                          return 0
+                      fi
+
+                      # Install CloudWatch agent
+                      if yum install -y amazon-cloudwatch-agent; then
+                          # Verify installation was successful
+                          if rpm -q amazon-cloudwatch-agent &> /dev/null; then
+                              echo "CloudWatch agent installed successfully"
+                              return 0
+                          else
+                              echo "CloudWatch agent installation failed verification"
+                              return 1
+                          fi
+                      else
+                          echo "Failed to install CloudWatch agent"
+                          return 1
+                      fi
                   }
+
                   # Function to install CloudWatch agent on Ubuntu or Debian
                   install_cloudwatch_deb() {
+                      # Check if CloudWatch agent is already installed
+                      if dpkg -l | grep -q "amazon-cloudwatch-agent"; then
+                          echo "CloudWatch agent is already installed"
+                          return 0
+                      fi
+
+                      # Update package list
                       apt-get update
-                      apt-get install -y wget
-                      wget https://amazoncloudwatch-agent.s3.amazonaws.com/debian/amd64/latest/amazon-cloudwatch-agent.deb
-                      dpkg -i -E ./amazon-cloudwatch-agent.deb
-                      rm amazon-cloudwatch-agent.deb
-                      echo "CloudWatch installed"
+
+                      # Check if wget is already installed
+                      if ! command -v wget &> /dev/null; then
+                          echo "Installing wget..."
+                          apt-get install -y wget
+                      else
+                          echo "wget is already installed"
+                      fi
+
+                      # Download and install CloudWatch agent
+                      if wget https://amazoncloudwatch-agent.s3.amazonaws.com/debian/amd64/latest/amazon-cloudwatch-agent.deb; then
+                          if dpkg -i -E ./amazon-cloudwatch-agent.deb; then
+                              rm amazon-cloudwatch-agent.deb
+                              echo "CloudWatch agent installed successfully"
+                          else
+                              echo "Failed to install CloudWatch agent"
+                              rm amazon-cloudwatch-agent.deb
+                              return 1
+                          fi
+                      else
+                          echo "Failed to download CloudWatch agent"
+                          return 1
+                      fi
                   }
+
+                  install_required_packages() {
+                      local packages=("jq" "zip" "unzip" "net-tools")
+                      local packages_to_install=()
+
+                      # Check each package
+                      for package in "${packages[@]}"; do
+                          if ! dpkg -l | grep -q "^ii.*$package "; then
+                              echo "$package is not installed"
+                              packages_to_install+=("$package")
+                          else
+                              echo "$package is already installed"
+                          fi
+                      done
+
+                      # Install missing packages if any
+                      if [ ${#packages_to_install[@]} -gt 0 ]; then
+                          echo "Installing missing packages: ${packages_to_install[*]}"
+                          apt-get update
+                          if apt-get install -y "${packages_to_install[@]}"; then
+                              echo "Successfully installed missing packages"
+                              return 0
+                          else
+                              echo "Failed to install some packages"
+                              return 1
+                          fi
+                      else
+                          echo "All required packages are already installed"
+                          return 0
+                      fi
+                  }
+
                   install_awscli() {
                       if [ ! -f /usr/share/collectd/types.db ]; then
                         sudo mkdir -p /usr/share/collectd
@@ -614,7 +700,7 @@ Resources:
                               ;;
                           ubuntu*|debian*)
                               install_cloudwatch_deb
-                              apt-get -y install jq zip unzip net-tools
+                              install_required_packages
                               ;;
                           *)
                               echo "Unsupported distribution: $distro"
@@ -632,7 +718,7 @@ Resources:
             inputs:
               runCommand:
                 - |
-                  sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -s -c ssm:{{ SSMParameterPrefix }}--cloudwatch-agent-config
+                  sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -s -c ssm:{{ SSMParameterPrefix }}/cloudwatch-agent-config
                   sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -m ec2 -a status      
           - action: aws:runShellScript
             name: Cron
@@ -658,6 +744,38 @@ Resources:
                     (sudo crontab -l 2>/dev/null; echo "*/1 * * * * /usr/local/port_count.sh >/dev/null 2>&1") | crontab -         
                   fi  
                 - sudo crontab -l
+
+          - action: aws:runShellScript
+            name: MinecraftS3Backup
+            inputs:
+              runCommand:
+                - '#!/bin/bash'
+                - !Sub |
+                  if [ ! -f /usr/local/minecraft_s3_backup.sh ]; then
+                    MINECRAFT_DIR="$HOME/.minecraft/saves"
+                    INSTANCE_ID=$(ec2metadata --instance-id)
+                    REGION=${AWS::Region}
+                    S3_BUCKET=${SupportBucket}
+                    # Creating the script
+                    echo "#!/bin/bash" > /usr/local/minecraft_s3_backup.sh
+                    echo "INSTANCE_ID=\"$INSTANCE_ID\"" >> /usr/local/minecraft_s3_backup.sh
+                    echo "REGION=\"$REGION\"" >> /usr/local/minecraft_s3_backup.sh
+                    echo "S3_BUCKET=\"$S3_BUCKET\"" >> /usr/local/minecraft_s3_backup.sh
+                    echo "MINECRAFT_DIR=\"$MINECRAFT_DIR\"" >> /usr/local/minecraft_s3_backup.sh
+                    echo "DATE=\$(date +%Y-%m-%d_%H-%M-%S)" >> /usr/local/minecraft_s3_backup.sh
+                    echo "BACKUP_NAME=\"minecraft_backup_\$DATE.tar.gz\"" >> /usr/local/minecraft_s3_backup.sh
+                    echo "tar -cpvzf /tmp/\$BACKUP_NAME \$MINECRAFT_DIR" >> /usr/local/minecraft_s3_backup.sh
+                    echo "aws s3 cp /tmp/\$BACKUP_NAME s3://\$S3_BUCKET/\$INSTANCE_ID/\$BACKUP_NAME" >> /usr/local/minecraft_s3_backup.sh
+                    echo "rm /tmp/\$BACKUP_NAME" >> /usr/local/minecraft_s3_backup.sh
+                    # Optionally, remove old backups (keep last 5)
+                    # echo "aws s3 ls s3://\$S3_BUCKET/\$INSTANCE_ID/ | sort | head -n -5 | awk '{print \$4}' | xargs -I {} aws s3 rm s3://\$S3_BUCKET/\$INSTANCE_ID/\$BACKUP_NAME" >> /usr/local/minecraft_s3_backup.sh
+                    # Make the script executable
+                    chmod +x /usr/local/minecraft_s3_backup.sh
+                    # Schedule the script to run every hour
+                    (sudo crontab -l 2>/dev/null; echo "0 * * * * /usr/local/minecraft_s3_backup.sh >/dev/null 2>&1") | crontab -
+                  fi
+                - sudo crontab -l
+
           - action: aws:runShellScript
             name: NICSSM
             inputs:
@@ -665,13 +783,16 @@ Resources:
                 - echo "Get NIC"
                 - NIC=$(ip route get 1.1.1.1 | awk '{print $5; exit}')
                 - INSTANCE_ID=$(ec2metadata --instance-id)                
-                - PARAM_NAME="/{{ SSMParameterPrefix }}/$INSTANCE_ID/nic"
+                - PARAM_NAME="{{ SSMParameterPrefix }}/$INSTANCE_ID/nic"
                 - !Sub |
                   if aws ssm get-parameter --name "$PARAM_NAME" 2>/dev/null; then
                     echo "Parameter already exists"
+                    return 0
                   else
                     echo "Parameter does not exist, creating $PARAM_NAME"
+                    # Adding to parameter Store in case need to be used in the future
                     aws ssm put-parameter --name "$PARAM_NAME" --type 'String' --value "$NIC"
+                    return 0
                   fi
 
   ScheduledRule: 
@@ -755,6 +876,13 @@ Resources:
         - !Ref AuthLayer
         - !Ref UtilLayer
         - !Ref Ec2Layer 
+        - !FindInMap 
+          - ParametersAndSecretsExtensionArn
+          - !Ref AWS::Region
+          - !If 
+            - IsARM64Architecture
+            - arm64
+            - x86
       Events:
         EC2StateTrigger:
           Type: CloudWatchEvent 
@@ -812,6 +940,7 @@ Resources:
           EC2_INSTANCE_PROFILE_NAME: !Ref IAMEC2InstanceProfile
           EC2_INSTANCE_PROFILE_ARN: !GetAtt IAMEC2InstanceProfile.Arn
           CONFIG_SERVER_LAMBDA_NAME: !Ref ConfigServer
+          PARAMETERS_SECRETS_EXTENSION_HTTP_PORT: 2773
 
   GetMonthlyCost:
     Type: AWS::Serverless::Function 
@@ -972,6 +1101,7 @@ Resources:
                 - ec2:AssociateIamInstanceProfile
                 - ec2:DisassociateIamInstanceProfile
                 - cloudwatch:PutMetricAlarm
+                - kms:Decrypt
               Resource: "*"
         - Version: "2012-10-17" # Policy Document
           Statement:

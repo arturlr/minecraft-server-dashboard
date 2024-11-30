@@ -15,7 +15,6 @@ logger.setLevel(logging.INFO)
 
 session = boto3.session.Session()
 aws_region = session.region_name
-
              
 class Auth:
     def __init__(self,cognito_pool_id):
