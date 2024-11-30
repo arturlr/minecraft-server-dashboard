@@ -1,0 +1,597 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+
+Globals:
+  Function:
+    AutoPublishAlias: live
+    Handler: index.handler
+    MemorySize: 256
+    Runtime: python3.10
+    Timeout: 120
+    Tracing: Active   
+
+Parameters:
+  ProjectName:
+    Type: String
+  EnvironmentName:
+    Type: String
+  AppValue:
+    Type: String    
+
+# Conditions:
+#   IsARM64Architecture: !Equals [ !Ref Architecture, arm64 ]
+
+# ParametersAndSecretsExtensionArn:
+#   us-east-1:
+#     x86: "arn:aws:lambda:us-east-1:177933569100:layer:AWS-Parameters-and-Secrets-Lambda-Extension:12"
+#     arm64: "arn:aws:lambda:us-east-1:177933569100:layer:AWS-Parameters-and-Secrets-Lambda-Extension-Arm64:12"
+#   us-west-2:
+#     x86: "arn:aws:lambda:us-west-2:345057560386:layer:AWS-Parameters-and-Secrets-Lambda-Extension:12"
+#     arm64: "arn:aws:lambda:us-west-2:345057560386:layer:AWS-Parameters-and-Secrets-Lambda-Extension-Arm64:12"
+
+Resources:
+
+  ServersTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: expiration
+        Enabled: true
+
+  LogAuditTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: expiration
+        Enabled: true
+
+  GraphQLAPI:
+    Type: AWS::Serverless::GraphQLApi
+    Properties:
+      Name: !Sub "${ProjectName}-${EnvironmentName}-graphql"
+      SchemaUri: ../../appsync/schema.graphql
+      Auth:
+        Type: "AMAZON_COGNITO_USER_POOLS"
+        UserPool:
+          UserPoolId: 
+            Fn::ImportValue: 
+              !Sub "${ProjectName}-${EnvironmentName}-UserPoolId"
+          AwsRegion: !Ref "AWS::Region"
+          DefaultAction: ALLOW
+        Additional:
+          - Type: AWS_IAM
+      DataSources:
+        DynamoDb:
+          LogAuditTable:
+            TableName: !Ref LogAuditTable
+            TableArn: !GetAtt LogAuditTable.Arn
+          ServersTable:
+            TableName: !Ref ServersTable
+            TableArn: !GetAtt ServersTable.Arn
+        Lambda:
+          ListServersDataSource:
+            FunctionArn: !GetAtt ListServers.Arn
+          ServerActionDataSource:
+            FunctionArn: !GetAtt ServerAction.Arn
+          GetMonthlyCostDataSource:
+            FunctionArn: !GetAtt GetMonthlyCost.Arn
+      Functions:
+        serverListFunction:
+          Runtime:
+            Name: APPSYNC_JS
+            Version: "1.0.0"
+          DataSource: ListServersDataSource
+          CodeUri: ../../appsync/resolvers/lambdaInvoker.js
+        serverActionFunction:
+          Runtime:
+            Name: APPSYNC_JS
+            Version: "1.0.0"
+          DataSource: ServerActionDataSource
+          CodeUri: ../../appsync/resolvers/lambdaInvoker.js     
+        getMonthlyCostFunction:
+          Runtime:
+            Name: APPSYNC_JS
+            Version: "1.0.0"
+          DataSource: GetMonthlyCostDataSource
+          CodeUri: ../../appsync/resolvers/lambdaInvoker.js
+        putLogAuditFunction:
+          Runtime:
+            Name: APPSYNC_JS
+            Version: "1.0.0"
+          DataSource: LogAuditTable
+          CodeUri: ../../appsync/resolvers/putById.js
+        getLogAuditFunction:
+          Runtime:
+            Name: APPSYNC_JS
+            Version: "1.0.0"
+          DataSource: LogAuditTable
+          CodeUri: ../../appsync/resolvers/getById.js
+        putServerRecordFunction:
+          Runtime:
+            Name: APPSYNC_JS
+            Version: "1.0.0"
+          DataSource: ServersTable
+          CodeUri: ../../appsync/resolvers/putById.js
+        getServerRecordFunction:
+          Runtime:
+            Name: APPSYNC_JS
+            Version: "1.0.0"
+          DataSource: ServersTable
+          CodeUri: ../../appsync/resolvers/getById.js
+      Resolvers:
+        Mutation: 
+          # putServerConfig:
+          #   Runtime:
+          #     Name: APPSYNC_JS
+          #     Version: "1.0.0"
+          #   Pipeline:
+          #     - serverActionFunction
+          putServerConfig:
+            Runtime:
+              Name: APPSYNC_JS
+              Version: "1.0.0"
+            Pipeline:
+              - putServerRecordFunction
+          updateServerConfig:
+            Runtime:
+              Name: APPSYNC_JS
+              Version: "1.0.0"
+            Pipeline:
+              - serverActionFunction
+          startServer:
+            Runtime:
+              Name: APPSYNC_JS
+              Version: "1.0.0"
+            Pipeline:
+              - serverActionFunction
+          stopServer:
+            Runtime:
+              Name: APPSYNC_JS
+              Version: "1.0.0"
+            Pipeline:
+              - serverActionFunction
+          restartServer:
+            Runtime:
+              Name: APPSYNC_JS
+              Version: "1.0.0"
+            Pipeline:
+              - serverActionFunction
+          fixServerRole:
+            Runtime:
+              Name: APPSYNC_JS
+              Version: "1.0.0"
+            Pipeline:
+              - serverActionFunction
+          addUserToServer:
+            Runtime:
+              Name: APPSYNC_JS
+              Version: "1.0.0"
+            Pipeline:
+              - serverActionFunction
+          putLogAudit:
+            Runtime:
+              Name: APPSYNC_JS
+              Version: "1.0.0"
+            Pipeline:
+              - putLogAuditFunction
+          verifyUserEmail:
+            Runtime:
+              Name: APPSYNC_JS
+              Version: "1.0.0"
+            Pipeline:
+              - getLogAuditFunction
+        Query:
+          listServers:
+            Runtime:
+              Name: APPSYNC_JS
+              Version: "1.0.0"
+            Pipeline:
+              - serverListFunction     
+          getServerConfig:
+            Runtime:
+              Name: APPSYNC_JS
+              Version: "1.0.0"
+            Pipeline:
+              - serverActionFunction
+          # getServerConfig:
+          #   Runtime:
+          #     Name: APPSYNC_JS
+          #     Version: "1.0.0"
+          #   Pipeline:
+          #     - getServerRecordFunction
+          getMonthlyCost:
+            Runtime:
+              Name: APPSYNC_JS
+              Version: "1.0.0"
+            Pipeline:
+              - getMonthlyCostFunction
+          getLogAudit:
+            Runtime:
+              Name: APPSYNC_JS
+              Version: "1.0.0"
+            Pipeline:
+              - getLogAuditFunction
+
+  ScheduledRule: 
+    Type: AWS::Events::Rule
+    Properties: 
+      Description: "ScheduledRule"
+      ScheduleExpression: "rate(2 minutes)"
+      State: "DISABLED"
+      Targets: 
+        - 
+          Arn: !GetAtt EventResponse.Arn              
+          Id: "EventResponseV1"
+
+  ScheduledRuleParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub /${ProjectName}/${EnvironmentName}/scheduledrule
+      Type: String
+      Value: !Ref ScheduledRule
+      Description: ScheduledRule
+
+  PermissionForEventsToInvokeLambda: 
+    Type: AWS::Lambda::Permission
+    Properties: 
+      FunctionName: !Ref "EventResponse"
+      Action: "lambda:InvokeFunction"
+      Principal: "events.amazonaws.com"
+      SourceArn: 
+        !GetAtt ScheduledRule.Arn
+
+  AuthLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      Description: MinecraftDashboardHelper
+      ContentUri: ../../layers/authHelper/
+      CompatibleRuntimes:
+        - python3.10
+      RetentionPolicy: Delete
+    Metadata:
+      BuildMethod: makefile
+
+  DynLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      Description: MinecraftDashboardHelpers
+      ContentUri: ../../layers/dynHelper/
+      CompatibleRuntimes:
+        - python3.10
+      RetentionPolicy: Delete
+    Metadata:
+      BuildMethod: makefile
+
+  UtilLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      Description: MinecraftDashboardHelper
+      ContentUri: ../../layers/utilHelper/
+      CompatibleRuntimes:
+        - python3.10
+      RetentionPolicy: Delete
+    Metadata:
+      BuildMethod: makefile
+
+  Ec2Layer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      Description: MinecraftDashboardHelpers
+      ContentUri: ../../layers/ec2Helper/
+      CompatibleRuntimes:
+        - python3.10
+      RetentionPolicy: Delete
+    Metadata:
+      BuildMethod: makefile
+
+  EventResponse:
+    Type: AWS::Serverless::Function 
+    Properties:
+      FunctionName: !Sub "${ProjectName}-${EnvironmentName}-eventResponse"
+      CodeUri: ../../lambdas/eventResponse/
+      Layers:
+        - !Ref AuthLayer
+        - !Ref UtilLayer
+        - !Ref Ec2Layer 
+        # - !FindInMap 
+        #   - ParametersAndSecretsExtensionArn
+        #   - !Ref AWS::Region
+        #   - !If 
+        #     - IsARM64Architecture
+        #     - arm64
+        #     - x86
+      Events:
+        EC2StateTrigger:
+          Type: CloudWatchEvent 
+          Properties:
+            Pattern:
+              source:
+                - aws.ec2
+              detail-type:
+                - EC2 Instance State-change Notification                
+      Policies:
+        - CostExplorerReadOnlyPolicy: {}
+        - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
+        - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess
+        - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
+        - arn:aws:iam::aws:policy/AWSCloudTrail_ReadOnlyAccess
+        - arn:aws:iam::aws:policy/AmazonCognitoReadOnly
+        - SSMParameterReadPolicy:
+            ParameterName: !Sub "${ProjectName}*"
+        - LambdaInvokePolicy:
+            FunctionName: !Ref ConfigServer
+        - Version: '2012-10-17' # Policy Document
+          Statement:
+            - Effect: Allow
+              Action:
+                - logs:Get*
+                - logs:List*
+                - logs:StartQuery
+              Resource: !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/minecraft/*'
+        - Version: '2012-10-17' # Policy Document
+          Statement:
+            - Effect: Allow
+              Action:
+                - appsync:ListGraphqlApis
+                - appsync:GetGraphqlApi
+                - appsync:GraphQL
+              Resource: '*'
+        - Version: '2012-10-17' # Policy Document
+          Statement:
+            - Effect: Allow
+              Action:
+                - events:ListRules
+                - events:DescribeRule
+                - events:DisableRule
+                - events:EnableRule
+              Resource: "*"
+      Environment:
+        Variables:
+          APP_NAME: !Ref ProjectName
+          ENVIRONMENT_NAME: !Ref EnvironmentName
+          AWS_REGION_NAME: !Sub "${AWS::Region}"
+          TAG_APP_VALUE: !Ref AppValue
+          APPSYNC_URL: !GetAtt GraphQLAPI.GraphQLUrl
+          COGNITO_USER_POOL_ID: 
+            Fn::ImportValue: 
+              !Sub "${ProjectName}-${EnvironmentName}-UserPoolId"
+          #INSTANCES_TABLE_NAME: !Ref InstancesTable
+          CONFIG_SERVER_LAMBDA_NAME: !Ref ConfigServer
+          PARAMETERS_SECRETS_EXTENSION_HTTP_PORT: 2773
+
+  GetMonthlyCost:
+    Type: AWS::Serverless::Function 
+    Properties:
+      FunctionName: !Sub "${ProjectName}-${EnvironmentName}-getMonthlyCost"
+      CodeUri: ../../lambdas/getMonthlyCost/
+      Layers:
+        - !Ref AuthLayer
+        - !Ref UtilLayer
+        - !Ref Ec2Layer         
+      Policies:
+        - CostExplorerReadOnlyPolicy: {}
+        - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
+        - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess
+        - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
+        - arn:aws:iam::aws:policy/AWSCloudTrail_ReadOnlyAccess
+        - arn:aws:iam::aws:policy/AmazonCognitoReadOnly
+        - SSMParameterReadPolicy:
+            ParameterName: !Sub "${ProjectName}*"
+        # - DynamoDBCrudPolicy:
+        #     TableName: !Ref InstancesTable
+      Environment:
+        Variables:
+          APP_NAME: !Ref ProjectName
+          TAG_APP_VALUE: !Ref AppValue
+          #INSTANCES_TABLE_NAME: !Ref InstancesTable
+
+  ListServers:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "${ProjectName}-${EnvironmentName}-listServers"
+      CodeUri: ../../lambdas/listServers/
+      Layers:
+        - !Ref AuthLayer
+        - !Ref UtilLayer
+        - !Ref Ec2Layer
+      Policies:
+        - CostExplorerReadOnlyPolicy: {}
+        - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
+        - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess
+        - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
+        - arn:aws:iam::aws:policy/AWSCloudTrail_ReadOnlyAccess
+        - arn:aws:iam::aws:policy/AmazonCognitoReadOnly
+        - SSMParameterReadPolicy:
+            ParameterName: !Sub "${ProjectName}*"
+        # - DynamoDBCrudPolicy:
+        #     TableName: !Ref InstancesTable
+      Environment:
+        Variables:
+          APP_NAME: !Ref ProjectName
+          TAG_APP_VALUE: !Ref AppValue
+          AWS_REGION_NAME: !Sub "${AWS::Region}"
+          #INSTANCES_TABLE_NAME: !Ref InstancesTable
+          COGNITO_USER_POOL_ID: 
+            Fn::ImportValue
+              !Sub "${ProjectName}-${EnvironmentName}-UserPoolId"
+
+  ServerAction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Timeout: 300
+      FunctionName: !Sub "${ProjectName}-${EnvironmentName}-serverAction"
+      CodeUri: ../../lambdas/serverAction/
+      Layers:
+        - !Ref AuthLayer
+        - !Ref UtilLayer
+        - !Ref Ec2Layer        
+      Policies:
+        - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
+        - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess
+        - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
+        - arn:aws:iam::aws:policy/AmazonCognitoReadOnly
+        # - StepFunctionsExecutionPolicy:
+        #     StateMachineName: !GetAtt StateMachine.Name
+        - SSMParameterReadPolicy:
+            ParameterName: !Sub "${ProjectName}*"
+        # - DynamoDBCrudPolicy:
+        #     TableName: !Ref InstancesTable
+        - Version: "2012-10-17" # Policy Document
+          Statement:
+            - Effect: Allow
+              Action:
+                - ec2:StartInstances
+                - ec2:StopInstances
+                - ec2:RebootInstances
+                - ec2:AssociateIamInstanceProfile
+                - ec2:DisassociateIamInstanceProfile
+                - ec2:DeleteTags
+                - ec2:CreateTags
+              Resource: 'arn:aws:ec2:*:*:instance/*'
+              Condition:
+                StringEquals:
+                  'ec2:ResourceTag/App': !Ref AppValue
+        - Version: "2012-10-17" # Policy Document
+          Statement:
+            - Effect: Allow
+              Action:
+                - iam:PassRole
+              Resource: 
+                Fn::ImportValue: 
+                  !Sub "${ProjectName}-${EnvironmentName}-IAMEC2InstanceProfileArn"
+        - Version: "2012-10-17" # Policy Document
+          Statement:
+            - Effect: Allow
+              Action:
+                - ssm:PutParameter
+                - ssm:GetParameters
+              Resource: !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/minecraftserverdashboard*
+        - Version: "2012-10-17" # Policy Document
+          Statement:
+            - Effect: Allow
+              Action:
+                - cognito-idp:CreateGroup
+                - cognito-idp:AdminAddUserToGroup
+                - cloudwatch:PutMetricAlarm
+              Resource: "*"
+      Environment:
+        Variables:
+          # StepFunctionsArn: !Ref StateMachine
+          APP_NAME: !Ref ProjectName
+          ENVIRONMENT_NAME: !Ref EnvironmentName
+          TAG_APP_VALUE: !Ref AppValue
+          AWS_REGION_NAME: !Sub "${AWS::Region}"
+          EC2_INSTANCE_PROFILE_NAME:  
+            Fn::ImportValue: 
+              !Sub "${ProjectName}-${EnvironmentName}-IAMEC2InstanceProfile"
+          EC2_INSTANCE_PROFILE_ARN:  
+            Fn::ImportValue: 
+              !Sub "${ProjectName}-${EnvironmentName}-IAMEC2InstanceProfileArn"
+          # CONFIG_SERVER_LAMBDA_NAME: !Ref ConfigServer
+          COGNITO_USER_POOL_ID:  
+            Fn::ImportValue: 
+              !Sub "${ProjectName}-${EnvironmentName}-UserPoolId"
+
+  ConfigServer:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "${ProjectName}-${EnvironmentName}-configServer"
+      CodeUri: ../../lambdas/configServer/
+      Layers:
+        - !Ref AuthLayer
+        - !Ref UtilLayer
+        - !Ref Ec2Layer 
+      Timeout: 300
+      Policies:
+        - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
+        - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess
+        - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
+        - SSMParameterReadPolicy:
+            ParameterName: !Sub "${ProjectName}*"
+        # - DynamoDBCrudPolicy:
+        #     TableName: !Ref InstancesTable
+        - Version: "2012-10-17" # Policy Document
+          Statement:
+            - Effect: Allow
+              Action:
+                - ssm:List*
+                - ssm:Describe*
+                - ssm:Get*
+                - ssm:SendCommand
+                - ssm:CancelCommand
+                - ssm:GetCommandInvocation
+                - ec2:AssociateIamInstanceProfile
+                - ec2:DisassociateIamInstanceProfile
+                - cloudwatch:PutMetricAlarm
+                - kms:Decrypt
+              Resource: "*"
+      Environment:
+        Variables:
+          APP_NAME: !Ref ProjectName
+          ENVIRONMENT_NAME: !Ref EnvironmentName
+          TAG_APP_VALUE: !Ref AppValue
+          SSM_DOC_NAME: 
+            Fn::ImportValue: 
+              !Sub "${ProjectName}-${EnvironmentName}-SSMDoc" 
+          AWS_REGION_NAME: !Sub "${AWS::Region}"
+          #INSTANCES_TABLE_NAME: !Ref InstancesTable       
+
+Outputs:
+  ServersTable:
+    Value: !GetAtt ServersTable.Arn
+    Export:
+      Name: !Sub "${ProjectName}-${EnvironmentName}-ServersTable"
+
+  LogAuditTable:
+    Value: !GetAtt LogAuditTable.Arn
+    Export:
+      Name: !Sub "${ProjectName}-${EnvironmentName}-LogAuditTable"
+
+  GraphQLAPIEndpoint:
+    Value: !GetAtt GraphQLAPI.GraphQLUrl
+    Export:
+      Name: !Sub "${ProjectName}-${EnvironmentName}-GraphQLAPIEndpoint"
+
+  GraphQLAPIId:
+    Value: !GetAtt GraphQLAPI.ApiId
+    Export:
+      Name: !Sub "${ProjectName}-${EnvironmentName}-GraphQLAPIId"
+
+  ConfigServer:
+    Value: !GetAtt ConfigServer.Arn
+    Export:
+      Name: !Sub "${ProjectName}-${EnvironmentName}-ConfigServer"
+
+  GetMonthlyCost:
+    Value: !GetAtt GetMonthlyCost.Arn
+    Export:
+      Name: !Sub "${ProjectName}-${EnvironmentName}-GetMonthlyCost"
+
+  ListServers:
+    Value: !GetAtt ListServers.Arn
+    Export:
+      Name: !Sub "${ProjectName}-${EnvironmentName}-ListServers"
+
+  ServerAction:
+    Value: !GetAtt ServerAction.Arn
+    Export:
+      Name: !Sub "${ProjectName}-${EnvironmentName}-ServerAction"
+
+  EventResponse:
+    Value: !GetAtt EventResponse.Arn
+    Export:
+      Name: !Sub "${ProjectName}-${EnvironmentName}-EventResponse"

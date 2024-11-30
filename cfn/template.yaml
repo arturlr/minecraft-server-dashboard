@@ -1,0 +1,107 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+
+Parameters:
+  ProjectName:
+    Type: String
+    Description: Name of the project
+  EnvironmentName:
+    Type: String
+    Description: Name of the environment
+  AppValue:
+    Type: String
+    Description: Value of the application
+
+Resources:
+
+  
+
+  CognitoStack:
+    Type: AWS::Serverless::Application
+    Properties:
+      Location: ./templates/cognito.yaml
+      Parameters:
+        ProjectName: !Ref ProjectName
+        EnvironmentName: !Ref EnvironmentName
+        AppValue: !Ref AppValue
+
+  EC2Stack:
+    Type: AWS::Serverless::Application
+    Properties:
+      Location: ./templates/ec2.yaml
+      Parameters:
+        ProjectName: !Ref ProjectName
+        EnvironmentName: !Ref EnvironmentName
+        AppValue: !Ref AppValue
+
+  LambdasStack:
+    Type: AWS::Serverless::Application
+    DependsOn: 
+      - EC2Stack
+      - CognitoStack
+    Properties:
+      Location: ./templates/lambdas.yaml
+      Parameters:
+        ProjectName: !Ref ProjectName
+        EnvironmentName: !Ref EnvironmentName
+        AppValue: !Ref AppValue
+
+  AppSyncStack:
+    Type: AWS::Serverless::Application
+    DependsOn: 
+      - LambdasStack
+    Properties:
+      Location: ./templates/appsync.yaml
+      Parameters:
+        ProjectName: !Ref ProjectName
+        EnvironmentName: !Ref EnvironmentName
+        AppValue: !Ref AppValue
+
+  WebStack:
+    Type: AWS::Serverless::Application
+    DependsOn: 
+      - EC2Stack
+      - CognitoStack
+    Properties:
+      Location: ./templates/web.yaml
+      Parameters:
+        ProjectName: !Ref ProjectName
+        EnvironmentName: !Ref EnvironmentName
+        AppValue: !Ref AppValue
+
+# Your existing Outputs section
+# Outputs:
+#   IdentityPoolId:
+#     Description: Cognito IdentityPool Id
+#     Value: 
+#       Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-UserPoolId"
+
+#   CognitoUserPoolClientId:
+#     Description: Cognito UserPool ClientId
+#     Value: 
+#       Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CognitoUserPoolClient"
+
+#   CognitoDomainName:
+#     Description: Cognito DomainName
+#     Value: 
+#       Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CognitoDomainName"
+
+#   CloudFrontUrl:
+#     Description: CloudFront Url
+#     Value: 
+#       Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CloudFrontDomain"
+
+#   AppSyncUrl:
+#     Description: AppSync Url
+#     Value: 
+#       Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-GraphQLAPIEndpoint"
+
+#   WebAppBucketName:
+#     Description: S3 Web Bucket Name
+#     Value: 
+#       Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-WebBucket"
+
+  # SupportBucketName:
+  #   Description: S3 Support Bucket Name
+  #   Value: 
+  #     Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-SupportBucket"
