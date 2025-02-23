@@ -1,135 +1,194 @@
-## Minecraft Server Dashboard
+# Minecraft Server Dashboard
 
-This solution builds a real-time Minecraft Server dashboard using AWS Amplify and AWS Appsync to manage  Minecraft Servers deployed on Amazon Elastic Compute Cloud (EC2). 
+A comprehensive web application for managing and monitoring Minecraft servers on AWS, featuring real-time metrics, server control, and user management.
 
-Details about the solution can be found at the [DIY Minecraft Dashboad](https://medium.com/@arturlr/diy-minecraft-dashboard-to-manage-your-kids-games-a2d84e828f82) blog post.
+The Minecraft Server Dashboard is a powerful tool designed to simplify the management and monitoring of Minecraft servers hosted on Amazon Web Services (AWS). This application provides a user-friendly interface for server administrators and players alike, offering real-time metrics, server control capabilities, and user management features.
 
-## Stack
-
-* **Front-end** - Vue.js as the core framework, [Vuetify](https://vuetifyjs.com/en/) for UI, [ApexCharts](https://apexcharts.com/) for the charts, [AWS Amplify](https://aws.amazon.com/amplify/) for Auth UI component and AWS integration. 
-* **Data** - User data is saved in [Amazon DynamoDB](https://aws.amazon.com/dynamodb/) via GraphQL using [AWS AppSync](https://aws.amazon.com/appsync/). EC2 information comes from Amazon CloudWatch metrics, Log Insights, Amazon Cloud Explorer and Amazon CloudTrail. 
-* **Auth** - [Amazon Cognito](https://aws.amazon.com/cognito/) federated with GMail. It provides JSON Web Tokens (JWT) and along with AppSync fine-grained authorization on what data types users can access.
-
-## User Interface
-
-<img src="./images/minecraft-dashboard-main-page.png"  width="800"/>
-
-## Deployment Guide
-
-To deploy this solution into your AWS Account please follow our [Deployment Guide](docs/deployment_guide.md)
-
-## User Guide
-
-Information in how to use and configure the solution at the [User Guide](docs/user_guide.md)
-
-## Data Flow
-
-1. User interacts with the Vue.js frontend, which uses AWS Amplify for authentication and API calls.
-2. AWS AppSync handles GraphQL queries and mutations, interfacing with DynamoDB for data storage.
-3. Lambda functions are triggered for various operations, such as starting/stopping EC2 instances, updating alarms, and retrieving server metrics.
-4. EC2 instances run Minecraft servers, with CloudWatch monitoring their performance.
-5. CloudTrail logs EC2 instance state changes, which are used to calculate running time.
-6. The dashboard updates in real-time using AppSync subscriptions for server metrics and state changes.
-
-## Sequence Diagram
-
-```
-User        Frontend     Cognito     AppSync     Lambda     DynamoDB    EC2    CloudWatch
- |             |            |           |           |           |        |          |
- |  Login      |            |           |           |           |        |          |
- |------------>|            |           |           |           |        |          |
- |             |  Auth      |           |           |           |        |          |
- |             |----------->|           |           |           |        |          |
- |             |  JWT Token |           |           |           |        |          |
- |             |<-----------|           |           |           |        |          |
- |             |                        |           |           |        |          |
- |  List Servers                        |           |           |        |          |
- |------------>|  GraphQL Query         |           |           |        |          |
- |             |----------------------->|           |           |        |          |
- |             |                        |  Invoke   |           |        |          |
- |             |                        |---------->|           |        |          |
- |             |                        |           |  Query    |        |          |
- |             |                        |           |---------->|        |          |
- |             |                        |           |  Results  |        |          |
- |             |                        |           |<----------|        |          |
- |             |                        |  Response |           |        |          |
- |             |                        |<----------|           |        |          |
- |             |  Server List           |           |           |        |          |
- |<------------|                        |           |           |        |          |
- |             |                        |           |           |        |          |
- |  Start Server                        |           |           |        |          |
- |------------>|  GraphQL Mutation      |           |           |        |          |
- |             |----------------------->|           |           |        |          |
- |             |                        |  Invoke   |           |        |          |
- |             |                        |---------->|           |        |          |
- |             |                        |           |  Start    |        |          |
- |             |                        |           |------------------>|          |
- |             |                        |           |           |        |  Monitor |
- |             |                        |           |           |        |--------->|
- |             |                        |           |           |        |          |
- |  Subscribe to Updates                |           |           |        |          |
- |------------>|  GraphQL Subscription  |           |           |        |          |
- |             |----------------------->|           |           |        |          |
- |             |                        |           |           |        |          |
- |             |  Real-time Updates     |           |           |        |          |
- |<------------|                        |           |           |        |          |
-```
+Key features of the Minecraft Server Dashboard include:
+- Real-time server metrics (CPU, memory, network usage, and active players)
+- Server start, stop, and restart functionality
+- User invitation and management system
+- Cost tracking and optimization recommendations
+- Integration with AWS services (EC2, CloudWatch, AppSync, Cognito)
+- Responsive web interface built with Vue.js
 
 ## Repository Structure
 
+The repository is organized into several key directories:
+
+- `amplify/`: Contains Amplify backend configuration and API definitions
+- `appsync/`: Includes AppSync resolvers and GraphQL schema
+- `cfn/`: Houses CloudFormation templates for infrastructure deployment
+- `dashboard/`: Contains the Vue.js frontend application
+- `lambdas/`: Includes Lambda functions for various server operations
+- `layers/`: Contains shared code layers used by Lambda functions
+
+Key Files:
+- `amplify.yml`: Amplify build and deployment configuration
+- `appconfig.sh`: Script for setting up application configuration
+- `cfn/template.yaml`: Main CloudFormation template for the application stack
+- `dashboard/src/main.js`: Entry point for the Vue.js application
+- `lambdas/configServer/index.py`: Lambda function for server configuration
+
+Important integration points:
+- GraphQL API (`appsync/schema.graphql`): Defines the API structure for client-server communication
+- Cognito User Pool: Handles user authentication and authorization
+- AppSync Resolvers: Connect GraphQL operations to Lambda functions and DynamoDB
+
+## Usage Instructions
+
+### Installation
+
+Prerequisites:
+- Node.js (v14 or later)
+- AWS CLI (configured with appropriate credentials)
+- Amplify CLI (v5 or later)
+
+Steps:
+1. Clone the repository:
+   ```
+   git clone <repository-url>
+   cd minecraft-server-dashboard
+   ```
+2. Install dependencies:
+   ```
+   npm install
+   ```
+3. Initialize Amplify:
+   ```
+   amplify init
+   ```
+4. Deploy the backend:
+   ```
+   amplify push
+   ```
+5. Configure the application:
+   ```
+   ./appconfig.sh
+   ```
+
+### Getting Started
+
+1. Start the development server:
+   ```
+   npm run serve
+   ```
+2. Open a web browser and navigate to `http://localhost:8080`
+3. Log in using your Cognito credentials or sign up for a new account
+
+### Configuration Options
+
+- Environment variables can be set in the `.env` file in the `dashboard/` directory
+- AWS resource configurations can be adjusted in the CloudFormation templates (`cfn/templates/`)
+
+### Common Use Cases
+
+1. Starting a Minecraft server:
+   - Log in to the dashboard
+   - Click on the "Start Server" button for the desired server instance
+   - Wait for the server to initialize (progress can be monitored in real-time)
+
+2. Inviting a new user:
+   - Navigate to the server management page
+   - Click on "Invite User"
+   - Enter the user's email address and submit
+   - The user will receive an invitation email with further instructions
+
+3. Monitoring server performance:
+   - View real-time metrics on the server dashboard
+   - Check CPU usage, memory utilization, network traffic, and active player count
+   - Set up custom CloudWatch alarms for specific metrics
+
+### Testing & Quality
+
+To run the test suite:
 ```
-.
-├── appsync/
-│   └── resolvers/         # AppSync resolver functions
-├── dashboard/
-│   ├── src/
-│   │   ├── graphql/       # GraphQL queries, mutations, and subscriptions
-│   │   ├── router/        # Vue Router configuration
-│   │   └── stores/        # Pinia stores for state management
-│   ├── package.json       # Frontend dependencies
-│   └── vite.config.js     # Vite configuration
-├── lambdas/               # Lambda functions for various operations
-├── layers/                # Lambda layers for shared code
-│   ├── authHelper/
-│   ├── dynHelper/
-│   ├── ec2Helper/
-│   └── utilHelper/
-├── tests/                 # Test files
-├── docs/                  # Documentation
-└── README.md              # Project overview
+npm run test
 ```
 
-## Troubleshooting
+### Troubleshooting
 
-1. **Authentication Issues**
-   - Ensure Cognito is properly configured with the correct user pool and app client.
-   - Check if the JWT token is being correctly passed in API requests.
+Common Issue: Server fails to start
+1. Check the CloudWatch logs for the specific EC2 instance
+2. Verify that the instance has the correct IAM role attached
+3. Ensure that the necessary security group rules are in place
 
-2. **GraphQL Errors**
-   - Verify that the AppSync schema matches the frontend queries and mutations.
-   - Check the AppSync console for any resolver errors or data source issues.
+Debugging:
+- Enable verbose logging in Lambda functions by setting the `LOG_LEVEL` environment variable to `DEBUG`
+- Check CloudWatch Logs for each Lambda function and EC2 instance
+- Use AWS X-Ray for tracing requests through the application
 
-3. **Lambda Function Failures**
-   - Review CloudWatch logs for specific Lambda function errors.
-   - Ensure IAM roles have the necessary permissions for accessing required AWS services.
+Performance Optimization:
+- Monitor Lambda function duration and memory usage in CloudWatch
+- Adjust Lambda function memory allocation as needed
+- Consider using provisioned concurrency for frequently invoked functions
 
-4. **EC2 Instance Management Problems**
-   - Verify that the EC2 instances have the correct tags for identification.
-   - Check if the IAM roles associated with the instances have the required permissions.
+## Data Flow
 
-5. **Real-time Updates Not Working**
-   - Ensure that AppSync subscriptions are properly set up and connected.
-   - Check for any network issues that might be preventing WebSocket connections.
+The Minecraft Server Dashboard application follows a serverless architecture with the following data flow:
 
-6. **Dashboard Data Discrepancies**
-   - Verify that CloudWatch metrics and Log Insights queries are correctly configured.
-   - Ensure that the correct time ranges are being used for data retrieval.
+1. User interacts with the Vue.js frontend application
+2. Frontend makes GraphQL API calls to AWS AppSync
+3. AppSync resolvers invoke Lambda functions or interact directly with DynamoDB
+4. Lambda functions perform operations on EC2 instances, CloudWatch metrics, and other AWS services
+5. Real-time updates are pushed to the frontend via AppSync subscriptions
 
-If issues persist, consult the AWS documentation for the specific services involved or reach out to AWS support for further assistance.
+```
+[User] <-> [Vue.js Frontend] <-> [AppSync API] <-> [Lambda Functions] <-> [AWS Services (EC2, CloudWatch, etc.)]
+                                      ^
+                                      |
+                                [DynamoDB Tables]
+```
 
-## Security
+Note: The application uses AWS Cognito for user authentication and authorization throughout the entire flow.
 
-See [CONTRIBUTING](CONTRIBUTING.md) for more information.
-## License
+## Deployment
 
-This library is licensed under the MIT-0 License. See the [LICENSE](LICENSE) file.
+Prerequisites:
+- AWS Account with appropriate permissions
+- AWS CLI configured with admin credentials
+- Amplify CLI installed and configured
+
+Deployment Steps:
+1. Clone the repository and navigate to the project root
+2. Run `amplify init` to initialize the Amplify project
+3. Run `amplify push` to deploy the backend resources
+4. Execute `./appconfig.sh` to configure the application
+5. Navigate to the `dashboard/` directory and run `npm run build`
+6. Deploy the frontend build to the S3 bucket created by CloudFormation
+
+## Infrastructure
+
+The Minecraft Server Dashboard uses the following key AWS resources:
+
+Lambda:
+- `configServer`: Configures and initializes Minecraft servers on EC2 instances
+- `eventResponse`: Handles EC2 instance state changes and updates server metrics
+- `getMonthlyCost`: Retrieves monthly cost data for servers
+- `listServers`: Lists EC2 instances based on user permissions
+- `serverAction`: Performs various server actions (start, stop, restart, etc.)
+
+DynamoDB:
+- `ServersTable`: Stores server configuration and state information
+- `LogAuditTable`: Stores audit logs for server actions
+
+AppSync:
+- GraphQL API with resolvers for server management operations
+
+Cognito:
+- User Pool for authentication and authorization
+- Identity Pool for AWS service access
+
+EC2:
+- Instances for running Minecraft servers
+
+CloudWatch:
+- Alarms for monitoring server performance
+- Logs for Lambda functions and EC2 instances
+
+S3:
+- `WebAppBucket`: Hosts the frontend application files
+- `SupportBucket`: Stores configuration and support files
+
+CloudFront:
+- Distribution for serving the frontend application

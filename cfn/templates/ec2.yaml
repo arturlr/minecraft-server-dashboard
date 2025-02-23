@@ -16,6 +16,8 @@ Resources:
     Type: AWS::S3::Bucket
     Properties:
       AccessControl: Private
+      PublicAccessBlockConfiguration:
+        RestrictPublicBuckets: true
       BucketEncryption:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:

@@ -14,8 +14,6 @@ Parameters:
 
 Resources:
 
-  
-
   CognitoStack:
     Type: AWS::Serverless::Application
     Properties:

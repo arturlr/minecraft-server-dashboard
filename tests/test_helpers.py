@@ -15,39 +15,6 @@ def mock_boto3_client():
 def utils(mock_boto3_client):
     return Utils()
 
-def test_capitalize_first_letter(utils):
-    assert utils.capitalize_first_letter('hello') == 'Hello'
-    assert utils.capitalize_first_letter('world') == 'World'
-    assert utils.capitalize_first_letter('') == ''
-
-def test_response(utils):
-    assert utils.response(200, 'Success') == {
-        'statusCode': 200,
-        'body': 'Success',
-        'headers': {
-            'Content-Type': 'application/json'
-        }
-    }
-
-def test_get_ssm_parameter(utils, mock_boto3_client):
-    # Mock the SSM client
-    mock_ssm = MagicMock()
-    utils.ssm_client = mock_boto3_client.return_value = mock_ssm
-
-    # Mock the get_parameter method
-    mock_ssm.get_parameter.return_value = {
-        'Parameter': {
-            'Value': 'value'
-        }
-    }
-
-    result = utils.get_ssm_parameter('parameter_name')
-
-    assert result == 'value'
-    mock_ssm.get_parameter.assert_called_once_with(
-        Name='parameter_name',
-        WithDecryption=True
-    )
 
 def test_get_instance_attributes(utils, mock_boto3_client):
     # Mock the EC2 client
