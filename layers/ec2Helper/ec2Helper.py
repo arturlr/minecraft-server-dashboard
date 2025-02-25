@@ -19,6 +19,7 @@ class Ec2Utils:
         self.ssm = boto3.client('ssm')        
         self.ct_client = boto3.client('cloudtrail')        
         self.appValue = os.getenv('TAG_APP_VALUE')
+        self.ec2InstanceProfileArn = os.getenv('EC2_INSTANCE_PROFILE_ARN')
 
     def get_instance_attributes_from_tags(self,instance_id):
         """

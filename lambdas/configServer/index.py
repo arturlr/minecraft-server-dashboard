@@ -187,11 +187,11 @@ def wait_for_command_execution(command_id, instance_id, max_retries: int = 5, wa
         print(f"Error while waiting for command: {str(e)}")
         return False
 
-def update_alarm(instanceId,alarmMetric,alarmThreshold,alarmEvaluationPeriod):
+def update_alarm(instanceId, alarmMetric, alarmThreshold, alarmEvaluationPeriod, schedule=None):
     logger.info("------- update_alarm : " + instanceId)
 
     dimensions=[]
-    statistic="Average"
+    statistic="Average" 
     namespace="CWAgent"
     dimensions.append({'Name': 'InstanceId','Value': instanceId})
     if alarmMetric == "CPUUtilization":
@@ -201,7 +201,30 @@ def update_alarm(instanceId,alarmMetric,alarmThreshold,alarmEvaluationPeriod):
         alarmMetricName = "UserCount"
         statistic="Maximum"
         namespace="MinecraftDashboard"
-    
+    elif alarmMetric == "Schedule":
+        # Create scheduled alarm using cron expression
+        if schedule:
+            cw_client.put_metric_alarm(
+                AlarmName=instanceId + "-" + "minecraft-server-schedule",
+                ActionsEnabled=True,
+                AlarmActions=["arn:aws:automate:" + aws_region + ":ec2:stop"],
+                InsufficientDataActions=[],
+                MetricName="ScheduledShutdown",
+                Namespace="MinecraftDashboard",
+                Statistic="Maximum",
+                Dimensions=[{'Name': 'InstanceId','Value': instanceId}],
+                Period=60,
+                EvaluationPeriods=1,
+                DatapointsToAlarm=1,
+                Threshold=1,
+                TreatMissingData="missing",
+                ComparisonOperator="GreaterThanOrEqualToThreshold",
+                # Example schedule: "0 23 ? * MON-FRI *" for weekdays at 11PM
+                Schedule=schedule
+            )
+            logger.info(f"Scheduled alarm configured for {schedule}")
+            return
+
     cw_client.put_metric_alarm(
             AlarmName=instanceId + "-" + "minecraft-server",
             ActionsEnabled=True,

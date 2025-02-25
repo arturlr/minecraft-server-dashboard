@@ -18,6 +18,7 @@ const workingDir = ref(null);
 const groupMembers = ref(null);
 const alarmMetric = ref({ metric: 'CPUUtilization', abbr: '% CPU' });
 const alarmEvaluationPeriod = ref();
+const alarmSchedule = ref(null);
 const alarmMetricItems = ref([
     { metric: 'CPUUtilization', abbr: '% CPU' },
     { metric: 'Connections', abbr: '# Users' },
@@ -97,6 +98,7 @@ async function getServerSettings() {
 function resetForm() {
     alarmThreshold.value = null
     alarmEvaluationPeriod.value = null
+    alarmSchedule.value = null
     runCommand.value = null;
     workingDir.value = null; 
 }
@@ -109,6 +111,7 @@ async function onSubmit() {
                 alarmMetric: alarmMetric.value.metric,
                 alarmThreshold: parseFloat(alarmThreshold.value),
                 alarmEvaluationPeriod: parseInt(alarmEvaluationPeriod.value, 10),
+                alarmSchedule: alarmSchedule.value,
                 runCommand: runCommand.value ?? '',
                 workDir: workDir.value ?? ''
             }
@@ -197,6 +200,44 @@ async function addUser() {
                                 <v-text-field dense label="Evaluation Period"
                                     hint="Number of data points per minute to evaluate." v-model="alarmEvaluationPeriod"
                                     :rules="onlyNumbersRules"></v-text-field>
+                            </v-col>
+                            <v-col cols="12">
+                                <v-row>
+                                    <v-col cols="6">
+                                        <v-text-field dense label="Alarm Schedule"
+                                            hint="Cron expression (e.g. '0 18 * * *' for 6 PM daily)" v-model="alarmSchedule"
+                                            :rules="[v => !v || /^((\*|[0-9]|[1-5][0-9]) (\*|[0-9]|1[0-9]|2[0-3]) (\*|[1-9]|[12][0-9]|3[01]) (\*|[1-9]|1[0-2]) (\*|[0-6]))$/.test(v) || 'Invalid cron expression']">
+                                        </v-text-field>
+                                    </v-col>
+                                    <v-col cols="3">
+                                        <v-menu>
+                                            <template v-slot:activator="{ props }">
+                                                <v-text-field
+                                                    v-model="alarmSchedule"
+                                                    label="Pick date"
+                                                    prepend-icon="mdi-calendar"
+                                                    readonly
+                                                    v-bind="props"
+                                                ></v-text-field>
+                                            </template>
+                                            <v-date-picker v-model="alarmSchedule"></v-date-picker>
+                                        </v-menu>
+                                    </v-col>
+                                    <v-col cols="3">
+                                        <v-menu>
+                                            <template v-slot:activator="{ props }">
+                                                <v-text-field
+                                                    v-model="alarmSchedule"
+                                                    label="Pick time"
+                                                    prepend-icon="mdi-clock"
+                                                    readonly
+                                                    v-bind="props"
+                                                ></v-text-field>
+                                            </template>
+                                            <v-time-picker v-model="alarmSchedule" format="24hr"></v-time-picker>
+                                        </v-menu>
+                                    </v-col>
+                                </v-row>
                             </v-col>
                         </v-row>
 

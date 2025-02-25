@@ -68,8 +68,7 @@ Resources:
         Type: "AMAZON_COGNITO_USER_POOLS"
         UserPool:
           UserPoolId: 
-            Fn::ImportValue: 
-              !Sub "${ProjectName}-${EnvironmentName}-UserPoolId"
+            Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-UserPoolId"
           AwsRegion: !Ref "AWS::Region"
           DefaultAction: ALLOW
         Additional:
@@ -367,8 +366,7 @@ Resources:
           TAG_APP_VALUE: !Ref AppValue
           APPSYNC_URL: !GetAtt GraphQLAPI.GraphQLUrl
           COGNITO_USER_POOL_ID: 
-            Fn::ImportValue: 
-              !Sub "${ProjectName}-${EnvironmentName}-UserPoolId"
+            Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-UserPoolId"
           #INSTANCES_TABLE_NAME: !Ref InstancesTable
           CONFIG_SERVER_LAMBDA_NAME: !Ref ConfigServer
           PARAMETERS_SECRETS_EXTENSION_HTTP_PORT: 2773
@@ -424,10 +422,12 @@ Resources:
           APP_NAME: !Ref ProjectName
           TAG_APP_VALUE: !Ref AppValue
           AWS_REGION_NAME: !Sub "${AWS::Region}"
+          EC2_INSTANCE_PROFILE_ARN: 
+            Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-IAMEC2InstanceProfileArn"
           #INSTANCES_TABLE_NAME: !Ref InstancesTable
           COGNITO_USER_POOL_ID: 
-            Fn::ImportValue
-              !Sub "${ProjectName}-${EnvironmentName}-UserPoolId"
+            Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-UserPoolId"
+
 
   ServerAction:
     Type: AWS::Serverless::Function
@@ -471,8 +471,7 @@ Resources:
               Action:
                 - iam:PassRole
               Resource: 
-                Fn::ImportValue: 
-                  !Sub "${ProjectName}-${EnvironmentName}-IAMEC2InstanceProfileArn"
+                Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-IAMEC2InstanceProfileArn"
         - Version: "2012-10-17" # Policy Document
           Statement:
             - Effect: Allow
@@ -496,15 +495,12 @@ Resources:
           TAG_APP_VALUE: !Ref AppValue
           AWS_REGION_NAME: !Sub "${AWS::Region}"
           EC2_INSTANCE_PROFILE_NAME:  
-            Fn::ImportValue: 
-              !Sub "${ProjectName}-${EnvironmentName}-IAMEC2InstanceProfile"
+            Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-IAMEC2InstanceProfile"
           EC2_INSTANCE_PROFILE_ARN:  
-            Fn::ImportValue: 
-              !Sub "${ProjectName}-${EnvironmentName}-IAMEC2InstanceProfileArn"
+            Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-IAMEC2InstanceProfileArn"
           # CONFIG_SERVER_LAMBDA_NAME: !Ref ConfigServer
           COGNITO_USER_POOL_ID:  
-            Fn::ImportValue: 
-              !Sub "${ProjectName}-${EnvironmentName}-UserPoolId"
+            Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-UserPoolId"
 
   ConfigServer:
     Type: AWS::Serverless::Function
@@ -545,8 +541,7 @@ Resources:
           ENVIRONMENT_NAME: !Ref EnvironmentName
           TAG_APP_VALUE: !Ref AppValue
           SSM_DOC_NAME: 
-            Fn::ImportValue: 
-              !Sub "${ProjectName}-${EnvironmentName}-SSMDoc" 
+            Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-SSMDoc" 
           AWS_REGION_NAME: !Sub "${AWS::Region}"
           #INSTANCES_TABLE_NAME: !Ref InstancesTable       
 

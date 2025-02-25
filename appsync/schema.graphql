@@ -51,6 +51,7 @@ type ServerConfig @aws_iam
 	alarmType: String
 	alarmThreshold: Float
 	alarmEvaluationPeriod: Int
+	alarmSchedule: String
 	runCommand: String
 	workDir: String
 	groupMembers: AWSJSON
@@ -60,7 +61,8 @@ input ServerConfigInput {
 	id: String!
 	alarmType: String
 	alarmThreshold: Float
-	alarmEvaluationPeriod: Int	
+	alarmEvaluationPeriod: Int
+	alarmSchedule: String
 	runCommand: String
 	workDir: String
 	groupMembers: AWSJSON
