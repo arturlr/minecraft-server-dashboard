@@ -174,8 +174,8 @@ def action_process(action, instance_id, arguments=None):
         "stopserver": lambda: handle_server_action("stop", instance_id),
         "fixserverrole": lambda: handle_fix_role(instance_id),
         "getserverconfig": lambda: handle_get_server_config(instance_id),
-        "putserverconfig": lambda: handle_config_update(instance_id, arguments),
-        "updateserverconfig": lambda: handle_config_update(instance_id, arguments)
+        "putserverconfig": lambda: handle_update_server_config(instance_id, arguments),
+        "updateserverconfig": lambda: handle_update_server_config(instance_id, arguments)
     }
 
     # Get the handler for the requested action
@@ -196,7 +196,6 @@ def handle_get_server_config(instance_id):
     return instance_tags
 
 def handle_server_action(action, instance_id):
-
     try:
         instance = ec2_utils.list_server_by_id(instance_id)
         if not instance.get('Instances'):
@@ -247,16 +246,15 @@ def handle_fix_role(instance_id):
     logger.error("Attaching IAM role failed")
     return utl.response(500, {"err": "Attaching IAM role failed"})
 
-def handle_config_update(instance_id, arguments):
+def handle_update_server_config(instance_id, arguments):
     """Helper function to handle config updates"""
     if not arguments:
         logger.error("Missing arguments for config update")
         return utl.response(400, {"err": "Missing required arguments"})
             
-    response = utl.set_instance_attributes(arguments)
+    response = ec2_utils.set_instance_attributes_to_tags(arguments)
     utl.update_alarm(instance_id)
     return response                
-
 
 def handle_local_invocation(event, context):
     # Handle local invocations here
@@ -311,6 +309,8 @@ def handler(event, context):
     if input_args := event["arguments"].get("input"):
         input = {
             'id': instance_id,
+            'shutdownMethod': input_args.get('shutdownMethod', ''),
+            'scheduleExpression': input_args.get('scheduleExpression', ''),
             'alarmType': input_args.get('alarmType', ''),
             'alarmThreshold': input_args.get('alarmThreshold', ''),
             'alarmEvaluationPeriod': input_args.get('alarmEvaluationPeriod', ''),

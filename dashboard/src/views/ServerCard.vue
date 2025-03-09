@@ -1,6 +1,6 @@
 <template>
   <div>
-    <v-card class="my-8 pa-2">
+    <v-card class="my-8 pa-2 rounded-lg elevation-3 border">
       <v-alert
       v-model="metricAlert"
       shaped
@@ -10,14 +10,15 @@
     >
      {{ metricMsg }}
     </v-alert>
-      <v-card-title class="text-h6">
+      <div class="server-header gradient-bg pa-4">
+      <v-card-title class="text-h5 font-weight-medium">
         {{ serverName }}
-        <v-chip variant="label">
-            <v-icon> mdi-clock-outline </v-icon>
-            {{ (serversDict[serverId].runningMinutes / 60).toFixed(1) }}
-            hours
+        <v-chip class="ml-2" color="primary" small>
+          <v-icon small left> mdi-clock-outline </v-icon>
+          {{ (serversDict[serverId].runningMinutes / 60).toFixed(1) }} hours
         </v-chip>
       </v-card-title>
+    </div>
       <v-card-subtitle class="text-caption">{{ serverId }} </v-card-subtitle>
         <v-alert
         v-if="!iamServerCompliant"
@@ -42,51 +43,6 @@
           </v-col>
         </v-row>
       </v-alert>
-      <v-card-text>
-        <v-row>
-          <v-chip-group column>
-            <!-- <v-chip 
-            v-if="serversDict[serverId].initStatus === 'fail' && serversDict[serverId].state === 'running'"
-            color="orange" label outlined>
-            <v-icon left> hourglass_empty </v-icon>
-              initializing...
-            </v-chip> -->
-
-            <v-chip color="gray" label outlined>
-              <v-icon left> developer_board </v-icon>
-              {{ serversDict[serverId].vCpus }} vCPU
-            </v-chip>
-
-            <v-chip color="gray" label outlined>
-              <v-icon left> sd_card </v-icon>
-              {{ serversDict[serverId].memSize / 1024 }} GB
-            </v-chip>
-
-            <v-chip color="gray" label outlined>
-              <v-icon left> album </v-icon>
-              {{ serversDict[serverId].diskSize }} GB
-            </v-chip>
-
-            <v-tooltip bottom>
-              <template v-slot:activator="{ on, attrs }">
-                <v-chip
-                  v-if="!isMobile"
-                  v-bind="attrs"
-                  v-on="on"
-                  color="gray"
-                  label
-                  outlined
-                >
-                  <v-icon left> schedule </v-icon>
-                  {{ (serversDict[serverId].runningMinutes / 60).toFixed(1) }}
-                  hours
-                </v-chip>
-              </template>
-              <span>Approximate number. Not for billing purpose</span>
-            </v-tooltip>
-          </v-chip-group>
-        </v-row>
-
         <v-row>
           <v-col md="auto" class="d-flex flex-column">
             <v-text-field
@@ -116,65 +72,52 @@
                 mdi-power
               </v-icon>
             </v-text-field>
-            <v-card>
-              <apexchart
-                ref="users"
-                height="90"
-                :options="areaChartOptions"
-                :series="chartInit"
-              ></apexchart>
-            </v-card>
-          </v-col>
-          <!-- <div v-if="isMobile">
-            <v-card>
-              <apexchart
-                ref="lineChart"
-                height="150"
-                :options="lineChartOptions"
-                :series="chartInit"
-              ></apexchart>
-            </v-card>
-          </div> 
-          <v-col v-else class="d-flex flex-column"> -->
-          <v-col>
-            <v-card>
-              <apexchart
-                ref="lineChart"
-                height="150"
-                :options="lineChartOptions"
-                :series="chartInit"
-              ></apexchart>
-            </v-card>
-          </v-col>
-        </v-row>
-      </v-card-text>
+            <v-row class="chart-container">
+              <v-col cols="12" md="4">
+                <v-card class="chart-card pa-3 rounded-lg">
+                  <div class="chart-title text-subtitle-1 mb-2">Users Activity</div>
+                  <apexchart
+                    ref="users"
+                    height="120"
+                    :options="getEnhancedAreaChartOptions"
+                    :series="chartInit"
+                  />
+                </v-card>
+              </v-col>
+              <v-col cols="12" md="8">
+                <v-card class="chart-card pa-3 rounded-lg">
+                  <div class="chart-title text-subtitle-1 mb-2">Performance Metrics</div>
+                  <apexchart
+                    ref="lineChart"
+                    height="180"
+                    :options="getEnhancedLineChartOptions"
+                    :series="chartInit"
+                  />
+                </v-card>
+              </v-col>
+            </v-row>
 
-      <v-card-actions>
-        <v-tooltip bottom>
-          <template v-slot:activator="{ on, attrs }">
-            <v-btn text v-bind="attrs" v-on="on" @click="processSettingsForm()">
-              <v-icon> settings </v-icon>
-            </v-btn>
-          </template>
-          <span> Configure Minecraft Server initialization command</span>
-        </v-tooltip>
-        <v-tooltip bottom>
-          <template v-slot:activator="{ on, attrs }">
-            <v-btn
-              text
-              v-bind="attrs"
-              v-on="on"
-              @click="
-                addUserDialog = true;
-                addUserEmail = null;
-              "
-            >
-              <v-icon> person_add </v-icon>
-            </v-btn>
-          </template>
-          <span> Add user to Start/Stop Server</span>
-        </v-tooltip>
-      </v-card-actions>
+            <v-card-actions class="pa-4">
+              <v-btn
+                color="primary"
+                outlined
+                rounded
+                @click="processSettingsForm()"
+              >
+                <v-icon left>settings</v-icon>
+                Settings
+              </v-btn>
+              <v-btn
+                color="secondary"
+                outlined
+                rounded
+                @click="addUserDialog = true"
+              >
+                <v-icon left>person_add</v-icon>
+                Add User
+              </v-btn>
+            </v-card-actions>
+
 
       <v-list>
         <v-list-item two-line>
@@ -231,6 +174,37 @@
     </v-snackbar>
   </div>
 </template>
+
+<style scoped>
+.gradient-bg {
+  background: linear-gradient(135deg, var(--v-primary-base) 0%, var(--v-secondary-base) 100%);
+  color: white;
+}
+
+.metric-card {
+  transition: all 0.3s ease;
+  border: 1px solid #eee;
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.metric-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+.chart-card {
+  background: #ffffff;
+  border: 1px solid #eee;
+}
+
+.status-chip {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+}
+</style>
+
 
 <script>
 import VueApexCharts from "vue-apexcharts";

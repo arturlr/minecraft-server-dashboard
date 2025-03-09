@@ -9,27 +9,30 @@ const userStore = useUserStore();
 const settingsForm = ref();
 const addUserForm = ref();
 const snackbar = ref(false)
-const snackText = ref(null)
 const snackColor = ref(null)
 const snackTimeout = ref(3500)
-const workDir = ref(null);
-const runCommand = ref(null);
-const workingDir = ref(null);
-const groupMembers = ref(null);
-const alarmMetric = ref({ metric: 'CPUUtilization', abbr: '% CPU' });
-const alarmEvaluationPeriod = ref();
-const alarmThreshold = ref(null);
+
+// Available shutdown methods
+const shutdownMethodOptions = ref([
+    { metric: 'CPUUtilization', abbr: '% CPU' },
+    { metric: 'Connections', abbr: '# Users' },
+    { metric: 'Schedule', abbr: 'Schedule' },
+]);
+
+// ServerConfig Input (from Schema)
+const serverConfigInput = reactive({
+    alarmThreshold: 0,
+    alarmEvaluationPeriod: 0,
+    runCommand: null,
+    workDir: null,
+    groupMembers: [],
+    scheduleExpression: '',
+    shutdownMethod: null 
+});
 
 // Variables for weekday scheduling
 const selectedWeekdays = ref([]);
 const selectedTime = ref(null);
-
-const inviteeEmail = ref()
-
-const settingsDialogLoading = ref(false);
-const configDialogVisible = ref(false);
-const usersDialogVisible = ref(false);
-
 // Weekdays options for selection
 const weekdayOptions = ref([
   { text: 'Select All', value: 'ALL' },
@@ -41,9 +44,14 @@ const weekdayOptions = ref([
   { text: 'Saturday', value: 'SAT' },
   { text: 'Sunday', value: 'SUN' },
 ]);
-
 // Time options for dropdown
 const timeOptions = ref([]);
+
+const inviteeEmail = ref()
+
+const settingsDialogLoading = ref(false);
+const configDialogVisible = ref(false);
+const usersDialogVisible = ref(false);
 
 // Generate time options in 30-minute intervals
 for (let hour = 0; hour < 24; hour++) {
@@ -62,12 +70,6 @@ const allWeekdayValues = computed(() => {
     .filter(option => option.value !== 'ALL')
     .map(option => option.value);
 });
-
-const alarmMetricItems = ref([
-    { metric: 'CPUUtilization', abbr: '% CPU' },
-    { metric: 'Connections', abbr: '# Users' },
-    { metric: 'Schedule', abbr: 'Schedule' },
-]);
 
 const isRequiredOnlyRules = [
     value => {
@@ -106,6 +108,14 @@ function handleWeekdaySelection(newValue) {
     selectedWeekdays.value = newValue.filter(day => day !== 'ALL');
   }
 }
+
+// Computed property for the hint
+const selectedMethodHint = computed(() => {
+    if (serverConfigInput.shutdownMethod) {
+        return `${serverConfigInput.shutdownMethod.abbr}, ${serverConfigInput.shutdownMethod.metric}`;
+    }
+    return '';
+});
 
 // Computed property to generate the cron expression from weekdays and time
 const generatedCronExpression = computed(() => {
@@ -193,53 +203,59 @@ function parseCronExpression(cronExpression) {
 }
 
 async function getServerSettings() {
-    settingsDialogLoading.value = true;
-    const serverSettings = await serverStore.getServerConfig();
-    alarmThreshold.value = serverSettings?.alarmThreshold || null;
-    alarmEvaluationPeriod.value = serverSettings?.alarmEvaluationPeriod || null;
-    runCommand.value = serverSettings?.runCommand || null;
-    workingDir.value = serverSettings?.workDir || null;  
-    groupMembers.value = JSON.parse(serverSettings.groupMembers);
-    
-    // Determine alarm type and set the appropriate alarmMetric
-    if (serverSettings?.alarmSchedule) {
-        alarmMetric.value = { metric: 'Schedule', abbr: 'Schedule' };
-        parseCronExpression(serverSettings.alarmSchedule);
-    } else {
-        // Set to the existing metric or default to CPUUtilization
-        const metricName = serverSettings?.alarmMetric || 'CPUUtilization';
-        const metricItem = alarmMetricItems.value.find(item => item.metric === metricName);
-        alarmMetric.value = metricItem || alarmMetricItems.value[0];
+    try {
+        settingsDialogLoading.value = true;
+        const serverSettings = await serverStore.getServerConfig();
+        
+        if (!serverSettings) {
+            return;
+        }
+
+        // Update individual properties of serverConfigInput
+        serverConfigInput.alarmThreshold = Number(serverSettings.alarmThreshold) || 0;
+        serverConfigInput.alarmEvaluationPeriod = Number(serverSettings.alarmEvaluationPeriod) || 0;
+        serverConfigInput.runCommand = serverSettings.runCommand || null;
+        serverConfigInput.workDir = serverSettings.workDir || null;
+        serverConfigInput.groupMembers = JSON.parse(serverSettings.groupMembers || '[]');
+        serverConfigInput.scheduleExpression = serverSettings.scheduleExpression || '';
+
+        // Set shutdown method based on server settings
+        const methodFromServer = serverSettings.shutdownMethod || 'CPUUtilization';
+        console.log(methodFromServer)
+        serverConfigInput.shutdownMethod = shutdownMethodOptions.value.find(
+            option => option.metric === methodFromServer
+        ) || shutdownMethodOptions.value[0];
+
+        // If there's a schedule expression, parse it
+        if (serverConfigInput.scheduleExpression) {
+            parseCronExpression(serverConfigInput.scheduleExpression);
+        }
+        
+    } catch (error) {
+        console.error('Error loading server settings:', error);
+    } finally {
+        settingsDialogLoading.value = false;
     }
-    settingsDialogLoading.value = false;
 }
 
 function resetForm() {
-    alarmThreshold.value = null;
-    alarmEvaluationPeriod.value = null;
-    selectedWeekdays.value = [];
-    selectedTime.value = null;
-    runCommand.value = null;
-    workingDir.value = null;
-    alarmMetric.value = alarmMetricItems.value[0]; // Default to first option
+        serverConfigInput.alarmThreshold = 0,
+        serverConfigInput.alarmEvaluationPeriod = 0,
+        serverConfigInput.runCommand = "",
+        serverConfigInput.workDir = "",
+        serverConfigInput.groupMember = '[]',
+        serverConfigInput.scheduleExpression = "",
+        serverConfigInput.shutdownMethod = shutdownMethodOptions.value[0].metric                
 }
 
 async function onSubmit() {
     settingsForm.value?.validate().then(async ({ valid: isValid }) => {
         if (isValid) {
             settingsDialogLoading.value = true;
-            const isSchedule = alarmMetric.value.metric === 'Schedule';
+
+            serverConfigInput.scheduleExpression = generatedCronExpression()
             
-            const input = {
-                id: serverStore.selectedServer.id,
-                alarmMetric: isSchedule ? null : alarmMetric.value.metric,
-                alarmThreshold: isSchedule ? null : parseFloat(alarmThreshold.value),
-                alarmEvaluationPeriod: isSchedule ? null : parseInt(alarmEvaluationPeriod.value, 10),
-                alarmSchedule: isSchedule ? generatedCronExpression.value : null,
-                runCommand: runCommand.value ?? '',
-                workDir: workingDir.value ?? ''
-            }
-            const serverSettings = await serverStore.putServerConfig(input);
+            const serverSettings = await serverStore.putServerConfig(serverConfigInput);
             if (serverSettings === serverStore.selectedServer.id) {
                 snackText.value = "Setting Updated Successfully";
                 snackbar.value = true;
@@ -250,6 +266,7 @@ async function onSubmit() {
         }
     })
 }
+
 
 async function writeLog(msg) {
     // Calculating expiration time
@@ -285,16 +302,37 @@ async function addUser() {
 
 <template>
     <!-- Main buttons to open dialogs -->
-    <div class="d-flex mb-4">
-        <v-btn color="primary" class="mr-2" @click="openConfigDialog">
-            <v-icon left>mdi-cog</v-icon>
-            Server Configuration
-        </v-btn>
-        <v-btn color="secondary" @click="openUsersDialog">
-            <v-icon left>mdi-account-group</v-icon>
-            Manage Users
-        </v-btn>
-    </div>
+    <div class="d-flex mb-4 pt-4 pl-4">
+    <v-tooltip top>
+      <template v-slot:activator="{ on, attrs }">
+        <v-icon
+          size="large"
+          class="mr-2 custom-icon"
+          v-bind="attrs"
+          v-on="on"
+          @click="openConfigDialog"
+        >
+        mdi-cog-outline
+        </v-icon>
+      </template>
+      <span>Server Configuration</span>
+    </v-tooltip>
+
+    <v-tooltip top>
+      <template v-slot:activator="{ on, attrs }">
+        <v-icon
+          size="large"
+          class="custom-icon"
+          v-bind="attrs"
+          v-on="on"
+          @click="openUsersDialog"
+        >
+          mdi-account-plus-outline
+        </v-icon>
+      </template>
+      <span>Manage Users</span>
+    </v-tooltip>
+  </div>
 
     <!-- Configuration Dialog -->
     <v-dialog v-model="configDialogVisible" max-width="800px">
@@ -318,46 +356,28 @@ async function addUser() {
                             </v-col>
                         </v-row>
 
-                        <!-- Alarm Method Selection -->
+                        <!-- Method Selection -->
                         <v-row>
                             <v-col cols="4">
                                 <v-select 
-                                    :items="alarmMetricItems" 
+                                    :items="shutdownMethodOptions" 
                                     item-title="abbr" 
                                     item-value="metric"
-                                    :hint="`${alarmMetric.abbr}, ${alarmMetric.metric}`" 
+                                    :hint="selectedMethodHint" 
                                     dense 
                                     label="Shutdown Method" 
                                     single-line 
                                     persistent-hint 
                                     return-object 
-                                    v-model="alarmMetric"
-                                    :rules="isRequiredOnlyRules">
+                                    v-model="serverConfigInput.shutdownMethod"
+                                    :rules="isRequiredOnlyRules"
+                                >
                                 </v-select>
                             </v-col>
                         </v-row>
 
-                        <!-- Metric-based alarm configuration -->
-                        <v-row v-if="alarmMetric.metric !== 'Schedule'">
-                            <v-col cols="12">
-                                <span class="font-weight-light">The alarm configuration evaluates if the {{ alarmMetric.abbr }}
-                                    utilization is under the threshold for the specified number of evaluation periods to
-                                    shutdown the instance.</span>
-                            </v-col>
-                            <v-col cols="4">
-                                <v-text-field dense label="Threshold"
-                                    hint="Number of {{ alarmMetric.abbr }} the instance has to be below to alarm" v-model="alarmThreshold"
-                                    :rules="onlyNumbersRules"></v-text-field>
-                            </v-col>
-                            <v-col cols="4">
-                                <v-text-field dense label="Evaluation Period"
-                                    hint="Number of data points per minute to evaluate." v-model="alarmEvaluationPeriod"
-                                    :rules="onlyNumbersRules"></v-text-field>
-                            </v-col>
-                        </v-row>
-
                         <!-- Schedule-based alarm configuration -->
-                        <v-row v-if="alarmMetric.metric === 'Schedule'">
+                        <v-row v-if="serverConfigInput.shutdownMethod?.metric === 'Schedule'">
                             <v-col cols="12">
                                 <span class="font-weight-light">Set a schedule to automatically shutdown the server on specific days and time.</span>
                             </v-col>
@@ -393,9 +413,45 @@ async function addUser() {
                                 <v-alert type="info" variant="tonal" density="compact">
                                     The server will shutdown at {{ selectedTime }} on 
                                     {{ selectedWeekdays.includes('ALL') ? 'all days' : 
-                                       selectedWeekdays.filter(day => day !== 'ALL').join(', ') }}
+                                    selectedWeekdays.filter(day => day !== 'ALL').join(', ') }}
                                     <br>
                                     <small>Cron expression: {{ generatedCronExpression }}</small>
+                                </v-alert>
+                            </v-col>
+                        </v-row>
+
+                        <!-- Metric-based alarm configuration -->
+                        <v-row v-if="serverConfigInput.shutdownMethod && serverConfigInput.shutdownMethod.metric !== 'Schedule'">
+                            <v-col cols="12">
+                                <span class="font-weight-light">Set threshold and evaluation period for automatic server shutdown based on {{ serverConfigInput.shutdownMethod.abbr }}.</span>
+                            </v-col>
+                            <v-col cols="6">
+                                <v-text-field
+                                    v-model="serverConfigInput.alarmThreshold"
+                                    dense
+                                    label="Threshold"
+                                    :hint="serverConfigInput.shutdownMethod.metric === 'CPUUtilization' ? 'Percentage of CPU utilization' : 'Number of connected users'"
+                                    persistent-hint
+                                    :suffix="serverConfigInput.shutdownMethod.metric === 'CPUUtilization' ? '%' : ''"
+                                    :rules="onlyNumbersRules"
+                                ></v-text-field>
+                            </v-col>
+                            <v-col cols="6">
+                                <v-text-field
+                                    v-model="serverConfigInput.alarmEvaluationPeriod"
+                                    dense
+                                    label="Evaluation Period"
+                                    hint="Number of minutes to evaluate the threshold"
+                                    persistent-hint
+                                    suffix="minutes"
+                                    :rules="onlyNumbersRules"
+                                ></v-text-field>
+                            </v-col>
+                            <v-col cols="12">
+                                <v-alert type="info" variant="tonal" density="compact">
+                                    The server will shutdown when {{ serverConfigInput.shutdownMethod.abbr }} is below 
+                                    {{ serverConfigInput.alarmThreshold }}{{ serverConfigInput.shutdownMethod.metric === 'CPUUtilization' ? '%' : ' users' }} 
+                                    for {{ serverConfigInput.alarmEvaluationPeriod }} minutes
                                 </v-alert>
                             </v-col>
                         </v-row>
@@ -414,7 +470,7 @@ async function addUser() {
                             <v-col cols="6">
                                 <v-text-field 
                                     dense 
-                                    v-model="workingDir" 
+                                    v-model="serverConfigInput.workingDir" 
                                     label="Working directory"
                                     hint="Directory where the Minecraft server is located"
                                     persistent-hint
@@ -424,7 +480,7 @@ async function addUser() {
                             <v-col cols="6">
                                 <v-text-field 
                                     dense 
-                                    v-model="runCommand" 
+                                    v-model="serverConfigInput.runCommand" 
                                     label="Run command"
                                     hint="Command to start the Minecraft server"
                                     persistent-hint
@@ -434,6 +490,7 @@ async function addUser() {
                         </v-row>
                     </v-container>
                 </v-form>
+
             </v-card-text>
             <v-card-actions>
                 <v-spacer></v-spacer>
@@ -502,3 +559,14 @@ async function addUser() {
         </template>
     </v-snackbar>
 </template>
+
+<style scoped>
+.custom-icon {
+  color: #9e9e9e; /* Gray color by default */
+  transition: color 0.3s ease;
+}
+
+.custom-icon:hover {
+  color: #1976d2; /* Primary blue color on hover */
+}
+</style>

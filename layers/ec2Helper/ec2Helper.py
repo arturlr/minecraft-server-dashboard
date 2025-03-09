@@ -51,6 +51,8 @@ class Ec2Utils:
             # returning following the Appsync Schema for ServerConfig
             return {
                 'id': instance_id,
+                'shutdownMethod': tag_mapping.get('shutdownmethod', ''),  
+                'scheduleExpression': tag_mapping.get('scheduleexpression', ''),
                 'alarmType': tag_mapping.get('alarmtype', ''),
                 'alarmThreshold': tag_mapping.get('alarmthreshold', ''),
                 'alarmEvaluationPeriod': tag_mapping.get('alarmevaluationperiod', ''),
@@ -72,8 +74,10 @@ class Ec2Utils:
 
         logger.info("Setting instance attributes for " + instance_id)
 
+        shutdownMethod = input.get('shutdownMethod', '')
+        scheduleExpression = input.get('scheduleExpression', '')
         alarm_type = input.get('alarmType', '')
-        alarm_threshold = input.get('alarmThreshold', '20')
+        alarm_threshold = input.get('alarmThreshold', '')
         alarmEvaluationPeriod = input.get('alarmEvaluationPeriod', '35')
         run_command = input.get('runCommand', '')
         work_dir = input.get('workDir', '')

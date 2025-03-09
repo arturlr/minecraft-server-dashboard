@@ -9,6 +9,9 @@ import { useServerStore } from "../stores/server";
 import * as mutations from "../graphql/mutations";
 import * as queries from "../graphql/queries";
 
+const loading = ref(false)
+const copying = ref(false)
+
 const userStore = useUserStore();
 const serverStore = useServerStore()
 
@@ -36,6 +39,20 @@ const serverName = computed(() => {
   }
 });
 
+const formatRunningTime = computed((minutes) => {
+    const hours = minutes / 60;
+    if (hours < 1) {
+      return `${Math.round(minutes)} minutes`;
+    } else if (hours < 24) {
+      return `${hours.toFixed(1)} hours`;
+    } else {
+      const days = Math.floor(hours / 24);
+      const remainingHours = (hours % 24).toFixed(1);
+      return `${days}d ${remainingHours}h`;
+    }
+  })
+
+
 const iamServerCompliant = computed(() => {
   return serverStore.selectedServer.iamStatus === 'ok' ? true : false
 });
@@ -48,20 +65,20 @@ async function copyToClipboard(text) {
   }
 }
 
-function copyPublicIp() {
-  const ip = document.querySelector('#publicIp').value + ':25565';
-
-  copyToClipboard(ip)
-    .then(() => {
-      snackbar.value = true
-      snackText.value = "Server IP Address copied!"
-      snackColor.value = "primary"
-    })
-    .catch(() => {
-      snackbar.value = true
-      snackText.value = "copy failed!"
-      snackColor.value = "error"
-    });
+async function copyPublicIp() {
+  copying.value = true
+  try {
+    await copyToClipboard(document.querySelector('#publicIp').value + ':25565')
+    snackbar.value = true
+    snackText.value = "Server IP Address copied!"
+    snackColor.value = "success"
+  } catch (err) {
+    snackbar.value = true
+    snackText.value = "Copy failed!"
+    snackColor.value = "error"
+  } finally {
+    copying.value = false
+  }
 }
 
 async function triggerAction(action) {
@@ -92,12 +109,30 @@ async function triggerAction(action) {
   }
 }
 
+const getServerStateColor = computed(() => {
+  switch(serverStore.selectedServer.state) {
+    case 'running': return 'success'
+    case 'stopped': return 'error'
+    default: return 'warning'
+  }
+})
+
+const getServerStateIcon = computed(() => {
+  switch(serverStore.selectedServer.state) {
+    case 'running': return 'mdi-server-network'
+    case 'stopped': return 'mdi-server-off'
+    default: return 'mdi-server-network-off'
+  }
+})
+
+
 </script>
 
 <template>
   <v-layout class="rounded rounded-md">
     <Header />
-    <v-main class="d-flex justify-center">
+    <v-main>
+      <v-container fluid class="pa-4">
       <v-snackbar v-model="snackbar" :timeout="snackTimeout" :color="snackColor" outlined left centered text>
         {{ snackText }}
 
@@ -109,23 +144,33 @@ async function triggerAction(action) {
       </v-snackbar>
 
       <div v-if="serverStore.selectedServer.id != null">
-        <v-card class="pa-6" max-width="600">
+         <!-- Server Card -->
+         <v-row justify="center">
+          <v-col cols="12" sm="10" md="8" lg="6">
+            <v-card elevation="2" class="rounded-lg">
 
-          <v-card-item>
+              <v-card-item>
+                <v-row align="center">
+                  <v-col>
+                    <v-card-title class="text-h5 font-weight-bold">
+                      {{ serverName }}
+                      <v-chip
+                        :color="serverStore.selectedServer.state === 'running' ? 'success' : 'error'"
+                        size="small"
+                        class="ml-2"
+                        variant="elevated"
+                      >
+                        {{ serverStore.selectedServer.state }}
+                      </v-chip>
+                    </v-card-title>
+                    <v-card-subtitle class="pt-2">
+                      <v-icon icon="mdi-server" class="mr-1"></v-icon>
+                      {{ serverStore.selectedServer.id }}
+                    </v-card-subtitle>
+                  </v-col>
+                </v-row>
+              </v-card-item>
 
-          <v-card-title>{{ serverName }}</v-card-title>
-
-          <v-card-subtitle>
-            {{ serverStore.selectedServer.id }}
-            <v-chip
-              size="small"
-              :color="serverStore.selectedServer.initStatus === 'ok' ? 'success' : 'warning'"
-              variant="text"
-            >
-            <v-icon icon="mdi-check-circle" start></v-icon>
-          </v-chip>
-          </v-card-subtitle>
-        </v-card-item>
 
           <v-alert v-if="!iamServerCompliant" closable dense type="error"> 
             <v-row align="center">
@@ -141,20 +186,15 @@ async function triggerAction(action) {
           </v-alert>
           
           <v-text-field 
-            class="pb-5" 
-            label="Public IP" 
-            id="publicIp" 
-            :hint="serverStore.selectedServer.state"
-            persistent-hint
-            v-model="serverStore.selectedServer.publicIp" readonly=true>
+            readonly
+            label="Server Address"
+            class="mt-4"
+            variant="outlined"
+            hide-details
+            v-model="serverStore.selectedServer.publicIp">
 
             <template v-slot:prepend-inner>
-              <v-icon icon="mdi-power-standby" @click="powerButtonDialog = true" size="large" :color="serverStore.selectedServer.state === 'stopped'
-        ? 'error'
-        : serverStore.selectedServer.state === 'running'
-          ? 'success'
-          : 'warning'
-        "></v-icon>
+              <v-icon icon="mdi-power-standby" @click="powerButtonDialog = true" size="large" :color="getServerStateColor" />          
             </template>
 
             <template v-slot:append-inner>
@@ -163,17 +203,20 @@ async function triggerAction(action) {
 
           </v-text-field>
 
-          <ServerCharts /> 
-          
           <ServerSettings /> 
 
-          <span class="text-caption">Hours running: {{ (serverStore.selectedServer.runningMinutes / 60).toFixed(1)
-            }}</span>
+          <ServerCharts /> 
+
+          <span {{ formatRunningTime(serverStore.selectedServer.runningMinutes) }} />
 
 
         </v-card>
         
-      </div>
+
+      </v-col>
+      </v-row>
+    </div>
+    </v-container>
     </v-main>
   </v-layout>
 
@@ -218,3 +261,15 @@ async function triggerAction(action) {
   </v-dialog>
 
 </template>
+
+<style scoped>
+.time-chip {
+  background-color: #f5f5f5 !important;
+  color: #757575 !important;
+  font-size: 0.875rem;
+}
+
+.custom-icon {
+  color: #9e9e9e;
+}
+</style>

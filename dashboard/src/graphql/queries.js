@@ -67,7 +67,8 @@ query GetServerConfig($id: String!) {
   getServerConfig(id: $id) {
     runCommand
     workDir
-    alarmType
+    shutdownMethod
+    scheduleExpression
     alarmThreshold
     alarmEvaluationPeriod
     groupMembers

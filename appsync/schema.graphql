@@ -48,10 +48,10 @@ input ServerActionInput {
 type ServerConfig @aws_iam
 @aws_cognito_user_pools {
 	id: String!
-	alarmType: String
+	shutdownMethod: String
+	scheduleExpression: String
 	alarmThreshold: Float
 	alarmEvaluationPeriod: Int
-	alarmSchedule: String
 	runCommand: String
 	workDir: String
 	groupMembers: AWSJSON
@@ -59,10 +59,10 @@ type ServerConfig @aws_iam
 
 input ServerConfigInput {
 	id: String!
-	alarmType: String
+	shutdownMethod: String
+	scheduleExpression: String
 	alarmThreshold: Float
 	alarmEvaluationPeriod: Int
-	alarmSchedule: String
 	runCommand: String
 	workDir: String
 	groupMembers: AWSJSON
