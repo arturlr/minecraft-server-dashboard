@@ -133,18 +133,12 @@ Resources:
           CodeUri: ../../appsync/resolvers/getById.js
       Resolvers:
         Mutation: 
-          # putServerConfig:
-          #   Runtime:
-          #     Name: APPSYNC_JS
-          #     Version: "1.0.0"
-          #   Pipeline:
-          #     - serverActionFunction
           putServerConfig:
             Runtime:
               Name: APPSYNC_JS
               Version: "1.0.0"
             Pipeline:
-              - putServerRecordFunction
+              - serverActionFunction
           updateServerConfig:
             Runtime:
               Name: APPSYNC_JS
@@ -206,12 +200,12 @@ Resources:
               Version: "1.0.0"
             Pipeline:
               - serverActionFunction
-          # getServerConfig:
-          #   Runtime:
-          #     Name: APPSYNC_JS
-          #     Version: "1.0.0"
-          #   Pipeline:
-          #     - getServerRecordFunction
+          getServerUsers:
+            Runtime:
+              Name: APPSYNC_JS
+              Version: "1.0.0"
+            Pipeline:
+              - serverActionFunction
           getMonthlyCost:
             Runtime:
               Name: APPSYNC_JS
@@ -472,6 +466,22 @@ Resources:
                 - iam:PassRole
               Resource: 
                 Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-IAMEC2InstanceProfileArn"
+        - Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Action:
+                - events:PutRule
+                - events:PutTargets
+                - events:DeleteRule
+                - events:RemoveTargets
+                - events:DisableRule
+                - events:EnableRule
+                - events:TagResource
+                - events:UntagResource
+                - events:ListTagsForResource
+                - events:ListRules
+                - events:ListTargetsByRule
+              Resource: !Sub "arn:aws:events:${AWS::Region}:${AWS::AccountId}:rule/*"
         - Version: "2012-10-17" # Policy Document
           Statement:
             - Effect: Allow
@@ -520,6 +530,22 @@ Resources:
             ParameterName: !Sub "${ProjectName}*"
         # - DynamoDBCrudPolicy:
         #     TableName: !Ref InstancesTable
+        - Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Action:
+                - events:PutRule
+                - events:PutTargets
+                - events:DeleteRule
+                - events:RemoveTargets
+                - events:DisableRule
+                - events:EnableRule
+                - events:TagResource
+                - events:UntagResource
+                - events:ListTagsForResource
+                - events:ListRules
+                - events:ListTargetsByRule
+              Resource: !Sub "arn:aws:events:${AWS::Region}:${AWS::AccountId}:rule/*"
         - Version: "2012-10-17" # Policy Document
           Statement:
             - Effect: Allow

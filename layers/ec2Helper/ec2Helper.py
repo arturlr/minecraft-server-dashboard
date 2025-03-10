@@ -1,3 +1,4 @@
+import sys
 import boto3
 import logging
 import os
@@ -5,6 +6,11 @@ import json
 from datetime import datetime, timezone
 from botocore.exceptions import ClientError
 from boto3.dynamodb.conditions import Key, Attr
+
+sys.path.insert(0, '/opt/utilHelper')
+import utilHelper
+
+utl = utilHelper.Utils()
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -18,6 +24,7 @@ class Ec2Utils:
         self.ec2_client = boto3.client('ec2')
         self.ssm = boto3.client('ssm')        
         self.ct_client = boto3.client('cloudtrail')        
+        self.cw_client = boto3.client('cloudwatch')
         self.appValue = os.getenv('TAG_APP_VALUE')
         self.ec2InstanceProfileArn = os.getenv('EC2_INSTANCE_PROFILE_ARN')
 
@@ -66,44 +73,24 @@ class Ec2Utils:
             return None  # or handle this error as appropriate
         
     def set_instance_attributes_to_tags(self,input):
-        logger.info("------- set_instance_attributes_to_tags")
-
         instance_id = input.get('id', None)
         if not instance_id:
             raise ValueError("Instance ID is required")
 
         logger.info("Setting instance attributes for " + instance_id)
 
-        shutdownMethod = input.get('shutdownMethod', '')
-        scheduleExpression = input.get('scheduleExpression', '')
-        alarm_type = input.get('alarmType', '')
-        alarm_threshold = input.get('alarmThreshold', '')
-        alarmEvaluationPeriod = input.get('alarmEvaluationPeriod', '35')
-        run_command = input.get('runCommand', '')
-        work_dir = input.get('workDir', '')
+        serverConfigInput = {k: v for k, v in input.items() if k != 'id' and v is not None and v != ''}
 
         # Getting current EC2 Tags
-        ec2_attrs = self.get_instance_attributes(instance_id)
+        ec2_attrs = self.get_instance_attributes_from_tags(instance_id)
 
         ec2_tag_mapping = {
-            self.capitalize_first_letter('alarmType'): alarm_type,
-            self.capitalize_first_letter('alarmThreshold'): alarm_threshold,
-            self.capitalize_first_letter('alarmEvaluationPeriod'): alarmEvaluationPeriod,
-            self.capitalize_first_letter('runCommand'): run_command,
-            self.capitalize_first_letter('workDir'): work_dir
+            utl.capitalize_first_letter(key): value 
+            for key, value in serverConfigInput.items()
         }
 
-        appsync_server_config_attrs = {
-            'id': instance_id,
-            'alarmType': alarm_type,
-            'alarmThreshold': alarm_threshold,
-            'alarmEvaluationPeriod': alarmEvaluationPeriod,
-            'runCommand': run_command,
-            'workDir': work_dir
-        }
-
-        logger.info(f"input : {input}")
-        logger.info(f"ec2_tag_mapping : {ec2_tag_mapping}")
+        # logger.info(f"input : {input}")
+        # logger.info(f"ec2_tag_mapping : {ec2_tag_mapping}")
         
         try:
             # Delete existing tags based on tag_mapping
@@ -118,12 +105,114 @@ class Ec2Utils:
                 Tags=[{'Key': key, 'Value': str(value) } for key, value in ec2_tag_mapping.items()]
             )
             logger.info(f"Tags set successfully for instance {instance_id}")
-
-            return appsync_server_config_attrs
-
+ 
+            # return serverConfigInput keys and values
+            return {
+                'id': instance_id,
+                **serverConfigInput
+            }
+           
         except Exception as e:
             logger.error(f"Error setting tags: {e}")
+
+    def update_alarm(self, instance_id, alarm_metric, alarm_threshold, alarm_evaluation_period):
+        logger.info("------- update_alarm : " + instance_id)
+
+        dimensions=[]
+        statistic="Average" 
+        namespace="CWAgent"
+        dimensions.append({'Name': 'InstanceId','Value': instance_id})
+        if alarm_metric == "CPUUtilization":
+            alarmMetricName = "cpu_usage_active"        
+            dimensions.append({'Name': 'cpu','Value': "cpu-total"})
+        elif alarm_metric == "Connections":
+            alarmMetricName = "UserCount"
+            statistic="Maximum"
+            namespace="MinecraftDashboard"
+
+        self.cw_client.put_metric_alarm(
+            AlarmName=instance_id + "-" + "minecraft-server",
+            ActionsEnabled=True,
+            AlarmActions=["arn:aws:automate:" + aws_region + ":ec2:stop"],
+            InsufficientDataActions=[],
+            MetricName=alarmMetricName,
+            Namespace=namespace,
+            Statistic=statistic,
+            Dimensions=dimensions,
+            Period=60,
+            EvaluationPeriods=int(alarm_evaluation_period),
+            DatapointsToAlarm=int(alarm_evaluation_period),
+            Threshold=int(alarm_threshold),
+            TreatMissingData="missing",
+            ComparisonOperator="LessThanOrEqualToThreshold"   
+        )
+
+        logger.info("Alarm configured to " + alarm_metric + " and " + alarm_threshold)
+    
+    def remove_alarm(self, instance_id):
+        logger.info("------- remove_alarm : " + instance_id)
+
+        alarm_name = instance_id + "-" + "minecraft-server"
         
+        # Check if alarm exists before deleting
+        try:
+            alarms = self.cw_client.describe_alarms(AlarmNames=[alarm_name])
+            if alarms['MetricAlarms']:
+                self.cw_client.delete_alarms(
+                    AlarmNames=[
+                        alarm_name
+                    ]
+                )
+                logger.info(f"Alarm {alarm_name} deleted successfully")
+            else:
+                logger.info(f"Alarm {alarm_name} does not exist")
+        except ClientError as e:
+            logger.error(f"Error checking/deleting alarm: {e}")
+
+    def configure_shutdown_event(self, instance_id, cron_expression):
+        eventbridge = boto3.client('events')
+        
+        # Create the rule with cron expression
+        # Example: shutdown at 11:00 PM UTC every day
+        rule_name = f"shutdown-for-{instance_id}"
+        eventbridge.put_rule(
+            Name=rule_name,
+            ScheduleExpression=cron_expression,
+            State='ENABLED'
+        )
+        
+        # Create the target (Lambda function or SSM Automation)
+        eventbridge.put_targets(
+            Rule=rule_name,
+            Targets=[{
+                'Id': f"shutdown-target-{instance_id}",
+                'Arn': f"arn:aws:automate:{aws_region}:ec2:stop",
+                'Input': json.dumps({"InstanceId": instance_id})
+            }]
+        )
+
+    def remove_shutdown_event(self, instance_id):
+        eventbridge = boto3.client('events')
+
+        # Remove the rule and target
+        rule_name = f"shutdown-{instance_id}"
+        try:
+            # Check if rule exists
+            rules = eventbridge.list_rules(NamePrefix=rule_name)
+            if not rules.get('Rules'):
+                logger.info(f"No shutdown event rule found for {instance_id}")
+                return
+                
+            eventbridge.remove_targets(
+                Rule=rule_name,
+                Ids=[f"shutdown-target-{instance_id}"]
+            )
+            eventbridge.delete_rule(Name=rule_name)
+            logger.info(f"Shutdown event removed for {instance_id}")
+
+        except ClientError as e:
+            logger.error(f"Error removing shutdown event: {e}")
+
     def get_total_hours_running_per_month(self, instanceId):
         logger.info(f"------- get_total_hours_running_per_month {instanceId}")
 
@@ -174,8 +263,8 @@ class Ec2Utils:
 
         return total_minutes
 
-    def extract_state_event_time(self, evt, previousState, instanceId):
-        logger.info(f"------- extract_state_event_time {instanceId}")
+    def extract_state_event_time(self, evt, previous_state, instance_id):
+        logger.info(f"------- extract_state_event_time {instance_id}")
 
         ct_event = evt.get('CloudTrailEvent')
         if ct_event:
@@ -187,14 +276,14 @@ class Ec2Utils:
                     items = instances_set.get('items')
                     if items:
                         for item in items:
-                            if item.get('instanceId') == instanceId and item['previousState']['name'] == previousState:
+                            if item.get('instanceId') == instance_id and item['previousState']['name'] == previous_state:
                                 return ct_event['eventTime']
         return None
     
     def list_instances_by_user_group(self, user_groups):
         user_instances = []
         for group_name in user_groups:
-            # check if group_name starts with i- (instanceId)
+            # check if group_name starts with i- (instance_id)
             if not group_name.startswith("i-"):
                 continue
 
@@ -218,8 +307,8 @@ class Ec2Utils:
             "TotalInstances": total_instances
         }
 
-    def list_server_by_id(self, instanceId):
-        response = self.ec2_client.describe_instances(InstanceIds=[instanceId])
+    def list_server_by_id(self, instance_id):
+        response = self.ec2_client.describe_instances(InstanceIds=[instance_id])
 
         if not response["Reservations"]:
             return []
@@ -352,11 +441,11 @@ class Ec2Utils:
         
         return { 'instanceId': instance_id, 'initStatus': initStatus, 'iamStatus': iamStatus }
 
-    def describe_instance_attributes(self, instanceId):
-        logger.info(f"------- describe_instance_attributes: {instanceId}")
+    def describe_instance_attributes(self, instance_id):
+        logger.info(f"------- describe_instance_attributes: {instance_id}")
         response = self.ec2_client.describe_instance_attribute(
             Attribute='userData',
-            InstanceId=instanceId
+            instanceId=instance_id
         )
 
    

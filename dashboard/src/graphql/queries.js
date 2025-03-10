@@ -71,7 +71,20 @@ query GetServerConfig($id: String!) {
     scheduleExpression
     alarmThreshold
     alarmEvaluationPeriod
-    groupMembers
   }
 }
+`;
+
+export const getServerUsers = /* GraphQL */ `
+  query GetServerUsers($id: String!) {
+    getServerUsers(id: $id) {
+      id
+      email
+      fullName
+      role
+      // lastLogin
+      // createdAt
+      // updatedAt
+    }
+  }
 `;

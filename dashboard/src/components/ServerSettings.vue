@@ -19,16 +19,20 @@ const shutdownMethodOptions = ref([
     { metric: 'Schedule', abbr: 'Schedule' },
 ]);
 
-// ServerConfig Input (from Schema)
+const selectedShutdownMethod = ref(shutdownMethodOptions.value[0]) // Select first item by default
+
+// ServerConfig Input - groupMembers will be processed 
 const serverConfigInput = reactive({
+    id: null,
     alarmThreshold: 0,
     alarmEvaluationPeriod: 0,
     runCommand: null,
     workDir: null,
-    groupMembers: [],
     scheduleExpression: '',
     shutdownMethod: null 
 });
+
+const groupMembers = ref([])
 
 // Variables for weekday scheduling
 const selectedWeekdays = ref([]);
@@ -146,12 +150,10 @@ function generateUniqueId() {
 }
 
 function openConfigDialog() {
-  getServerSettings();
   configDialogVisible.value = true;
 }
 
 function openUsersDialog() {
-  getServerSettings();
   usersDialogVisible.value = true;
 }
 
@@ -211,24 +213,31 @@ async function getServerSettings() {
             return;
         }
 
-        // Update individual properties of serverConfigInput
-        serverConfigInput.alarmThreshold = Number(serverSettings.alarmThreshold) || 0;
-        serverConfigInput.alarmEvaluationPeriod = Number(serverSettings.alarmEvaluationPeriod) || 0;
-        serverConfigInput.runCommand = serverSettings.runCommand || null;
-        serverConfigInput.workDir = serverSettings.workDir || null;
-        serverConfigInput.groupMembers = JSON.parse(serverSettings.groupMembers || '[]');
-        serverConfigInput.scheduleExpression = serverSettings.scheduleExpression || '';
+        // Users are processed separately 
+        const updates = {
+            id: serverStore.selectedServer.id,
+            alarmThreshold: Number(serverSettings.alarmThreshold) || 0,
+            alarmEvaluationPeriod: Number(serverSettings.alarmEvaluationPeriod) || 0,
+            runCommand: serverSettings.runCommand || null,
+            workDir: serverSettings.workDir || null,            
+            scheduleExpression: serverSettings.scheduleExpression || '',
+            shutdownMethod: null
+        };
 
-        // Set shutdown method based on server settings
+        groupMembers.value = JSON.parse(serverSettings.groupMembers || '[]')
+
+        // Find the shutdown method
         const methodFromServer = serverSettings.shutdownMethod || 'CPUUtilization';
-        console.log(methodFromServer)
-        serverConfigInput.shutdownMethod = shutdownMethodOptions.value.find(
+        updates.shutdownMethod = shutdownMethodOptions.value.find(
             option => option.metric === methodFromServer
-        ) || shutdownMethodOptions.value[0];
+        ) || shutdownMethodOptions.value[0].metric;
 
-        // If there's a schedule expression, parse it
-        if (serverConfigInput.scheduleExpression) {
-            parseCronExpression(serverConfigInput.scheduleExpression);
+        // Update all values at once
+        Object.assign(serverConfigInput, updates);
+
+        // Handle schedule expression after the state update
+        if (serverSettings.scheduleExpression) {
+            parseCronExpression(serverSettings.scheduleExpression);
         }
         
     } catch (error) {
@@ -238,12 +247,13 @@ async function getServerSettings() {
     }
 }
 
+
 function resetForm() {
         serverConfigInput.alarmThreshold = 0,
         serverConfigInput.alarmEvaluationPeriod = 0,
         serverConfigInput.runCommand = "",
         serverConfigInput.workDir = "",
-        serverConfigInput.groupMember = '[]',
+        //serverConfigInput.groupMember = '[]',
         serverConfigInput.scheduleExpression = "",
         serverConfigInput.shutdownMethod = shutdownMethodOptions.value[0].metric                
 }
@@ -253,7 +263,9 @@ async function onSubmit() {
         if (isValid) {
             settingsDialogLoading.value = true;
 
-            serverConfigInput.scheduleExpression = generatedCronExpression()
+            serverConfigInput.shutdownMethod = selectedShutdownMethod.value.metric
+            serverConfigInput.id = serverStore.selectedServer.id
+            serverConfigInput.scheduleExpression = generatedCronExpression.value
             
             const serverSettings = await serverStore.putServerConfig(serverConfigInput);
             if (serverSettings === serverStore.selectedServer.id) {
@@ -368,8 +380,8 @@ async function addUser() {
                                     label="Shutdown Method" 
                                     single-line 
                                     persistent-hint 
-                                    return-object 
-                                    v-model="serverConfigInput.shutdownMethod"
+                                    return-object                                     
+                                    v-model="selectedShutdownMethod"
                                     :rules="isRequiredOnlyRules"
                                 >
                                 </v-select>
@@ -377,7 +389,7 @@ async function addUser() {
                         </v-row>
 
                         <!-- Schedule-based alarm configuration -->
-                        <v-row v-if="serverConfigInput.shutdownMethod?.metric === 'Schedule'">
+                        <v-row v-if="selectedShutdownMethod?.metric === 'Schedule'">
                             <v-col cols="12">
                                 <span class="font-weight-light">Set a schedule to automatically shutdown the server on specific days and time.</span>
                             </v-col>
@@ -421,18 +433,18 @@ async function addUser() {
                         </v-row>
 
                         <!-- Metric-based alarm configuration -->
-                        <v-row v-if="serverConfigInput.shutdownMethod && serverConfigInput.shutdownMethod.metric !== 'Schedule'">
+                        <v-row v-if="selectedShutdownMethod && selectedShutdownMethod.metric !== 'Schedule'">
                             <v-col cols="12">
-                                <span class="font-weight-light">Set threshold and evaluation period for automatic server shutdown based on {{ serverConfigInput.shutdownMethod.abbr }}.</span>
+                                <span class="font-weight-light">Set threshold and evaluation period for automatic server shutdown based on {{ selectedShutdownMethod.abbr }}.</span>
                             </v-col>
                             <v-col cols="6">
                                 <v-text-field
                                     v-model="serverConfigInput.alarmThreshold"
                                     dense
                                     label="Threshold"
-                                    :hint="serverConfigInput.shutdownMethod.metric === 'CPUUtilization' ? 'Percentage of CPU utilization' : 'Number of connected users'"
+                                    :hint="selectedShutdownMethod.metric === 'CPUUtilization' ? 'Percentage of CPU utilization' : 'Number of connected users'"
                                     persistent-hint
-                                    :suffix="serverConfigInput.shutdownMethod.metric === 'CPUUtilization' ? '%' : ''"
+                                    :suffix="selectedShutdownMethod.metric === 'CPUUtilization' ? '%' : ''"
                                     :rules="onlyNumbersRules"
                                 ></v-text-field>
                             </v-col>
@@ -449,8 +461,8 @@ async function addUser() {
                             </v-col>
                             <v-col cols="12">
                                 <v-alert type="info" variant="tonal" density="compact">
-                                    The server will shutdown when {{ serverConfigInput.shutdownMethod.abbr }} is below 
-                                    {{ serverConfigInput.alarmThreshold }}{{ serverConfigInput.shutdownMethod.metric === 'CPUUtilization' ? '%' : ' users' }} 
+                                    The server will shutdown when {{ selectedShutdownMethod.abbr }} is below 
+                                    {{ serverConfigInput.alarmThreshold }}{{ selectedShutdownMethod.metric === 'CPUUtilization' ? '%' : ' users' }} 
                                     for {{ serverConfigInput.alarmEvaluationPeriod }} minutes
                                 </v-alert>
                             </v-col>
@@ -470,7 +482,7 @@ async function addUser() {
                             <v-col cols="6">
                                 <v-text-field 
                                     dense 
-                                    v-model="serverConfigInput.workingDir" 
+                                    v-model="serverConfigInput.workDir" 
                                     label="Working directory"
                                     hint="Directory where the Minecraft server is located"
                                     persistent-hint

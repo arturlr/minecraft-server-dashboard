@@ -21,7 +21,7 @@ utl = utilHelper.Utils()
 
 ssm = boto3.client('ssm')
 ec2 = boto3.client('ec2')
-cw_client = boto3.client('cloudwatch')
+
 lambda_client = boto3.client('lambda')
 
 app_name = os.getenv('APP_NAME') 
@@ -187,122 +187,6 @@ def wait_for_command_execution(command_id, instance_id, max_retries: int = 5, wa
         print(f"Error while waiting for command: {str(e)}")
         return False
  
-def remove_shutdown_schedule(instance_id):
-    """
-    Removes an EventBridge rule that schedules server shutdown
-    """
-    logger.info(f"------- remove_shutdown_schedule: {instance_id}")
-    
-    # Create EventBridge client
-    events = boto3.client('events')
-    
-    rule_name = f"minecraft-shutdown-{instance_id}"
-    
-    try:
-        # Remove targets from the rule
-        events.remove_targets(
-            Rule=rule_name,
-            Ids=[f'ShutdownTarget-{instance_id}']
-        )
-        
-        # Delete the rule
-        events.delete_rule(
-            Name=rule_name
-        )
-        
-        logger.info(f"Shutdown schedule removed for instance {instance_id}")
-        return True
-        
-    except Exception as e:
-        logger.error(f"Error removing shutdown schedule: {str(e)}")
-        return False   
-
-def create_shutdown_schedule(instance_id, schedule):
-    """
-    Creates an EventBridge rule to schedule server shutdown
-    """
-    logger.info(f"------- create_shutdown_schedule: {instance_id}")
-    
-    # Create EventBridge client
-    events = boto3.client('events')
-    
-    rule_name = f"minecraft-shutdown-{instance_id}"
-    
-    try:
-        # Create the EventBridge rule
-        response = events.put_rule(
-            Name=rule_name,
-            ScheduleExpression=f"cron({schedule})",
-            State='ENABLED',
-            Description=f'Scheduled shutdown for Minecraft server {instance_id}'
-        )
-        
-        # Create the target for the Lambda function
-        target = {
-            'Id': f'ShutdownTarget-{instance_id}',
-            'Arn': event_response_lambda,
-            'Input': json.dumps({
-                'action': 'stop',
-                'instanceId': instance_id
-            })
-        }
-        
-        # Add the target to the rule
-        events.put_targets(
-            Rule=rule_name,
-            Targets=[target]
-        )
-        
-        logger.info(f"Shutdown schedule created for {schedule}")
-        return True
-        
-    except Exception as e:
-        logger.error(f"Error creating shutdown schedule: {str(e)}")
-        return False
-
-def update_alarm(instanceId, alarmMetric, alarmThreshold, alarmEvaluationPeriod):
-    logger.info("------- update_alarm : " + instanceId)
-
-    dimensions=[]
-    statistic="Average" 
-    namespace="CWAgent"
-    dimensions.append({'Name': 'InstanceId','Value': instanceId})
-    if alarmMetric == "CPUUtilization":
-        alarmMetricName = "cpu_usage_active"        
-        dimensions.append({'Name': 'cpu','Value': "cpu-total"})
-    elif alarmMetric == "Connections":
-        alarmMetricName = "UserCount"
-        statistic="Maximum"
-        namespace="MinecraftDashboard"
-
-    cw_client.put_metric_alarm(
-        AlarmName=instanceId + "-" + "minecraft-server",
-        ActionsEnabled=True,
-        AlarmActions=["arn:aws:automate:" + aws_region + ":ec2:stop"],
-        InsufficientDataActions=[],
-        MetricName=alarmMetricName,
-        Namespace=namespace,
-        Statistic=statistic,
-        Dimensions=dimensions,
-        Period=60,
-        EvaluationPeriods=int(alarmEvaluationPeriod),
-        DatapointsToAlarm=int(alarmEvaluationPeriod),
-        Threshold=int(alarmThreshold),
-        TreatMissingData="missing",
-        ComparisonOperator="LessThanOrEqualToThreshold"   
-    )
-
-    logger.info("Alarm configured to " + alarmMetric + " and " + alarmThreshold)
-
-def remove_alarm(instance_id):
-    logger.info("------- remove_alarm : " + instance_id)
-
-    alarm_name = instance_id + "-" + "minecraft-server"
-    cw_client.delete_alarms(
-        AlarmNames=[
-            alarm_name
-        ]
-    )
 
 def handler(event, context):
 
@@ -331,11 +215,11 @@ def handler(event, context):
     minecraft_init(instance_id)
 
     # making sure the alarm is on
-    alarmMetric = tags.get("AlarmMetric", 'CPUUtilization')
-    alarmThreshold = tags.get('AlarmThreshold','25')
-    alarmEvaluationPeriod = tags.get('AlarmEvaluationPeriod', '35')
+    # alarmMetric = tags.get("AlarmMetric", 'CPUUtilization')
+    # alarmThreshold = tags.get('AlarmThreshold','25')
+    # alarmEvaluationPeriod = tags.get('AlarmEvaluationPeriod', '35')
 
-    update_alarm(instance_id,alarmMetric,alarmThreshold,alarmEvaluationPeriod)
+    # ec2_utils.update_alarm(instance_id,alarmMetric,alarmThreshold,alarmEvaluationPeriod)
 
     cwAgentStatus = cw_agent_status_check(instance_id)
     if not cwAgentStatus:

@@ -39,19 +39,6 @@ const serverName = computed(() => {
   }
 });
 
-const formatRunningTime = computed((minutes) => {
-    const hours = minutes / 60;
-    if (hours < 1) {
-      return `${Math.round(minutes)} minutes`;
-    } else if (hours < 24) {
-      return `${hours.toFixed(1)} hours`;
-    } else {
-      const days = Math.floor(hours / 24);
-      const remainingHours = (hours % 24).toFixed(1);
-      return `${days}d ${remainingHours}h`;
-    }
-  })
-
 
 const iamServerCompliant = computed(() => {
   return serverStore.selectedServer.iamStatus === 'ok' ? true : false
@@ -64,6 +51,19 @@ async function copyToClipboard(text) {
     console.error('Failed to copy', err);
   }
 }
+
+function formatRunningTime(minutes) {
+    const hours = minutes / 60;
+    if (hours < 1) {
+      return `${Math.round(minutes)} minutes`;
+    } else if (hours < 24) {
+      return `${hours.toFixed(1)} hours`;
+    } else {
+      const days = Math.floor(hours / 24);
+      const remainingHours = (hours % 24).toFixed(1);
+      return `${days}d ${remainingHours}h`;
+    }
+  }
 
 async function copyPublicIp() {
   copying.value = true
@@ -162,6 +162,19 @@ const getServerStateIcon = computed(() => {
                       >
                         {{ serverStore.selectedServer.state }}
                       </v-chip>
+
+                      <!-- <span v-if="serverStore.selectedServer.runningMinutes">
+                        <v-chip
+                          size="small"
+                          class="ml-2"
+                          color='black'
+                          variant="outlined"
+                          :prepend-icon="serverStore.selectedServer.runningMinutes ? 'mdi-clock-outline' : 'mdi-clock-off-outline'"
+                        >
+                          {{ formatRunningTime(serverStore.selectedServer.runningMinutes) }}
+                        </v-chip>
+                      </span> -->
+
                     </v-card-title>
                     <v-card-subtitle class="pt-2">
                       <v-icon icon="mdi-server" class="mr-1"></v-icon>
@@ -207,9 +220,6 @@ const getServerStateIcon = computed(() => {
 
           <ServerCharts /> 
 
-          <span {{ formatRunningTime(serverStore.selectedServer.runningMinutes) }} />
-
-
         </v-card>
         
 
@@ -220,45 +230,83 @@ const getServerStateIcon = computed(() => {
     </v-main>
   </v-layout>
 
-  <v-dialog v-model="powerButtonDialog" max-width="300px">
-    <v-card>
-      <v-list-item two-line>
-        <v-list-item-content>
-          <v-list-item-title class="text-h6">
-            {{ serverName }}
-          </v-list-item-title>
-          <v-list-item-subtitle>Confirm actions: </v-list-item-subtitle>
-        </v-list-item-content>
-      </v-list-item>
-      <v-card-actions v-if="serverStore.selectedServer.iamStatus === 'ok'">
-        <div v-if="serverStore.selectedServer.state === 'stopped'">
-          <v-btn color="success" outlined small class="pa-2" @click="triggerAction('startServer')">
+  <v-dialog v-model="powerButtonDialog" max-width="400px" transition="dialog-bottom-transition">
+  <v-card class="rounded-lg">
+    <v-card-item class="bg-primary pa-4">
+      <template v-slot:prepend>
+        <v-icon size="large" color="white" class="mr-2">mdi-server</v-icon>
+      </template>
+      <v-card-title class="text-h5 text-white font-weight-medium pa-0">
+        {{ serverName }}
+      </v-card-title>
+    </v-card-item>
+
+    <v-card-text class="pt-4">
+      <v-alert
+        v-if="serverStore.selectedServer.iamStatus !== 'ok'"
+        type="error"
+        variant="tonal"
+        density="comfortable"
+      >
+        <template v-slot:prepend>
+          <v-icon icon="mdi-alert-circle"></v-icon>
+        </template>
+        You need to fix the IAM role to perform any actions!
+      </v-alert>
+
+      <div v-else>
+        <div v-if="serverStore.selectedServer.state === 'stopped'" class="d-flex gap-2">
+          <v-btn
+     
+          density="compact"
+            color="success"
+            text-transform="none"
+            @click="triggerAction('startServer')"
+            prepend-icon="mdi-power"
+          >
             Start
           </v-btn>
         </div>
-        <div v-else>
-          <v-btn color="warning" outlined small @click="triggerAction('stopServer')">
+        <div v-else class="d-flex gap-2">
+          <v-btn
+   
+          density="compact"
+            color="warning"
+            text-transform="none"
+            @click="triggerAction('stopServer')"
+            prepend-icon="mdi-power-off"
+          >
             Stop
           </v-btn>
-
-          <span> &nbsp; </span>
-
-          <v-btn color="warning" outlined small @click="triggerAction('restartServer')">
-            ReStart
+          <v-btn
+          density="compact"
+            color="info"
+            text-transform="none"
+            @click="triggerAction('restartServer')"
+            prepend-icon="mdi-restart"
+          >
+            Restart
           </v-btn>
         </div>
+      </div>
+    </v-card-text>
 
-        <v-spacer></v-spacer>
+    <v-divider></v-divider>
 
-        <v-btn color="gray darken-1" outlined small @click="powerButtonDialog = false">
-          Cancel
-        </v-btn>
-      </v-card-actions>
-      <v-card-text v-else>
-        You need to Fix the role to be able to perform any action!
-      </v-card-text>
-    </v-card>
-  </v-dialog>
+    <v-card-actions class="pa-4">
+      <v-spacer></v-spacer>
+      <v-btn
+        color="grey-darken-1"
+        variant="text"
+        @click="powerButtonDialog = false"
+        prepend-icon="mdi-close"
+      >
+        Cancel
+      </v-btn>
+    </v-card-actions>
+  </v-card>
+</v-dialog>
+
 
 </template>
 

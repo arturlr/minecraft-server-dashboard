@@ -185,12 +185,21 @@ def action_process(action, instance_id, arguments=None):
 
     return handler()
 
+def handle_get_server_users(instance_id):
+    """Helper function to handle get server users action"""
+    try:
+        # Get the list of users for the given instance_id
+        users = auth.list_users_for_group(instance_id)
+        return users
+    
+    except Exception as e:
+        logger.error(f"Error retrieving users for instance {instance_id}: {str(e)}")
+        return utl.response(500, {"error": f"Failed to retrieve users: {str(e)}"})   
+
 def handle_get_server_config(instance_id):
     """Helper function to handle get server config action"""
     
     instance_tags = ec2_utils.get_instance_attributes_from_tags(instance_id)
-
-    instance_tags['groupMembers'] = auth.list_users_for_group(instance_id)
 
     # Return the tag dictionary
     return instance_tags
@@ -251,9 +260,28 @@ def handle_update_server_config(instance_id, arguments):
     if not arguments:
         logger.error("Missing arguments for config update")
         return utl.response(400, {"err": "Missing required arguments"})
-            
+    
     response = ec2_utils.set_instance_attributes_to_tags(arguments)
-    utl.update_alarm(instance_id)
+
+    logger.info(f"Config update response: {response}")
+        
+    if response.get('shutdownMethod') == 'Schedule':
+        if response.get('scheduleExpression') is None:
+            logger.error("Missing schedule expression")
+            return utl.response(400, {"err": "Missing schedule expression"})
+        # Delete existing alarm
+        ec2_utils.remove_alarm(instance_id)
+        # Configure event for scheduled shutdown
+        ec2_utils.configure_shutdown_event(instance_id, response.get('scheduleExpression'))       
+    else:
+        if response.get('alarmEvaluationPeriod') is None or response.get('alarmThreshold') is None or response.get('shutdownMethod') is None:
+            logger.error("Missing alarmEvaluationPeriod or alarmThreshold")
+            return utl.response(400, {"err": "Missing alarmEvaluationPeriod or alarmThreshold"})
+        # Delete existing event
+        ec2_utils.remove_shutdown_event(instance_id)
+        # Set instance tags and create alarm
+        ec2_utils.update_alarm(instance_id, response.get('shutdownMethod'), response.get('alarmThreshold'), response.get('alarmEvaluationPeriod'))
+    
     return response                
 
 def handle_local_invocation(event, context):
@@ -326,10 +354,11 @@ def handler(event, context):
         resp = {"err": "User not authorized"}
         logger.error(user_attributes["email"] + " is not authorized")
         return utl.response(401, resp)
-        
-    group_check = check_and_create_group(instance_id,user_attributes["username"])     
-    if not group_check:        
-        logger.error("Group creation failed")          
+
+    # MOVE THIS FUNCTION TO CONFIG SERVER    
+    # group_check = check_and_create_group(instance_id,user_attributes["username"])     
+    # if not group_check:        
+    #     logger.error("Group creation failed")          
 
     # Calling action_process function to process the action with the mutation name
     field_name = event["info"]["fieldName"]

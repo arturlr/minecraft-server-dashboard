@@ -74,3 +74,46 @@ Resources:
         }
       ResponseMappingTemplate: $util.toJson($ctx.result)
 
+  # PutServerConfigResolver:
+  #   Type: AWS::AppSync::Resolver
+  #   Properties:
+  #     ApiId:  
+  #       Fn::ImportValue: 
+  #         !Sub "${ProjectName}-${EnvironmentName}-GraphQLAPIId"
+  #     TypeName: Mutation
+  #     FieldName: putServerConfig
+  #     DataSourceName: !GetAtt DataSourceNone.Name
+  #     RequestMappingTemplate: |
+  #       {
+  #         "version" : "2017-02-28",
+  #         "payload": { 
+  #             "id": $util.toJson($context.arguments.input.id),
+  #             "shutdownMethod": $util.toJson($context.arguments.input.shutdownMethod),
+  #             "scheduleExpression": $util.toJson($context.arguments.input.scheduleExpression),             
+  #             "alarmThreshold": $util.toJson($context.arguments.input.alarmThreshold),
+  #             "alarmEvaluationPeriod": $util.toJson($context.arguments.input.alarmEvaluationPeriod),
+  #             "runCommand": $util.toJson($context.arguments.input.runCommand),
+  #             "workDir": $util.toJson($context.arguments.input.workDir)
+  #         }
+  #       }
+  #     ResponseMappingTemplate: $util.toJson($ctx.result)
+
+  # PutServerUsersResolver:
+  #   Type: AWS::AppSync::Resolver
+  #   Properties:
+  #     ApiId:  
+  #       Fn::ImportValue: 
+  #         !Sub "${ProjectName}-${EnvironmentName}-GraphQLAPIId"
+  #     TypeName: Mutation
+  #     FieldName: putServerUsers
+  #     DataSourceName: !GetAtt DataSourceNone.Name
+  #     RequestMappingTemplate: |
+  #       {
+  #         "version" : "2017-02-28",
+  #         "payload": { 
+  #             "id": $util.toJson($context.arguments.input.id),
+  #             "groupMembers": $util.toJson($context.arguments.input.groupMembers)
+  #         }
+  #       }
+  #     ResponseMappingTemplate: $util.toJson($ctx.result)
+

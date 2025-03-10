@@ -98,6 +98,12 @@ export const putServerConfig = /* GraphQL */ `
   mutation PutServerConfig($input: ServerConfigInput!) {
     putServerConfig(input: $input) {
       id
+      runCommand
+      workDir
+      shutdownMethod
+      scheduleExpression
+      alarmThreshold
+      alarmEvaluationPeriod
     }
   }
 `;

@@ -11,7 +11,6 @@ logger.setLevel(logging.INFO)
 session = boto3.session.Session()
 aws_region = session.region_name
 
-
 class Dyn:
     def __init__(self):
         logger.info("------- Dyn Class Initialization")

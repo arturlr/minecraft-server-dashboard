@@ -54,7 +54,6 @@ type ServerConfig @aws_iam
 	alarmEvaluationPeriod: Int
 	runCommand: String
 	workDir: String
-	groupMembers: AWSJSON
 }
 
 input ServerConfigInput {
@@ -65,7 +64,19 @@ input ServerConfigInput {
 	alarmEvaluationPeriod: Int
 	runCommand: String
 	workDir: String
-	groupMembers: AWSJSON
+}
+
+type ServerUsers @aws_iam
+@aws_cognito_user_pools {
+	id: String!
+	email: AWSEmail!
+	fullName: String!
+}
+
+input ServerUsersInput {
+	id: String!
+	email: AWSEmail!
+	fullName: String!
 }
 
 type ServerInfo @aws_iam
@@ -149,6 +160,8 @@ type Query {
 	getMonthlyCost(instanceId: String!): MonthlyCost
 		@aws_cognito_user_pools
 	getServerConfig(id: String!): ServerConfig
+		@aws_cognito_user_pools
+	getServerUsers(instanceId: String!): [ServerUsers]
 		@aws_cognito_user_pools
 	getLogAudit(id: String!): [LogAudit]
 		@aws_cognito_user_pools  
