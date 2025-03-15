@@ -14,6 +14,7 @@ const serversList = ref([])
 const serversDict = ref({})
 
 onMounted(async () => {
+    // load servers and serverDict (both are done at listServer)
     serversList.value = await serverStore.listServers()
     serversDict.value = serverStore.serversDict  
     await subscribeChangeServerInfo() 
@@ -26,8 +27,8 @@ async function subscribeChangeServerInfo() {
     }).subscribe({
         next: (response) => {
             let server = response.data.onChangeState
-            console.log("updating :" + server.id);
-            serverStore.updateServerStateDict(server)
+            serverStore.updateServer(server)
+            //serverStore.updateServerStateDict(server)
         },
         error: (error) => {
             console.error('Error subscribing to server info changes:', error);
@@ -53,7 +54,11 @@ async function userSignOut() {
 }
 
 function showServer(id) {
-    serverStore.selectedServer = serverStore.serversDict[id]
+    // check if id is not null
+    if (!id) return
+    // check if id is not the same as the selected server
+    if (id === serverStore.selectedServerId) return
+    serverStore.setSelectedServerId(id)
 }
 
 </script>

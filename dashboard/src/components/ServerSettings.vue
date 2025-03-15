@@ -215,7 +215,7 @@ async function getServerSettings() {
 
         // Users are processed separately 
         const updates = {
-            id: serverStore.selectedServer.id,
+            id: serverStore.selectedServerId,
             alarmThreshold: Number(serverSettings.alarmThreshold) || 0,
             alarmEvaluationPeriod: Number(serverSettings.alarmEvaluationPeriod) || 0,
             runCommand: serverSettings.runCommand || null,
@@ -264,11 +264,11 @@ async function onSubmit() {
             settingsDialogLoading.value = true;
 
             serverConfigInput.shutdownMethod = selectedShutdownMethod.value.metric
-            serverConfigInput.id = serverStore.selectedServer.id
+            serverConfigInput.id = serverStore.selectedServerId
             serverConfigInput.scheduleExpression = generatedCronExpression.value
             
             const serverSettings = await serverStore.putServerConfig(serverConfigInput);
-            if (serverSettings === serverStore.selectedServer.id) {
+            if (serverSettings === serverStore.selectedServerId) {
                 snackText.value = "Setting Updated Successfully";
                 snackbar.value = true;
                 snackColor.value = "primary";
@@ -300,7 +300,7 @@ async function addUser() {
                 id: generateUniqueId(),
                 actionUser: userStore.email,
                 action: "add_user",
-                instanceId: serverStore.selectedServer.id,
+                instanceId: serverStore.selectedServerId,
                 inviteeEmail: inviteeEmail.value + "@gmail.com",
                 expirationEpoch: getEpochTime(1)
             };
@@ -322,7 +322,7 @@ async function addUser() {
           class="mr-2 custom-icon"
           v-bind="attrs"
           v-on="on"
-          @click="openConfigDialog"
+          v-on:click="openConfigDialog"
         >
         mdi-cog-outline
         </v-icon>
@@ -530,14 +530,16 @@ async function addUser() {
                 <v-container>
                     <v-row>
                         <v-col cols="12">
-                            <v-list two-line>
-                                <v-list-header>Current Members</v-list-header>
-                                <v-list-item v-for="user in groupMembers" :key="user.id">
-                                    <v-list-item-content>
-                                        <v-list-item-title v-text="user.fullname"></v-list-item-title>
-                                        <v-list-item-subtitle v-text="user.email"></v-list-item-subtitle>
-                                    </v-list-item-content>
-                                </v-list-item>
+                            <v-list lines="tow">
+                                <v-list-subheader>Current Members</v-list-subheader>
+                                    <v-list-item
+                                        v-for="user in groupMembers"
+                                        :key="user.id"
+                                        :title="user.fullname"
+                                        :subtitle="user.email"
+                                        :prepend-avatar="user.avatar"
+                                    >
+                                    </v-list-item>                                
                             </v-list>
                         </v-col>
                     </v-row>

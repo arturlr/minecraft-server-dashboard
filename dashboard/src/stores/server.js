@@ -5,7 +5,7 @@ import * as queries from "../graphql/queries";
 import { useUserStore } from "../stores/user";
 import { ConsoleLogger } from 'aws-amplify/utils';
 import { configAmplify } from "../configAmplify";
-import { generateClient } from 'aws-amplify/api';
+import { generateClient, get } from 'aws-amplify/api';
 
 const logger = new ConsoleLogger('mineDash');
 configAmplify();
@@ -15,14 +15,39 @@ export const useServerStore = defineStore("server", {
     state: () => ({
         serversList: [],
         serversDict: {},
-        selectedServer: {},
+        selectedServerId: null,
         monthlyUsage: {},
         loading: false,
         paginationToken: ""
     }),
 
-    actions: {
+    getters: {
+        getServerById: (state) => (id) => state.serversDict[id],
+        getServerName: (state) => {
+            const selectedServer = state.serversDict[state.selectedServerId];
+            if (selectedServer?.name && selectedServer.name.length > 2) {
+                return selectedServer.name;
+            }
+            return selectedServer?.id;
+        },
+        isServerIamCompliant: (state) => {
+            const selectedServer = state.serversDict[state.selectedServerId];            
+            return selectedServer?.iamStatus === 'ok';
+        },
+        getServerState: (state) => (id) => state.serversDict[id]?.state,
+        getServerStateColor: (state) => {
+            const serverState = state.serversDict[state.selectedServerId]?.state;
+            switch(serverState) {
+                case 'running': return 'success'
+                case 'stopped': return 'error'
+                default: return 'warning'
+            }
+        },
+        getRunningServers: (state) => 
+            Object.values(state.serversDict).filter(server => server.state === 'running')
+    },
 
+    actions: {
         async listServers() {
             try {
                 console.group("listServers");
@@ -40,6 +65,8 @@ export const useServerStore = defineStore("server", {
                     return [];
                 }
 
+                // Populating serversDict
+                this.serversDict = {};
                 results.data.listServers.forEach(({ id, name, memSize, diskSize, vCpus, state, initStatus, iamStatus, publicIp, launchTime, runningMinutes, groupMembers }) => {
                     this.serversDict[id] = { id, name, memSize, diskSize, vCpus, state, initStatus, iamStatus, publicIp, launchTime, runningMinutes, groupMembers };
                 });
@@ -56,44 +83,37 @@ export const useServerStore = defineStore("server", {
             }
         },
 
-        updateServerStateDict(server) {
-            const serverAttributes = this.serversDict[server.id];
-            if (serverAttributes) {
-                // Servers Dictionary update state
-                this.serversDict[server.id] = { 
-                    ...serverAttributes, 
-                    state: server.state,
-                    initStatus: server.initStatus,  
-                    publicIp: server.publicIp,
-                    runningMinutes: server.runningMinutes        
-                };
-
-                // If selectedServer is populated, update state
-                if (this.selectedServer) {
-                    this.selectedServer = {
-                        ...serverAttributes, 
-                        state: server.state,
-                        initStatus: server.initStatus,
-                        publicIp: server.publicIp,
-                        runningMinutes: server.runningMinutes                  
-                    }
-                }
+        updateServer(server) {
+            if (server.id) {
+                //console.log('Before update:', this.serversDict[server.id]);
+                //console.log('Update payload:', server);
                 
-            } else {
-                console.warn(`Server with ID ${server.id} not found in serversDict`);
-            }
+                this.serversDict[server.id] = 
+                {   ...this.serversDict[server.id],
+                    state: server.state,
+                    initStatus: server.initStatus,
+                    publicIp: server.publicIp,
+                    runningMinutes: server.runningMinutes  
+                 }
+            };                
+                //console.log('After update:', this.serversDict[server.id]);
         },
+                
+        setSelectedServerId(id) {
+            console.log("setSelectedServerId", id);
+            this.selectedServerId = id;
+          },
 
         async getServerConfig() {
             console.group("getServerConfig");
             try {
                 const results = await client.graphql({
                     query: queries.getServerConfig,
-                    variables: { id: this.selectedServer.id }
+                    variables: { id: this.selectedServerId }
                 });
 
                 if (results.data.getServerConfig === null) {
-                    console.log(`Server with ID ${this.selectedServer.id} not found`);
+                    console.log(`Server with ID ${this.selectedServerId} not found`);
                     return null;
                 }
 

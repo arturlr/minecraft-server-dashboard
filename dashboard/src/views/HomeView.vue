@@ -1,5 +1,5 @@
 <script setup>
-import { reactive, ref, onMounted, computed } from "vue";
+import { reactive, ref, watch, computed } from "vue";
 import Header from "../components/Header.vue";
 import ServerCharts from "../components/ServerCharts.vue";
 import ServerSettings from "../components/ServerSettings.vue";
@@ -28,21 +28,7 @@ const snackText = ref(null)
 const snackColor = ref(null)
 const snackTimeout = ref(3500)
 
-const serverName = computed(() => {
-  if (
-    serverStore.selectedServer.name &&
-    serverStore.selectedServer.name.length > 2
-  ) {
-    return serverStore.selectedServer.name;
-  } else {
-    return serverStore.selectedServer.id;
-  }
-});
-
-
-const iamServerCompliant = computed(() => {
-  return serverStore.selectedServer.iamStatus === 'ok' ? true : false
-});
+const selectedServer = computed(() => serverStore.getServerById(serverStore.selectedServerId))
 
 async function copyToClipboard(text) {
   try {
@@ -85,7 +71,7 @@ async function triggerAction(action) {
 
   const actionResult = await graphQlClient.graphql({
     query: mutations[action],
-    variables: { instanceId: serverStore.selectedServer.id },
+    variables: { instanceId: serverStore.selectedServerId },
   });
 
   const rsp = JSON.parse(actionResult.data[action]);
@@ -109,21 +95,8 @@ async function triggerAction(action) {
   }
 }
 
-const getServerStateColor = computed(() => {
-  switch(serverStore.selectedServer.state) {
-    case 'running': return 'success'
-    case 'stopped': return 'error'
-    default: return 'warning'
-  }
-})
 
-const getServerStateIcon = computed(() => {
-  switch(serverStore.selectedServer.state) {
-    case 'running': return 'mdi-server-network'
-    case 'stopped': return 'mdi-server-off'
-    default: return 'mdi-server-network-off'
-  }
-})
+
 
 
 </script>
@@ -143,7 +116,7 @@ const getServerStateIcon = computed(() => {
         </template>
       </v-snackbar>
 
-      <div v-if="serverStore.selectedServer.id != null">
+      <div v-if="selectedServer">
          <!-- Server Card -->
          <v-row justify="center">
           <v-col cols="12" sm="10" md="8" lg="6">
@@ -153,39 +126,39 @@ const getServerStateIcon = computed(() => {
                 <v-row align="center">
                   <v-col>
                     <v-card-title class="text-h5 font-weight-bold">
-                      {{ serverName }}
+                      {{ serverStore.getServerName }}
                       <v-chip
-                        :color="serverStore.selectedServer.state === 'running' ? 'success' : 'error'"
+                        :color="selectedServer.state === 'running' ? 'success' : 'error'"
                         size="small"
                         class="ml-2"
                         variant="elevated"
                       >
-                        {{ serverStore.selectedServer.state }}
+                        {{ selectedServer.state }}
                       </v-chip>
 
-                      <!-- <span v-if="serverStore.selectedServer.runningMinutes">
+                      <!-- <span v-if="selectedServer.runningMinutes">
                         <v-chip
                           size="small"
                           class="ml-2"
                           color='black'
                           variant="outlined"
-                          :prepend-icon="serverStore.selectedServer.runningMinutes ? 'mdi-clock-outline' : 'mdi-clock-off-outline'"
+                          :prepend-icon="selectedServer.runningMinutes ? 'mdi-clock-outline' : 'mdi-clock-off-outline'"
                         >
-                          {{ formatRunningTime(serverStore.selectedServer.runningMinutes) }}
+                          {{ formatRunningTime(selectedServer.runningMinutes) }}
                         </v-chip>
                       </span> -->
 
                     </v-card-title>
                     <v-card-subtitle class="pt-2">
                       <v-icon icon="mdi-server" class="mr-1"></v-icon>
-                      {{ serverStore.selectedServer.id }}
+                      {{ selectedServer.id }}
                     </v-card-subtitle>
                   </v-col>
                 </v-row>
               </v-card-item>
 
 
-          <v-alert v-if="!iamServerCompliant" closable dense type="error"> 
+          <v-alert v-if="!serverStore.isServerIamCompliant" closable dense type="error"> 
             <v-row align="center">
               <v-col class="grow">
                 This server does not have the correct IAM role and permissions to execute.
@@ -204,10 +177,10 @@ const getServerStateIcon = computed(() => {
             class="mt-4"
             variant="outlined"
             hide-details
-            v-model="serverStore.selectedServer.publicIp">
+            v-model="selectedServer.publicIp">
 
             <template v-slot:prepend-inner>
-              <v-icon icon="mdi-power-standby" @click="powerButtonDialog = true" size="large" :color="getServerStateColor" />          
+              <v-icon icon="mdi-power-standby" @click="powerButtonDialog = true" size="large" :color="serverStore.getServerStateColor" />          
             </template>
 
             <template v-slot:append-inner>
@@ -237,13 +210,13 @@ const getServerStateIcon = computed(() => {
         <v-icon size="large" color="white" class="mr-2">mdi-server</v-icon>
       </template>
       <v-card-title class="text-h5 text-white font-weight-medium pa-0">
-        {{ serverName }}
+        {{ serverStore.getServerName }}
       </v-card-title>
     </v-card-item>
 
     <v-card-text class="pt-4">
       <v-alert
-        v-if="serverStore.selectedServer.iamStatus !== 'ok'"
+        v-if="selectedServer.iamStatus !== 'ok'"
         type="error"
         variant="tonal"
         density="comfortable"
@@ -255,7 +228,7 @@ const getServerStateIcon = computed(() => {
       </v-alert>
 
       <div v-else>
-        <div v-if="serverStore.selectedServer.state === 'stopped'" class="d-flex gap-2">
+        <div v-if="selectedServer.state === 'stopped'" class="d-flex gap-2">
           <v-btn
      
           density="compact"
