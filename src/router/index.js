@@ -7,6 +7,7 @@ import SimpleLayout from '../layouts/Simple.vue'
 import Home from '../views/HomeView.vue'
 import Server from '../views/ServerCard.vue'
 import Auth from '../views/AuthView.vue'
+import Users from '../views/UsersView.vue'
 
 
 Vue.use(VueRouter)
@@ -28,6 +29,12 @@ const router = new VueRouter({
           name: "server",
           component: Server,
           meta: { requiresAuth: true, name: 'Server' }
+        },
+        {
+          path: "users",
+          name: "users",
+          component: Users,
+          meta: { requiresAuth: true, name: 'Users' }
         }
       ]
     },

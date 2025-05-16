@@ -34,6 +34,11 @@
       <v-toolbar-title v-if="!isMobile">Minecraft Dashboard</v-toolbar-title>
       <v-toolbar-title v-else>MD</v-toolbar-title>
       <v-spacer></v-spacer>
+      
+      <v-btn text to="/users" class="mr-2">
+        <v-icon left>mdi-account-group</v-icon>
+        <span v-if="!isMobile">Users</span>
+      </v-btn>
 
       <v-menu
         bottom
@@ -54,6 +59,13 @@
                 {{ email }}
               </p>
 
+              <v-divider class="my-3"></v-divider>
+              
+              <v-btn text color="primary" to="/users" class="mb-2">
+                <v-icon left>mdi-account-group</v-icon>
+                Users & Groups
+              </v-btn>
+              
               <v-divider class="my-3"></v-divider>
                     <v-tooltip bottom>
                 <template v-slot:activator="{ on, attrs }">
