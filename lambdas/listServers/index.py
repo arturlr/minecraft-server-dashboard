@@ -61,7 +61,7 @@ def handler(event, context):
 
     if user_instances["TotalInstances"] == 0:
         logger.error("No Servers Found")
-        return "No Instances Found"
+        return []  # Return empty array instead of string
 
     # Fetch instance types and status in parallel
     with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:

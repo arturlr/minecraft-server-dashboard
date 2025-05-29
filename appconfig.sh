@@ -15,6 +15,7 @@ DATESUFFIX=$(date +%Y-%m-%d-%H%M)
 
 parent_stack=$(cat samconfig.toml | grep stack_name |  tr -d '"' | awk '{print $3}')
 region=$(cat samconfig.toml | grep region |  tr -d '"' | awk '{print $3}')
+account_id=$(aws sts get-caller-identity --query "Account" --output text)
 
 # Function to extract outputs from a stack
 get_stack_outputs() {
@@ -96,6 +97,7 @@ echo -e "- Cognito identity pool id: ${GREEN}${CognitoIdentityPool}${SET}"
 echo -e "- Cognito domain name: ${GREEN}${CognitoDomainName}${SET}"
 echo -e "- S3 Web bucket name: ${GREEN}${WebAppBucket}${SET}"
 echo -e "- S3 Support bucket name: ${GREEN}${SupportBucket}${SET}"
+echo -e "- AWS Account ID: ${GREEN}${account_id}${SET}"
 echo -e "${WHITE}---- Uploading cloudwath agent config file to S3 ${WHITE}${SET}"
 aws s3 cp amazon-cloudwatch-agent.json "s3://${SupportBucket}/amazon-cloudwatch-agent.json" --region $region
 
@@ -113,6 +115,7 @@ echo "VITE_COGNITO_DOMAIN=${CognitoDomainName}.auth.${region}.amazoncognito.com"
 echo "VITE_BUCKET_NAME=${WebAppBucket}" >> dashboard/.env
 
 echo "VITE_ADMIN_GROUP_NAME=admin" >> dashboard/.env
+echo "VITE_AWS_ACCOUNT_ID=${account_id}" >> dashboard/.env
 echo "VITE_I18N_LOCALE=en" >> dashboard/.env
 echo "VITE_I18N_FALLBACK_LOCALE=en" >> dashboard/.env
 

@@ -154,75 +154,10 @@ The application is built using Vue.js for the frontend, AWS AppSync for real-tim
 - Node.js 14+ for frontend development
 - Python 3.9+ for Lambda functions
 - AWS SAM CLI for deployment
-- AWS Amplify CLI
 - Google OAuth credentials for authentication
 
-### Installation
-1. Clone the repository:
-```bash
-git clone <repository-url>
-cd minecraft-server-dashboard
-```
-
-2. Install frontend dependencies:
-```bash
-cd dashboard
-npm install
-```
-
-3. Configure AWS credentials:
-```bash
-aws configure
-```
-
-4. Deploy the infrastructure:
-```bash
-sam build
-sam deploy --guided
-```
-
-### Quick Start
-1. Set up Google OAuth credentials:
-```bash
-# Store Google credentials in SSM Parameter Store
-aws ssm put-parameter --name /minecraft/GOOGLE_CLIENT_ID --value <your-client-id> --type SecureString
-aws ssm put-parameter --name /minecraft/GOOGLE_SECRET --value <your-client-secret> --type SecureString
-```
-
-2. Start the development server:
-```bash
-cd dashboard
-npm run dev
-```
-
-3. Access the dashboard at http://localhost:5173
-
-### More Detailed Examples
-1. Creating a new Minecraft server:
-```javascript
-// Using the dashboard UI
-await serverStore.triggerAction('startServer', {
-  instanceId: 'i-1234567890abcdef0'
-});
-```
-
-2. Configuring automatic shutdown:
-```javascript
-// Set CPU utilization threshold
-await serverStore.putServerConfig({
-  id: 'i-1234567890abcdef0',
-  shutdownMethod: 'CPUUtilization',
-  alarmThreshold: 10,
-  alarmEvaluationPeriod: 15
-});
-```
 
 ## Data Flow
-
-### Authentication Flow
-- User authenticates via Cognito (with Google OAuth option)
-- Frontend receives temporary AWS credentials
-- Credentials used for AppSync API calls
 
 ### Server Management Flow
 - User initiates action in frontend (e.g., start server)
@@ -311,38 +246,6 @@ graph TD
    npm run build
    aws s3 sync dist/ s3://<web-bucket-name>
    ```
-
-3. **Configure CloudWatch agent:**
-   ```bash
-   aws ssm put-parameter --name AmazonCloudWatch-Config --type String --value file://amazon-cloudwatch-agent.json
-   ```
-
-## Troubleshooting
-1. IAM Role Issues
-   - Problem: Server shows "IAM role not compliant" error
-   - Solution: Click the "Fix it" button in the dashboard or run:
-   ```bash
-   aws lambda invoke --function-name <function-name> --payload '{"action":"fixServerRole","instanceId":"i-xxx"}' response.json
-   ```
-
-2. CloudWatch Agent Not Reporting
-   - Check agent status:
-   ```bash
-   aws ssm send-command --instance-ids i-xxx --document-name "AmazonCloudWatch-ManageAgent" --parameters '{"action":["status"],"mode":["ec2"]}'
-   ```
-   - Review logs at `/opt/aws/amazon-cloudwatch-agent/logs/amazon-cloudwatch-agent.log`
-
-## Monitoring and Maintenance
-
-1. **CloudWatch Alarms:**
-   - EC2 instance performance monitoring
-   - Lambda function error tracking
-   - API availability metrics
-
-2. **Cost Optimization:**
-   - Automated shutdown policies based on inactivity
-   - Right-sizing recommendations for EC2 instances
-   - CloudWatch metrics for cost tracking
 
 ## Future Enhancements
 
