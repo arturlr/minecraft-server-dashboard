@@ -53,11 +53,16 @@ def handler(event, context):
     # Get all instances the user has access from token
     cognitoGroups = event["identity"].get("groups") 
     if cognitoGroups:
-        user_instances = ec2_utils.list_instances_by_user_group(cognitoGroups)
+        # If user is in admin group, list all instances by app tag
+        if "admin" in cognitoGroups:
+            user_instances = ec2_utils.list_instances_by_app_tag(appValue)
+            logger.info("Admin user - listing all instances by app tag")
+        else:
+            user_instances = ec2_utils.list_instances_by_user_group(cognitoGroups)
         logger.info(user_instances)
     else:
         logger.error("No Cognito Groups found")
-        return "No Instances Found"
+        return []
 
     if user_instances["TotalInstances"] == 0:
         logger.error("No Servers Found")

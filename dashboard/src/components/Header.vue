@@ -66,8 +66,15 @@ function showServer(id) {
 <template>
     <v-navigation-drawer permanent>
         <v-list>
-            <v-list-item prepend-icon=mdi-account-circle-outline :subtitle="userStore.email"
-                :title="userStore.fullname"></v-list-item>
+            <v-list-item prepend-icon=mdi-account-circle-outline
+                :title="userStore.fullname">
+                <template v-slot:subtitle>
+                    <div class="d-flex align-center">
+                        {{ userStore.email }}
+                        <v-chip v-if="userStore.isAdmin" color="primary" size="x-small" class="ml-2" label>Admin</v-chip>
+                    </div>
+                </template>
+            </v-list-item>
             <v-list-item prepend-icon=mdi-exit-to-app subtitle="SignOut" @click="userSignOut"></v-list-item>
         </v-list>
 

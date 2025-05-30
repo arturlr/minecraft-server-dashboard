@@ -321,8 +321,7 @@ async function addUser() {
           size="large"
           class="mr-2 custom-icon"
           v-bind="attrs"
-          v-on="on"
-          v-on:click="openConfigDialog"
+          v-on="{ ...on, click: openConfigDialog }"
         >
         mdi-cog-outline
         </v-icon>
@@ -336,8 +335,7 @@ async function addUser() {
           size="large"
           class="custom-icon"
           v-bind="attrs"
-          v-on="on"
-          @click="openUsersDialog"
+          v-on="{ ...on, click: openUsersDialog }"
         >
           mdi-account-plus-outline
         </v-icon>

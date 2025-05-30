@@ -14,8 +14,9 @@ logger.setLevel(logging.INFO)
 
 class Utils:
     def __init__(self):
-        logger.info("------- Ec2Utils Class Initialization")
-        self.ssm = boto3.client('ssm')        
+        logger.info("------- Utils Class Initialization")
+        self.ssm = boto3.client('ssm')
+        self.admin_group_name = os.getenv('ADMIN_GROUP_NAME', 'admin')  # Default to 'admin' if not set
     
     def capitalize_first_letter(self, text):
         """
@@ -56,6 +57,57 @@ class Utils:
             retries += 1
             time.sleep(delay)
         return False
+        
+    def is_admin_user(self, cognito_groups):
+        """
+        Checks if a user belongs to the admin group
+        
+        Args:
+            cognito_groups (list): List of Cognito groups the user belongs to
+            
+        Returns:
+            bool: True if user is in admin group, False otherwise
+        """
+        if not cognito_groups:
+            return False
+            
+        return self.admin_group_name in cognito_groups
+        
+    def check_user_authorization(self, cognito_groups, instance_id, user_email, ec2_utils):
+        """
+        Comprehensive authorization check for server actions
+        
+        Args:
+            cognito_groups (list): List of Cognito groups the user belongs to
+            instance_id (str): EC2 instance ID
+            user_email (str): Email of the user attempting the action
+            ec2_utils: EC2 utility object for instance operations
+            
+        Returns:
+            tuple: (bool, str) - (is_authorized, authorization_reason)
+        """
+        # Check if user is admin
+        if self.is_admin_user(cognito_groups):
+            return True, "admin_group"
+            
+        # Check if user is in instance-specific group
+        if cognito_groups:
+            for group in cognito_groups:
+                if group == instance_id:
+                    return True, "instance_group"
+        
+        # Check if user is the owner based on instance tags
+        server_info = ec2_utils.list_server_by_id(instance_id)
+        if server_info["TotalInstances"] > 0:
+            instance = server_info['Instances'][0]
+            tags = instance.get('Tags', [])
+            
+            for tag in tags:
+                if tag['Key'] == 'Owner' and tag['Value'] == user_email:
+                    return True, "instance_owner"
+        
+        # Not authorized
+        return False, "unauthorized"
 
     def get_ssm_param(self, paramKey, isEncrypted=False):
         try:

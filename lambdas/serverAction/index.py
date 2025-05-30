@@ -104,29 +104,26 @@ def check_authorization(event, instance_id, user_attributes):
         bool: True if authorized, False if not
     """
     
-    cognitoGroups = event["identity"].get("groups") 
-    if cognitoGroups:       
-        for group in cognitoGroups:
-            if (group == instance_id):   
-                logger.info("Authorized server action for email %s on instance %s", user_attributes["email"], instance_id) 
-                return True                   
-
-    server_admin_email = ""
-    server_info = ec2_utils.list_server_by_id(instance_id)
-    instance = server_info['Instances'][0]
-
-    # Extract tags from the instance
-    tags = instance.get('Tags', [])
+    cognito_groups = event["identity"].get("groups", [])
+    user_email = user_attributes["email"]
     
-    for tag in tags:
-        if tag['Key'] == 'Owner':
-            server_admin_email = tag['Value']
-
-    if server_admin_email == user_attributes["email"]: 
-        logger.info("Authorized server action as owner for email %s on instance %s", user_attributes["email"], instance_id)
-        return True
-        
-    return False
+    # Use the centralized authorization check from utilHelper
+    is_authorized, auth_reason = utl.check_user_authorization(
+        cognito_groups, 
+        instance_id, 
+        user_email, 
+        ec2_utils
+    )
+    
+    if is_authorized:
+        if auth_reason == "admin_group":
+            logger.info("Authorized server action for admin user %s on instance %s", user_email, instance_id)
+        elif auth_reason == "instance_group":
+            logger.info("Authorized server action for group member %s on instance %s", user_email, instance_id)
+        elif auth_reason == "instance_owner":
+            logger.info("Authorized server action as owner for email %s on instance %s", user_email, instance_id)
+    
+    return is_authorized
 
 def check_and_create_group(instance_id, user_name):
     """

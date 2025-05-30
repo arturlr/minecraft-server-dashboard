@@ -306,6 +306,37 @@ class Ec2Utils:
             "Instances": user_instances,
             "TotalInstances": total_instances
         }
+        
+    def list_instances_by_app_tag(self, app_tag_value):
+        """
+        Lists all instances with the specified app tag value.
+        
+        Args:
+            app_tag_value (str): The value of the App tag to filter by.
+            
+        Returns:
+            dict: A dictionary containing the instances and total count.
+        """
+        logger.info(f"Listing instances by app tag: {app_tag_value}")
+        
+        filters = [
+            {"Name": "tag:App", "Values": [app_tag_value]},
+            {"Name": "instance-state-name", "Values": ["pending", "running", "stopping", "stopped"]}
+        ]
+        
+        response = self.ec2_client.describe_instances(Filters=filters)
+        
+        instances = []
+        for reservation in response["Reservations"]:
+            instances.extend(reservation["Instances"])
+            
+        total_instances = len(instances)
+        logger.info(f"Found {total_instances} instances with App tag: {app_tag_value}")
+        
+        return {
+            "Instances": instances,
+            "TotalInstances": total_instances
+        }
 
     def list_server_by_id(self, instance_id):
         response = self.ec2_client.describe_instances(InstanceIds=[instance_id])
