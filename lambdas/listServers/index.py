@@ -4,6 +4,7 @@ import os
 import concurrent.futures
 import authHelper
 import ec2Helper
+import utilHelper
 import pytz
 
 logger = logging.getLogger()
@@ -19,6 +20,7 @@ cognito_pool_id = os.getenv('COGNITO_USER_POOL_ID')
 
 auth = authHelper.Auth(cognito_pool_id)
 ec2_utils = ec2Helper.Ec2Utils()
+utl = utilHelper.Utils()
 utc = pytz.utc
 pst = pytz.timezone('US/Pacific')
 
@@ -51,14 +53,14 @@ def handler(event, context):
         return "Invalid Token"
     
     # Get all instances the user has access from token
-    cognitoGroups = event["identity"].get("groups") 
-    if cognitoGroups:
-        # If user is in admin group, list all instances by app tag
-        if "admin" in cognitoGroups:
-            user_instances = ec2_utils.list_instances_by_app_tag(appValue)
-            logger.info("Admin user - listing all instances by app tag")
-        else:
-            user_instances = ec2_utils.list_instances_by_user_group(cognitoGroups)
+    cognitoGroups = event["identity"].get("groups", [])
+    
+    # Use the centralized admin check from utilHelper
+    if utl.is_admin_user(cognitoGroups):
+        user_instances = ec2_utils.list_instances_by_app_tag(appValue)
+        logger.info("Admin user - listing all instances by app tag")
+    elif cognitoGroups:
+        user_instances = ec2_utils.list_instances_by_user_group(cognitoGroups)
         logger.info(user_instances)
     else:
         logger.error("No Cognito Groups found")
