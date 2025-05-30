@@ -13,8 +13,8 @@ WHITE='\033[1;37m'
 SET='\033[0m'
 DATESUFFIX=$(date +%Y-%m-%d-%H%M) 
 
-parent_stack=$(cat samconfig.toml | grep stack_name |  tr -d '"' | awk '{print $3}')
-region=$(cat samconfig.toml | grep region |  tr -d '"' | awk '{print $3}')
+parent_stack=$(cat cfn/samconfig.toml | grep stack_name |  tr -d '"' | awk '{print $3}')
+region=$(cat cfn/samconfig.toml | grep region |  tr -d '"' | awk '{print $3}')
 account_id=$(aws sts get-caller-identity --query "Account" --output text)
 
 # Function to extract outputs from a stack
@@ -67,15 +67,15 @@ process_stacks() {
 }
 
 if [ -z "$parent_stack" ]; then
-    echo -e "${RED} Stack name could not be found at the samconfig.toml file ${RED}${SET} - Fail"
+    echo -e "${RED} Stack name could not be found at the cfn/samconfig.toml file ${RED}${SET} - Fail"
     exit 1
 fi
 
 if [ -z "$region" ]; then
-    echo -e "${YELLOW}AWS region not found in samconfig.toml, using default region from AWS config${SET}"
+    echo -e "${YELLOW}AWS region not found in cfn/samconfig.toml, using default region from AWS config${SET}"
     region=$(aws configure get region)
     if [ -z "$region" ]; then
-        echo -e "${RED}No AWS region specified in samconfig.toml or AWS config${SET} - Fail"
+        echo -e "${RED}No AWS region specified in cfn/samconfig.toml or AWS config${SET} - Fail"
         exit 1
     fi
 fi
