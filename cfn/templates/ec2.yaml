@@ -54,6 +54,14 @@ Resources:
                   - "ssm:PutParameter"
                   - "ssm:GetParameter"
                 Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/minecraft*"
+        - PolicyName: ec2TagsAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "ec2:DescribeTags"
+                Resource: "*"
 
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
@@ -73,6 +81,54 @@ Resources:
       Type: String
       Value: '{ "agent": { "metrics_collection_interval": 60, "run_as_user": "root" }, "logs": { "logs_collected": { "files": { "collect_list": [ { "file_path": "/opt/minecraft/server/logs/latest.log", "log_group_name": "/minecraft/serverlog/{instance_id}", "retention_in_days": 3, "filters": [ { "type": "include", "expression": "Server thread/INFO" } ] } ] } } }, "metrics": { "append_dimensions": { "AutoScalingGroupName": "${aws:AutoScalingGroupName}", "InstanceId": "${aws:InstanceId}" }, "metrics_collected": { "collectd": { "metrics_aggregation_interval": 60 }, "cpu": { "measurement": [ "cpu_usage_active" ], "resources": [ "*" ], "metrics_collection_interval": 60 }, "net": { "measurement": [ "net_bytes_sent" ], "metrics_collection_interval": 60 }, "mem": { "measurement": [ "mem_used_percent" ], "metrics_collection_interval": 60 }, "statsd": { "metrics_aggregation_interval": 60, "metrics_collection_interval": 10, "service_address": ":8125" } } } }'
       Description: Amazon CloudWatch agent config
+
+  MinecraftRunnerSSMDoc:
+    Type: AWS::SSM::Document
+    Properties:
+      DocumentType: Command
+      TargetType: /AWS::EC2::Instance
+      Content:
+        schemaVersion: '2.2'
+        description: Run Minecraft server using instance tags
+        mainSteps:
+          - action: aws:runShellScript
+            name: RunMinecraftServer
+            inputs:
+              runCommand:
+                - '#!/bin/bash'
+                - |
+                  # Get instance ID
+                  INSTANCE_ID=$(ec2metadata --instance-id)
+                  REGION=$(curl -s http://169.254.169.254/latest/meta-data/placement/region)
+                  
+                  # Get instance tags
+                  TAGS=$(aws ec2 describe-tags --filters "Name=resource-id,Values=$INSTANCE_ID" --region $REGION --output json)
+                  
+                  # Extract runCommand and workDir from tags
+                  RUN_COMMAND=$(echo $TAGS | jq -r '.Tags[] | select(.Key=="RunCommand") | .Value')
+                  WORK_DIR=$(echo $TAGS | jq -r '.Tags[] | select(.Key=="WorkDir") | .Value')
+                  
+                  # Log the values
+                  echo "Instance ID: $INSTANCE_ID"
+                  echo "Run Command: $RUN_COMMAND"
+                  echo "Work Directory: $WORK_DIR"
+                  
+                  # Check if both values are present
+                  if [ -z "$RUN_COMMAND" ] || [ -z "$WORK_DIR" ]; then
+                    echo "ERROR: RunCommand or WorkDir tag is missing"
+                    exit 1
+                  fi
+                  
+                  # Check if work directory exists
+                  if [ ! -d "$WORK_DIR" ]; then
+                    echo "Creating work directory: $WORK_DIR"
+                    mkdir -p "$WORK_DIR"
+                  fi
+                  
+                  # Change to work directory and run the command
+                  cd "$WORK_DIR"
+                  echo "Executing: $RUN_COMMAND"
+                  eval "$RUN_COMMAND"
 
   BootstrapSSMDoc:
     Type: AWS::SSM::Document
@@ -344,3 +400,9 @@ Outputs:
     Value: !Ref BootstrapSSMDoc
     Export:
       Name: !Sub "${ProjectName}-${EnvironmentName}-SSMDoc"
+      
+  MinecraftRunnerSSMDoc:
+    Description: Document for running Minecraft server
+    Value: !Ref MinecraftRunnerSSMDoc
+    Export:
+      Name: !Sub "${ProjectName}-${EnvironmentName}-MinecraftRunnerSSMDoc"
