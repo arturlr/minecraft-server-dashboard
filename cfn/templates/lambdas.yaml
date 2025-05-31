@@ -325,8 +325,6 @@ Resources:
         - arn:aws:iam::aws:policy/AmazonCognitoReadOnly
         - SSMParameterReadPolicy:
             ParameterName: !Sub "${ProjectName}*"
-        - LambdaInvokePolicy:
-            FunctionName: !Ref ConfigServer
         - Version: '2012-10-17' # Policy Document
           Statement:
             - Effect: Allow
@@ -362,7 +360,7 @@ Resources:
           COGNITO_USER_POOL_ID: 
             Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-UserPoolId"
           #INSTANCES_TABLE_NAME: !Ref InstancesTable
-          CONFIG_SERVER_LAMBDA_NAME: !Ref ConfigServer
+          # CONFIG_SERVER_LAMBDA_NAME removed as ConfigServer Lambda is no longer needed
           PARAMETERS_SECRETS_EXTENSION_HTTP_PORT: 2773
 
   GetMonthlyCost:
@@ -512,64 +510,7 @@ Resources:
           COGNITO_USER_POOL_ID:  
             Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-UserPoolId"
 
-  ConfigServer:
-    Type: AWS::Serverless::Function
-    Properties:
-      FunctionName: !Sub "${ProjectName}-${EnvironmentName}-configServer"
-      CodeUri: ../../lambdas/configServer/
-      Layers:
-        - !Ref AuthLayer
-        - !Ref UtilLayer
-        - !Ref Ec2Layer 
-      Timeout: 300
-      Policies:
-        - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
-        - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess
-        - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
-        - SSMParameterReadPolicy:
-            ParameterName: !Sub "${ProjectName}*"
-        # - DynamoDBCrudPolicy:
-        #     TableName: !Ref InstancesTable
-        - Version: "2012-10-17"
-          Statement:
-            - Effect: Allow
-              Action:
-                - events:PutRule
-                - events:PutTargets
-                - events:DeleteRule
-                - events:RemoveTargets
-                - events:DisableRule
-                - events:EnableRule
-                - events:TagResource
-                - events:UntagResource
-                - events:ListTagsForResource
-                - events:ListRules
-                - events:ListTargetsByRule
-              Resource: !Sub "arn:aws:events:${AWS::Region}:${AWS::AccountId}:rule/*"
-        - Version: "2012-10-17" # Policy Document
-          Statement:
-            - Effect: Allow
-              Action:
-                - ssm:List*
-                - ssm:Describe*
-                - ssm:Get*
-                - ssm:SendCommand
-                - ssm:CancelCommand
-                - ssm:GetCommandInvocation
-                - ec2:AssociateIamInstanceProfile
-                - ec2:DisassociateIamInstanceProfile
-                - cloudwatch:PutMetricAlarm
-                - kms:Decrypt
-              Resource: "*"
-      Environment:
-        Variables:
-          APP_NAME: !Ref ProjectName
-          ENVIRONMENT_NAME: !Ref EnvironmentName
-          TAG_APP_VALUE: !Ref AppValue
-          SSM_DOC_NAME: 
-            Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-SSMDoc" 
-          AWS_REGION_NAME: !Sub "${AWS::Region}"
-          #INSTANCES_TABLE_NAME: !Ref InstancesTable       
+  # ConfigServer Lambda removed as its functionality is handled by SSM Document
 
 Outputs:
   ServersTable:
@@ -592,10 +533,7 @@ Outputs:
     Export:
       Name: !Sub "${ProjectName}-${EnvironmentName}-GraphQLAPIId"
 
-  ConfigServer:
-    Value: !GetAtt ConfigServer.Arn
-    Export:
-      Name: !Sub "${ProjectName}-${EnvironmentName}-ConfigServer"
+  # ConfigServer output removed as Lambda is no longer needed
 
   GetMonthlyCost:
     Value: !GetAtt GetMonthlyCost.Arn

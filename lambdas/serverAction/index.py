@@ -15,7 +15,6 @@ ec2_client = boto3.client('ec2')
 appValue = os.getenv('TAG_APP_VALUE')
 ec2_instance_profile_name = os.getenv('EC2_INSTANCE_PROFILE_NAME')
 ec2_instance_profile_arn = os.getenv('EC2_INSTANCE_PROFILE_ARN')
-config_server_lambda_name = os.getenv('CONFIG_SERVER_LAMBDA_NAME')
 cognito_pool_id = os.getenv('COGNITO_USER_POOL_ID')
 
 auth = authHelper.Auth(cognito_pool_id)
