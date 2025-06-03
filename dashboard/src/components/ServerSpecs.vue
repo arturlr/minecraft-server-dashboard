@@ -8,6 +8,10 @@ const serverStore = useServerStore()
 
 const copyDialog = ref(false)
 const fixButtonProgess = ref(false)
+const fixErrorAlert = ref(false)
+const fixErrorMsg = ref("")
+const fixSuccessAlert = ref(false)
+const fixSuccessMsg = ref("")
 
 const iamServerCompliant = computed(() => {
     return serverStore.selectedServer.iamStatus === 'ok' ? true : false
@@ -56,77 +60,79 @@ function copyPublicIp() {
     });
 }
 
-async function triggerAction(
-      action,
-      param,
-      returnValue = false
-    ) {
+async function triggerAction(action, param, returnValue = false) {
+  try {
+    // Reset error state when starting a new action
+    if (action === 'config_iam') {
+      fixErrorAlert.value = false;
+      fixErrorMsg.value = "";
+    }
 
-      if (action == 'add_user') {
-        this.$refs.addUserEmail.validate();
-        if (this.$refs.addUserEmail.hasError) {
-          this.errorAlert = true
-          this.errorMsg = "Only provide your google username"
-          return false
-        }
+    let jsonParams = null;
+    if (typeof param === "string" && param.startsWith('i-')) {
+      jsonParams = JSON.parse('{ "instanceId":"' + param + '"}');
+    } else {
+      jsonParams = JSON.stringify(param);
+    }
 
-      }
-      this.serverStateConfirmation = false;
-      this.addUserDialog = false;
+    const input = {
+      instanceId: serverStore.selectedServer.id,
+      action: action,
+      params: jsonParams
+    };
 
-      let jsonParams = null;
-      if (typeof SignUpParams == "string" && param.startsWith('i-')){
-        jsonParams = JSON.parse('{ "instanceId":"' + param + '"}')
-      }
-      else {
-        jsonParams = JSON.stringify(param);
-      }
+    const actionResult = await API.graphql({
+      query: triggerServerAction,
+      variables: { input: input },
+    });
 
-      const input = {
-        instanceId: this.serverId,
-        action: action,
-        params: jsonParams
-      };
-      const actionResult = await API.graphql({
-        query: triggerServerAction,
-        variables: { input: input },
-      });
+    const rsp = JSON.parse(actionResult.data.triggerServerAction);
 
-      const rsp = JSON.parse(actionResult.data.triggerServerAction);
-
-      // resetting flags
-      if (action == 'config_iam') {
-        this.fixButtonProgess = false;
-        if (rsp.statusCode == 200) {
-          this.serversDict[this.serverId].iamStatus = 'ok'
-        }
-        else {
-          console.log(rsp)
-        }
-      }
-
-      if (action == 'start') {
-        this.fixButtonProgess = false;
-        if (rsp.statusCode == 200) {
-          this.serversDict[this.serverId].state = "starting"
-        }
-      }
-
-      if (rsp.statusCode == 200) {
-        if (returnValue) {
-          return rsp.body;
-        }
-        //this.infoMsg = "Server action: " + action + " done.";
-        //this.successAlert = true;
+    // Handle response for IAM configuration
+    if (action === 'config_iam') {
+      fixButtonProgess.value = false;
+      if (rsp.statusCode === 200) {
+        serverStore.selectedServer.iamStatus = 'ok';
+        // Clear any previous error messages if fix was successful
+        fixErrorAlert.value = false;
+        fixErrorMsg.value = "";
+        // Show success message
+        fixSuccessAlert.value = true;
+        fixSuccessMsg.value = rsp.body.msg || "Successfully fixed IAM role";
+        // Auto-hide success message after 5 seconds
+        setTimeout(() => {
+          fixSuccessAlert.value = false;
+        }, 5000);
       } else {
-        if (returnValue) {
-          return null;
-        }
-        this.errorMsg = rsp.body.err;
-        this.errorAlert = true;
+        // Display error message from backend
+        fixErrorAlert.value = true;
+        fixErrorMsg.value = rsp.body.details || rsp.body.err || "Failed to fix IAM role";
+        console.error("IAM fix error:", rsp);
       }
     }
 
+    // Handle response for start action
+    if (action === 'start') {
+      if (rsp.statusCode === 200) {
+        serverStore.selectedServer.state = "starting";
+      }
+    }
+
+    if (returnValue) {
+      return rsp.statusCode === 200 ? rsp.body : null;
+    }
+
+    return rsp.statusCode === 200;
+  } catch (error) {
+    console.error("Error executing action:", error);
+    if (action === 'config_iam') {
+      fixButtonProgess.value = false;
+      fixErrorAlert.value = true;
+      fixErrorMsg.value = "An error occurred while processing your request";
+    }
+    return returnValue ? null : false;
+  }
+}
 </script>
 
 <template>
@@ -142,6 +148,25 @@ async function triggerAction(
             </v-col>
         </v-row>
     </v-alert>
+    
+    <!-- Success alert for IAM fix -->
+    <v-alert v-if="fixSuccessAlert" closable dense type="success" class="mt-2">
+        <v-row align="center">
+            <v-col>
+                {{ fixSuccessMsg }}
+            </v-col>
+        </v-row>
+    </v-alert>
+    
+    <!-- Error alert for IAM fix -->
+    <v-alert v-if="fixErrorAlert" closable dense type="warning" class="mt-2">
+        <v-row align="center">
+            <v-col>
+                {{ fixErrorMsg }}
+            </v-col>
+        </v-row>
+    </v-alert>
+    
     <v-card class="my-8 pa-2">
         <v-card-text>
             <v-row>
