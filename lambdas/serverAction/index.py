@@ -6,6 +6,7 @@ import time
 import authHelper
 import ec2Helper
 import utilHelper
+import botocore.exceptions
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -56,11 +57,15 @@ class IamProfile:
         try:
             # Call EC2 API to remove the profile association
             self.ec2_client.disassociate_iam_instance_profile(AssociationId=self.association_id)
-        except self.ec2_client.exceptions.InvalidAssociationIDNotFound as e:
-            # Handle the case where the association ID doesn't exist
-            logger.warning("Association ID not found: %s. This is not an error, continuing...", self.association_id)
-            # Return True to continue with attaching the profile
-            return True
+        except botocore.exceptions.ClientError as e:
+            if "InvalidAssociationID.NotFound" in str(e):
+                # Handle the case where the association ID doesn't exist
+                logger.warning("Association ID not found: %s. This is not an error, continuing...", self.association_id)
+                # Return True to continue with attaching the profile
+                return True
+            else:
+                logger.error("Error disassociating IAM profile: %s", str(e))
+                return False
         except Exception as e:
             logger.error("Error disassociating IAM profile: %s", str(e))
             return False
@@ -96,11 +101,15 @@ class IamProfile:
                 IamInstanceProfile={"Name": ec2_instance_profile_name},
                 InstanceId=self.instance_id
             )
-        except self.ec2_client.exceptions.UnauthorizedOperation as e:
-            # Handle unauthorized operation specifically
+        except botocore.exceptions.ClientError as e:
             error_msg = str(e)
-            logger.error("Unauthorized operation when attaching IAM profile: %s", error_msg)
-            return {"status": "error", "message": error_msg, "code": "UnauthorizedOperation"}
+            # Check if this is an unauthorized operation
+            if "UnauthorizedOperation" in error_msg:
+                logger.error("Unauthorized operation when attaching IAM profile: %s", error_msg)
+                return {"status": "error", "message": error_msg, "code": "UnauthorizedOperation"}
+            else:
+                logger.error("Error attaching IAM profile: %s", error_msg)
+                return False
         except Exception as e:
             logger.error("Error attaching IAM profile: %s", str(e))
             return False
