@@ -31,10 +31,10 @@ class IamProfile:
         iam_profile = ec2_utils.describe_iam_profile(self.instance_id, "associated")
 
         if iam_profile and iam_profile['Arn'] == ec2_instance_profile_arn:
-            logger.info(f"Instance IAM Profile is already valid: {iam_profile['Arn']}")
+            logger.info("Instance IAM Profile is already valid: %s", iam_profile['Arn'])
             return True
         elif iam_profile:
-            logger.info(f"Instance IAM Profile is invalid: {iam_profile['Arn']}")
+            logger.info("Instance IAM Profile is invalid: %s", iam_profile['Arn'])
             self.association_id = iam_profile['AssociationId']
             rsp = self.disassociate_iam_profile()
             if not rsp:
@@ -47,17 +47,17 @@ class IamProfile:
     # Parameters:
     #   association_id: The ID of the IAM instance profile association to remove
     def disassociate_iam_profile(self):
-        logger.info(f"Disassociating IAM profile: {self.association_id}")
+        logger.info("Disassociating IAM profile: %s", self.association_id)
         try:
             # Call EC2 API to remove the profile association
             self.ec2_client.disassociate_iam_instance_profile(AssociationId=self.association_id)
         except self.ec2_client.exceptions.InvalidAssociationIDNotFound as e:
             # Handle the case where the association ID doesn't exist
-            logger.warning(f"Association ID not found: {self.association_id}. This is not an error, continuing...")
+            logger.warning("Association ID not found: %s. This is not an error, continuing...", self.association_id)
             # Return True to continue with attaching the profile
             return True
         except Exception as e:
-            logger.error(f"Error disassociating IAM profile: {str(e)}")
+            logger.error("Error disassociating IAM profile: %s", str(e))
             return False
 
         # Helper function that checks if profile is fully disassociated
@@ -77,13 +77,22 @@ class IamProfile:
     def attach_iam_profile(self):
         # This method attaches an IAM instance profile to an EC2 instance
         # The profile name and ARN are specified in environment variables
-        logger.info(f"Attaching IAM profile: {ec2_instance_profile_name}")
+        logger.info("Attaching IAM profile: %s", ec2_instance_profile_name)
         
-        # Call EC2 API to associate the IAM profile with the instance
-        response = self.ec2_client.associate_iam_instance_profile(
-            IamInstanceProfile={"Name": ec2_instance_profile_name},
-            InstanceId=self.instance_id
-        )
+        try:
+            # Call EC2 API to associate the IAM profile with the instance
+            response = self.ec2_client.associate_iam_instance_profile(
+                IamInstanceProfile={"Name": ec2_instance_profile_name},
+                InstanceId=self.instance_id
+            )
+        except self.ec2_client.exceptions.UnauthorizedOperation as e:
+            # Handle unauthorized operation specifically
+            error_msg = str(e)
+            logger.error("Unauthorized operation when attaching IAM profile: %s", error_msg)
+            return {"status": "error", "message": error_msg, "code": "UnauthorizedOperation"}
+        except Exception as e:
+            logger.error("Error attaching IAM profile: %s", str(e))
+            return False
 
         # Define helper function to check if profile is properly attached
         def check_associated_status():
@@ -144,7 +153,7 @@ def check_and_create_group(instance_id, user_name):
     cogGrp = auth.group_exists(instance_id)
     if not cogGrp:
         # Create Group
-        logger.warning(f"Group {instance_id} does not exit. Creating one.")
+        logger.warning("Group %s does not exit. Creating one.", instance_id)
         crtGrp = auth.create_group(instance_id)
         if crtGrp:
             # adding current user to the group
@@ -169,7 +178,7 @@ def action_process(action, instance_id, arguments=None):
     Returns:
         dict: Response containing status code and message
     """
-    logger.info(f"Action: {action} InstanceId: {instance_id}")
+    logger.info("Action: %s InstanceId: %s", action, instance_id)
     action = action.lower().strip()
 
     # Map of valid actions to their handlers
@@ -198,7 +207,7 @@ def handle_get_server_users(instance_id):
         return users
     
     except Exception as e:
-        logger.error(f"Error retrieving users for instance {instance_id}: {str(e)}")
+        logger.error("Error retrieving users for instance %s: %s", instance_id, str(e))
         return utl.response(500, {"error": f"Failed to retrieve users: {str(e)}"})    
 
 def handle_get_server_config(instance_id):
@@ -222,39 +231,48 @@ def handle_server_action(action, instance_id):
         if action == "start":
             if state == "stopped":
                 ec2_client.start_instances(InstanceIds=[instance_id])
-                logger.info(f'Starting instance {instance_id}')
+                logger.info('Starting instance %s', instance_id)
             else:
-                logger.warning(f'Start instance {instance_id} not possible - current state: {state}')
+                logger.warning('Start instance %s not possible - current state: %s', instance_id, state)
 
         # Handle stop action        
         elif action == "stop":
             if state == "running":
                 ec2_client.stop_instances(InstanceIds=[instance_id])
-                logger.info(f'Stopping instance {instance_id}')
+                logger.info('Stopping instance %s', instance_id)
             else:
-                logger.warning(f'Stop instance {instance_id} not possible - current state: {state}')
+                logger.warning('Stop instance %s not possible - current state: %s', instance_id, state)
 
         # Handle restart action
         elif action == "restart":
             if state == "running":
                 ec2_client.reboot_instances(InstanceIds=[instance_id])
-                logger.info(f'Restarting instance {instance_id}')
+                logger.info('Restarting instance %s', instance_id)
             else:
-                logger.warning(f'Restart instance {instance_id} not possible - current state: {state}')            
+                logger.warning('Restart instance %s not possible - current state: %s', instance_id, state)            
 
         return utl.response(200, f"{action.capitalize()} command submitted")
     
     except Exception as e:
-        logger.error(f"Error performing {action} action on instance {instance_id}: {str(e)}")
+        logger.error("Error performing %s action on instance %s: %s", action, instance_id, str(e))
         return utl.response(500, {"error": f"Failed to {action} instance: {str(e)}"})
     
 def handle_fix_role(instance_id):
     """Helper function to handle IAM role fixes"""
     iam_profile = IamProfile(instance_id)
     resp = iam_profile.manage_iam_profile()
-    logger.info(f"IAM role attachment response: {resp}")
+    logger.info("IAM role attachment response: %s", resp)
     
-    if resp:
+    # Check if the response is a dictionary with error information
+    if isinstance(resp, dict) and resp.get("status") == "error":
+        if resp.get("code") == "UnauthorizedOperation":
+            # Return a specific error for unauthorized operations
+            return utl.response(403, {
+                "err": "Unauthorized operation", 
+                "details": resp.get("message", "You do not have permission to attach IAM roles")
+            })
+    
+    if resp is True:
         return utl.response(200, {"msg": "Successfully attached IAM role to the Minecraft Instance"})
     
     logger.error("Attaching IAM role failed")
@@ -268,7 +286,7 @@ def handle_update_server_config(instance_id, arguments):
     
     response = ec2_utils.set_instance_attributes_to_tags(arguments)
 
-    logger.info(f"Config update response: {response}")
+    logger.info("Config update response: %s", response)
         
     if response.get('shutdownMethod') == 'Schedule':
         if response.get('scheduleExpression') is None:
@@ -313,8 +331,8 @@ def handler(event, context):
             #return utl.response(401,{"err": "No request found in event" })
 
     except Exception as e:
-        logger.error(f"Error processing request: {e}")
-        return utl.response(401,{"err": e })
+        logger.error("Error processing request: %s", e)
+        return utl.response(401,{"err": str(e) })
 
     # Get user info
     user_attributes = auth.process_token(token)    
@@ -351,13 +369,13 @@ def handler(event, context):
             'workDir': input_args.get('workDir', '')
         }
     
-    logger.info(f"Received instanceId: {instance_id}")
+    logger.info("Received instanceId: %s", instance_id)
 
     is_authorized = check_authorization(event, instance_id, user_attributes)
 
     if not is_authorized:
         resp = {"err": "User not authorized"}
-        logger.error(user_attributes["email"] + " is not authorized")
+        logger.error("%s is not authorized", user_attributes["email"])
         return utl.response(401, resp)
 
     # MOVE THIS FUNCTION TO CONFIG SERVER    
@@ -367,6 +385,6 @@ def handler(event, context):
 
     # Calling action_process function to process the action with the mutation name
     field_name = event["info"]["fieldName"]
-    logger.info(f"Received field name: {field_name}")
+    logger.info("Received field name: %s", field_name)
     return action_process(field_name,instance_id,input)
     
