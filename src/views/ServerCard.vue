@@ -623,10 +623,27 @@ export default {
       if (submit) {
         // Ensure numeric values are properly converted when submitting
         let params = { 
-          am: this.alarmMetric,
-          at: parseFloat(this.alarmThreshold) || 10, // Convert to Float with default value
-          aep: parseInt(this.alarmEvaluationPeriod) || 35 // Convert to Int with default value
+          am: this.alarmMetric
         }
+        
+        // Convert alarmThreshold to Float with default value
+        try {
+          const atValue = parseFloat(this.alarmThreshold);
+          params.at = isNaN(atValue) ? 10 : atValue;
+        } catch (error) {
+          params.at = 10;
+          console.warn("Error parsing alarmThreshold, using default: 10", error);
+        }
+        
+        // Convert alarmEvaluationPeriod to Int with default value
+        try {
+          const aepValue = parseInt(this.alarmEvaluationPeriod);
+          params.aep = isNaN(aepValue) ? 35 : aepValue;
+        } catch (error) {
+          params.aep = 35;
+          console.warn("Error parsing alarmEvaluationPeriod, using default: 35", error);
+        }
+        
         if (this.runCommand && this.runCommand.length > 3) {
           params.rc = this.runCommand
         }
@@ -658,11 +675,35 @@ export default {
           }
           if ("alarmThreshold" in infoResp){
             // Convert alarmThreshold to Float with default value
-            this.alarmThreshold = parseFloat(infoResp.alarmThreshold) || 10;
+            try {
+              this.alarmThreshold = parseFloat(infoResp.alarmThreshold);
+              if (isNaN(this.alarmThreshold)) {
+                this.alarmThreshold = 10;
+                console.warn("Invalid alarmThreshold value, using default: 10");
+              }
+            } catch (error) {
+              this.alarmThreshold = 10;
+              console.warn("Error parsing alarmThreshold, using default: 10", error);
+            }
+          } else {
+            // Default value if missing
+            this.alarmThreshold = 10;
           }
           if ("alarmEvaluationPeriod" in infoResp){
             // Convert alarmEvaluationPeriod to Int with default value
-            this.alarmEvaluationPeriod = parseInt(infoResp.alarmEvaluationPeriod) || 35;
+            try {
+              this.alarmEvaluationPeriod = parseInt(infoResp.alarmEvaluationPeriod);
+              if (isNaN(this.alarmEvaluationPeriod)) {
+                this.alarmEvaluationPeriod = 35;
+                console.warn("Invalid alarmEvaluationPeriod value, using default: 35");
+              }
+            } catch (error) {
+              this.alarmEvaluationPeriod = 35;
+              console.warn("Error parsing alarmEvaluationPeriod, using default: 35", error);
+            }
+          } else {
+            // Default value if missing
+            this.alarmEvaluationPeriod = 35;
           }
         }        
       }

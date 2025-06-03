@@ -26,7 +26,9 @@ class Dyn:
                     # Key('region').eq(region_name)
             )
             if 'Items' in response and len(response['Items']) > 0:
-                return {'code': 200, 'msg': response['Items'][0] } 
+                # Process the item to ensure proper type conversion
+                processed_item = self._process_item_types(response['Items'][0])
+                return {'code': 200, 'msg': processed_item } 
             else:
                 logger.warning("GetInstanceAttr: Instance not found in the App Database")
                 return {'code': 400, 'msg': "Instance not found in the App Database" } 
@@ -34,6 +36,42 @@ class Dyn:
         except ClientError as e:
             logger.error(e.response['Error']['Message'])
             return {'code': 500, 'msg': e.response['Error']['Message'] }
+            
+    def _process_item_types(self, item):
+        """
+        Process an item from DynamoDB to ensure proper type conversion for numeric fields.
+        
+        Args:
+            item (dict): The DynamoDB item to process
+            
+        Returns:
+            dict: The processed item with proper type conversion
+        """
+        processed_item = item.copy()
+        
+        # Convert alarmThreshold to Float with default value
+        if 'alarmThreshold' in processed_item:
+            try:
+                processed_item['alarmThreshold'] = float(processed_item['alarmThreshold'])
+            except (ValueError, TypeError):
+                logger.warning(f"Invalid alarmThreshold value: {processed_item['alarmThreshold']}. Using default: 10")
+                processed_item['alarmThreshold'] = 10.0
+        else:
+            # Add default value if missing
+            processed_item['alarmThreshold'] = 10.0
+            
+        # Convert alarmEvaluationPeriod to Int with default value
+        if 'alarmEvaluationPeriod' in processed_item:
+            try:
+                processed_item['alarmEvaluationPeriod'] = int(processed_item['alarmEvaluationPeriod'])
+            except (ValueError, TypeError):
+                logger.warning(f"Invalid alarmEvaluationPeriod value: {processed_item['alarmEvaluationPeriod']}. Using default: 35")
+                processed_item['alarmEvaluationPeriod'] = 35
+        else:
+            # Add default value if missing
+            processed_item['alarmEvaluationPeriod'] = 35
+            
+        return processed_item
 
     def SetInstanceAttr(self,instanceId,params):
         try:

@@ -361,6 +361,30 @@ def handler(event, context):
         # GET INSTANCE INFO
         elif action == "get_instance_attr":
             response = dyn.GetInstanceAttr(instanceId)
+            # Additional validation to ensure proper types for GraphQL schema
+            if response["code"] == 200 and isinstance(response["msg"], dict):
+                # Ensure alarmThreshold is a Float
+                if "alarmThreshold" in response["msg"]:
+                    try:
+                        response["msg"]["alarmThreshold"] = float(response["msg"]["alarmThreshold"])
+                    except (ValueError, TypeError):
+                        logger.warning(f"Invalid alarmThreshold value: {response['msg']['alarmThreshold']}. Using default: 10")
+                        response["msg"]["alarmThreshold"] = 10.0
+                else:
+                    # Add default value if missing
+                    response["msg"]["alarmThreshold"] = 10.0
+                
+                # Ensure alarmEvaluationPeriod is an Int
+                if "alarmEvaluationPeriod" in response["msg"]:
+                    try:
+                        response["msg"]["alarmEvaluationPeriod"] = int(response["msg"]["alarmEvaluationPeriod"])
+                    except (ValueError, TypeError):
+                        logger.warning(f"Invalid alarmEvaluationPeriod value: {response['msg']['alarmEvaluationPeriod']}. Using default: 35")
+                        response["msg"]["alarmEvaluationPeriod"] = 35
+                else:
+                    # Add default value if missing
+                    response["msg"]["alarmEvaluationPeriod"] = 35
+            
             return utl.response(response["code"],response["msg"])
 
         
