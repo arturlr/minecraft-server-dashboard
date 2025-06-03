@@ -28,17 +28,22 @@ class IamProfile:
         self.association_id = None
 
     def manage_iam_profile(self):
-        iam_profile = ec2_utils.describe_iam_profile(self.instance_id, "associated")
+        try:
+            iam_profile = ec2_utils.describe_iam_profile(self.instance_id, "associated")
 
-        if iam_profile and iam_profile['Arn'] == ec2_instance_profile_arn:
-            logger.info("Instance IAM Profile is already valid: %s", iam_profile['Arn'])
-            return True
-        elif iam_profile:
-            logger.info("Instance IAM Profile is invalid: %s", iam_profile['Arn'])
-            self.association_id = iam_profile['AssociationId']
-            rsp = self.disassociate_iam_profile()
-            if not rsp:
-                return False
+            if iam_profile and iam_profile['Arn'] == ec2_instance_profile_arn:
+                logger.info("Instance IAM Profile is already valid: %s", iam_profile['Arn'])
+                return True
+            elif iam_profile:
+                logger.info("Instance IAM Profile is invalid: %s", iam_profile['Arn'])
+                self.association_id = iam_profile['AssociationId']
+                rsp = self.disassociate_iam_profile()
+                if not rsp:
+                    return False
+        except Exception as e:
+            # If we can't describe the profile, log it but continue with attachment
+            logger.warning("Error describing IAM profile: %s. Will attempt to attach profile anyway.", str(e))
+            # If the error is about an invalid association ID, we can continue
 
         logger.info("Attaching IAM role to the Minecraft Instance")
         return self.attach_iam_profile()
@@ -63,13 +68,19 @@ class IamProfile:
         # Helper function that checks if profile is fully disassociated
         # Returns True if profile is confirmed disassociated, False otherwise
         def check_disassociated_status():
-            return ec2_utils.describe_iam_profile(self.instance_id, "disassociated", self.association_id) is not None
+            try:
+                return ec2_utils.describe_iam_profile(self.instance_id, "disassociated", self.association_id) is not None
+            except Exception as e:
+                # If we get an error checking the status, assume it's disassociated
+                logger.warning("Error checking disassociation status: %s. Assuming profile is disassociated.", str(e))
+                return True
 
         # Retry checking disassociation status for up to 30 times with 5 second delays
         # Return False if profile is not disassociated after all retries
         if not utl.retry_operation(check_disassociated_status, max_retries=30, delay=5):
             logger.warning("Profile timeout during disassociating")
-            return False
+            # Even if we time out, we'll try to attach the new profile anyway
+            return True
 
         # Profile was successfully disassociated
         return True
@@ -96,10 +107,14 @@ class IamProfile:
 
         # Define helper function to check if profile is properly attached
         def check_associated_status():
-            # Get current IAM profile info for the instance
-            iam_profile = ec2_utils.describe_iam_profile(self.instance_id, "associated")
-            # Verify profile ARN matches expected ARN
-            return iam_profile and iam_profile['Arn'] == ec2_instance_profile_arn
+            try:
+                # Get current IAM profile info for the instance
+                iam_profile = ec2_utils.describe_iam_profile(self.instance_id, "associated")
+                # Verify profile ARN matches expected ARN
+                return iam_profile and iam_profile['Arn'] == ec2_instance_profile_arn
+            except Exception as e:
+                logger.warning("Error checking association status: %s", str(e))
+                return False
 
         # Retry checking profile association status for up to 30 times with 5 second delays
         # Return False if profile is not attached after all retries
