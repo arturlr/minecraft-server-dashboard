@@ -52,8 +52,21 @@ class Dyn:
                 dynExpression = dynExpression + "alarmMetric = :am,"     
                 valuesMap[':am'] = params["am"]
             if 'at' in params:
-                dynExpression = dynExpression + "alarmThreshold = :at,"     
-                valuesMap[':at'] = params["at"]
+                dynExpression = dynExpression + "alarmThreshold = :at,"
+                # Ensure alarmThreshold is stored as a float
+                try:
+                    valuesMap[':at'] = float(params["at"])
+                except (ValueError, TypeError):
+                    logger.warning(f"Invalid alarmThreshold value: {params['at']}. Using default: 10")
+                    valuesMap[':at'] = 10.0
+            if 'aep' in params:
+                dynExpression = dynExpression + "alarmEvaluationPeriod = :aep,"
+                # Ensure alarmEvaluationPeriod is stored as an integer
+                try:
+                    valuesMap[':aep'] = int(params["aep"])
+                except (ValueError, TypeError):
+                    logger.warning(f"Invalid alarmEvaluationPeriod value: {params['aep']}. Using default: 35")
+                    valuesMap[':aep'] = 35
         
             entry = self.GetInstanceAttr(instanceId)
 

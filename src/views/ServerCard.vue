@@ -269,6 +269,18 @@
                 ></v-text-field>
               </v-col>
 
+              <v-col cols="12" sm="6">
+                <v-text-field
+                  dense
+                  label="Evaluation period (minutes)"
+                  hint="Number of minutes before auto-shutdown"
+                  :rules="[rules.required, rules.onlyNumbers]"
+                  maxlength="3"
+                  v-model="alarmEvaluationPeriod"
+                  ref="alarmEvaluationPeriod"
+                ></v-text-field>
+              </v-col>
+
               <v-col cols="12">
                 <v-text-field
                   dense
@@ -474,7 +486,8 @@ export default {
       addUserDialog: false,
       fixButtonProgess: false,
       alarmMetric: null,
-      alarmThreshold: 25,
+      alarmThreshold: 10,
+      alarmEvaluationPeriod: 35, // Added alarmEvaluationPeriod with default value
       settingsFormHasErrors: false,
       chartInit: [
         {
@@ -608,11 +621,16 @@ export default {
       this.settingsDialogLoading = true;
       
       if (submit) {
-        let params = { am:this.alarmMetric,at:this.alarmThreshold }
-        if (this.runCommand.length > 3) {
+        // Ensure numeric values are properly converted when submitting
+        let params = { 
+          am: this.alarmMetric,
+          at: parseFloat(this.alarmThreshold) || 10, // Convert to Float with default value
+          aep: parseInt(this.alarmEvaluationPeriod) || 35 // Convert to Int with default value
+        }
+        if (this.runCommand && this.runCommand.length > 3) {
           params.rc = this.runCommand
         }
-        if (this.workingDir.length > 3) {
+        if (this.workingDir && this.workingDir.length > 3) {
           params.wd = this.workingDir
         }
 
@@ -624,6 +642,7 @@ export default {
         this.workingDir = "";
         this.alarmMetric = "CPUUtilization";
         this.alarmThreshold = "10";
+        this.alarmEvaluationPeriod = 35; // Default value for alarmEvaluationPeriod
 
         const infoResp = await this.triggerAction("get_instance_attr", this.serverId, true);
 
@@ -638,7 +657,12 @@ export default {
             this.alarmMetric = infoResp.alarmMetric;
           }
           if ("alarmThreshold" in infoResp){
-            this.alarmThreshold = infoResp.alarmThreshold;
+            // Convert alarmThreshold to Float with default value
+            this.alarmThreshold = parseFloat(infoResp.alarmThreshold) || 10;
+          }
+          if ("alarmEvaluationPeriod" in infoResp){
+            // Convert alarmEvaluationPeriod to Int with default value
+            this.alarmEvaluationPeriod = parseInt(infoResp.alarmEvaluationPeriod) || 35;
           }
         }        
       }
@@ -650,6 +674,7 @@ export default {
 
       this.$refs.alarmMetric.reset();
       this.$refs.alarmThreshold.reset();
+      this.$refs.alarmEvaluationPeriod.reset();
       this.$refs.runCommand.reset();
       this.$refs.workingDir.reset();
     },
@@ -658,11 +683,13 @@ export default {
 
       this.$refs.alarmMetric.validate();
       this.$refs.alarmThreshold.validate();
+      this.$refs.alarmEvaluationPeriod.validate();
       this.$refs.runCommand.validate();
       this.$refs.workingDir.validate();
       if (
         this.$refs.alarmMetric.hasError ||
         this.$refs.alarmThreshold.hasError ||
+        this.$refs.alarmEvaluationPeriod.hasError ||
         this.$refs.runCommand.hasError ||
         this.$refs.workingDir.hasError
       ) {
