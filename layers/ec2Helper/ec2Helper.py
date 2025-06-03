@@ -36,7 +36,7 @@ class Ec2Utils:
             instance_id (str): The ID of the EC2 instance.
 
         Returns:
-            dict: A dictionary containing the instance attributes.
+            dict: A dictionary containing the instance attributes with proper type conversions.
         """
         try:        
             logger.info("------- get_instance_attributes_from_tags " + instance_id)
@@ -54,6 +54,32 @@ class Ec2Utils:
                 tag_mapping[tag['Key'].lower()] = tag['Value']
 
             # logger.info(f"Tag Mapping: {tag_mapping}")
+            
+            # Get values with proper type conversions
+            alarm_threshold = tag_mapping.get('alarmthreshold', '')
+            alarm_evaluation_period = tag_mapping.get('alarmevaluationperiod', '')
+            
+            # Convert alarmThreshold to Float if present
+            if alarm_threshold:
+                try:
+                    alarm_threshold = float(alarm_threshold)
+                except (ValueError, TypeError):
+                    logger.warning(f"Invalid alarmThreshold value: {alarm_threshold}. Using default 0.0")
+                    alarm_threshold = 0.0
+            else:
+                # Default value for alarmThreshold
+                alarm_threshold = 0.0
+                
+            # Convert alarmEvaluationPeriod to Int if present
+            if alarm_evaluation_period:
+                try:
+                    alarm_evaluation_period = int(alarm_evaluation_period)
+                except (ValueError, TypeError):
+                    logger.warning(f"Invalid alarmEvaluationPeriod value: {alarm_evaluation_period}. Using default 0")
+                    alarm_evaluation_period = 0
+            else:
+                # Default value for alarmEvaluationPeriod
+                alarm_evaluation_period = 0
 
             # returning following the Appsync Schema for ServerConfig
             return {
@@ -61,8 +87,8 @@ class Ec2Utils:
                 'shutdownMethod': tag_mapping.get('shutdownmethod', ''),  
                 'scheduleExpression': tag_mapping.get('scheduleexpression', ''),
                 'alarmType': tag_mapping.get('alarmtype', ''),
-                'alarmThreshold': tag_mapping.get('alarmthreshold', ''),
-                'alarmEvaluationPeriod': tag_mapping.get('alarmevaluationperiod', ''),
+                'alarmThreshold': alarm_threshold,  # Now properly typed as Float
+                'alarmEvaluationPeriod': alarm_evaluation_period,  # Now properly typed as Int
                 'runCommand': tag_mapping.get('runcommand', ''),
                 'workDir': tag_mapping.get('workdir', ''),
                 'groupMembers': ''
@@ -70,7 +96,18 @@ class Ec2Utils:
         
         except Exception as e:
             logger.error(f"Error getting tags: {e}")
-            return None  # or handle this error as appropriate
+            # Return default values in case of error
+            return {
+                'id': instance_id,
+                'shutdownMethod': '',  
+                'scheduleExpression': '',
+                'alarmType': '',
+                'alarmThreshold': 0.0,  # Default Float value
+                'alarmEvaluationPeriod': 0,  # Default Int value
+                'runCommand': '',
+                'workDir': '',
+                'groupMembers': ''
+            }
         
     def set_instance_attributes_to_tags(self,input):
         instance_id = input.get('id', None)
