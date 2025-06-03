@@ -172,14 +172,28 @@ def updateAlarm(instanceId):
     instanceInfo = dyn.GetInstanceAttr(instanceId)
     # Default values
     alarmMetric = "CPUUtilization"
-    alarmThreshold = "10"
+    alarmThreshold = 10
+    alarmEvaluationPeriod = 35
 
     if instanceInfo != None and instanceInfo['code'] == 200:
         if 'alarmMetric' in instanceInfo['msg']:
             alarmMetric = instanceInfo['msg']['alarmMetric']
             
         if 'alarmThreshold' in instanceInfo['msg']:
-            alarmThreshold = instanceInfo['msg']['alarmThreshold']
+            # Convert alarmThreshold to float with default value
+            try:
+                alarmThreshold = float(instanceInfo['msg']['alarmThreshold'])
+            except (ValueError, TypeError):
+                logger.warning(f"Invalid alarmThreshold value: {instanceInfo['msg']['alarmThreshold']}. Using default: 10")
+                alarmThreshold = 10
+        
+        if 'alarmEvaluationPeriod' in instanceInfo['msg']:
+            # Convert alarmEvaluationPeriod to int with default value
+            try:
+                alarmEvaluationPeriod = int(instanceInfo['msg']['alarmEvaluationPeriod'])
+            except (ValueError, TypeError):
+                logger.warning(f"Invalid alarmEvaluationPeriod value: {instanceInfo['msg']['alarmEvaluationPeriod']}. Using default: 35")
+                alarmEvaluationPeriod = 35
         
     elif instanceInfo != None and instanceInfo['code'] == 400:
         logger.info("Using Default values for Alarming")
@@ -210,15 +224,14 @@ def updateAlarm(instanceId):
             Statistic=statistic,
             Dimensions=dimensions,
             Period=60,
-            EvaluationPeriods=35,
-            DatapointsToAlarm=35,
-            Threshold=int(alarmThreshold),
+            EvaluationPeriods=alarmEvaluationPeriod,
+            DatapointsToAlarm=alarmEvaluationPeriod,
+            Threshold=alarmThreshold,
             TreatMissingData="missing",
             ComparisonOperator="LessThanOrEqualToThreshold"   
         )
 
-    logger.info("Alarm configured to " + alarmMetric + " and " + alarmThreshold)
-            
+    logger.info(f"Alarm configured to {alarmMetric}, threshold: {alarmThreshold}, evaluation period: {alarmEvaluationPeriod}")
 def handler(event, context):
     if not 'identity' in event:
         logger.error("No Identity found")
