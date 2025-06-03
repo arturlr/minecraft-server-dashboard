@@ -48,8 +48,17 @@ class IamProfile:
     #   association_id: The ID of the IAM instance profile association to remove
     def disassociate_iam_profile(self):
         logger.info(f"Disassociating IAM profile: {self.association_id}")
-        # Call EC2 API to remove the profile association
-        self.ec2_client.disassociate_iam_instance_profile(AssociationId=self.association_id)
+        try:
+            # Call EC2 API to remove the profile association
+            self.ec2_client.disassociate_iam_instance_profile(AssociationId=self.association_id)
+        except self.ec2_client.exceptions.InvalidAssociationIDNotFound as e:
+            # Handle the case where the association ID doesn't exist
+            logger.warning(f"Association ID not found: {self.association_id}. This is not an error, continuing...")
+            # Return True to continue with attaching the profile
+            return True
+        except Exception as e:
+            logger.error(f"Error disassociating IAM profile: {str(e)}")
+            return False
 
         # Helper function that checks if profile is fully disassociated
         # Returns True if profile is confirmed disassociated, False otherwise
@@ -190,7 +199,7 @@ def handle_get_server_users(instance_id):
     
     except Exception as e:
         logger.error(f"Error retrieving users for instance {instance_id}: {str(e)}")
-        return utl.response(500, {"error": f"Failed to retrieve users: {str(e)}"})   
+        return utl.response(500, {"error": f"Failed to retrieve users: {str(e)}"})    
 
 def handle_get_server_config(instance_id):
     """Helper function to handle get server config action"""
@@ -206,7 +215,7 @@ def handle_server_action(action, instance_id):
         if not instance.get('Instances'):
             raise ValueError(f"Instance {instance_id} not found")
             
-        instance_info = instance['Instances'][0]         
+        instance_info = instance['Instances'][0]        
         state = instance_info["State"]["Name"]
 
         # Handle start action
@@ -231,7 +240,7 @@ def handle_server_action(action, instance_id):
                 ec2_client.reboot_instances(InstanceIds=[instance_id])
                 logger.info(f'Restarting instance {instance_id}')
             else:
-                logger.warning(f'Restart instance {instance_id} not possible - current state: {state}')                    
+                logger.warning(f'Restart instance {instance_id} not possible - current state: {state}')            
 
         return utl.response(200, f"{action.capitalize()} command submitted")
     
@@ -268,7 +277,7 @@ def handle_update_server_config(instance_id, arguments):
         # Delete existing alarm
         ec2_utils.remove_alarm(instance_id)
         # Configure event for scheduled shutdown
-        ec2_utils.configure_shutdown_event(instance_id, response.get('scheduleExpression'))       
+        ec2_utils.configure_shutdown_event(instance_id, response.get('scheduleExpression'))        
     else:
         if response.get('alarmEvaluationPeriod') is None or response.get('alarmThreshold') is None or response.get('shutdownMethod') is None:
             logger.error("Missing alarmEvaluationPeriod or alarmThreshold")
@@ -278,7 +287,7 @@ def handle_update_server_config(instance_id, arguments):
         # Set instance tags and create alarm
         ec2_utils.update_alarm(instance_id, response.get('shutdownMethod'), response.get('alarmThreshold'), response.get('alarmEvaluationPeriod'))
     
-    return response                
+    return response            
 
 def handle_local_invocation(event, context):
     # Handle local invocations here
@@ -321,8 +330,8 @@ def handler(event, context):
 
     # Extract instance_id from arguments
     instance_id = (event["arguments"].get("instanceId") or 
-                  event["arguments"].get("id") or
-                  event["arguments"].get("input", {}).get("id"))
+                 event["arguments"].get("id") or
+                 event["arguments"].get("input", {}).get("id"))
 
     if not instance_id:
         logger.error("Instance id is not present in the event") 
@@ -352,9 +361,9 @@ def handler(event, context):
         return utl.response(401, resp)
 
     # MOVE THIS FUNCTION TO CONFIG SERVER    
-    # group_check = check_and_create_group(instance_id,user_attributes["username"])     
+    # group_check = check_and_create_group(instance_id,user_attributes["username"])    
     # if not group_check:        
-    #     logger.error("Group creation failed")          
+    #     logger.error("Group creation failed")        
 
     # Calling action_process function to process the action with the mutation name
     field_name = event["info"]["fieldName"]
