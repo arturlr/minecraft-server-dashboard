@@ -211,14 +211,20 @@ class Ec2Utils:
     def configure_shutdown_event(self, instance_id, cron_expression):
         eventbridge = boto3.client('events')
         
+        logger.info(f"Original cron expression: {cron_expression}")
+        
         # Validate and format the cron expression for EventBridge
         formatted_schedule = self._format_schedule_expression(cron_expression)
+        logger.info(f"Formatted schedule expression: {formatted_schedule}")
+        
         if not formatted_schedule:
             logger.error(f"Invalid cron expression: {cron_expression}")
             raise ValueError(f"Invalid cron expression: {cron_expression}")
         
         # Create the rule with cron expression
         rule_name = f"shutdown-{instance_id}"
+        logger.info(f"Creating EventBridge rule {rule_name} with schedule: {formatted_schedule}")
+        
         eventbridge.put_rule(
             Name=rule_name,
             ScheduleExpression=formatted_schedule,
@@ -262,14 +268,20 @@ class Ec2Utils:
         """Configure EventBridge rule to start EC2 instance on schedule"""
         eventbridge = boto3.client('events')
         
+        logger.info(f"Original start cron expression: {cron_expression}")
+        
         # Validate and format the cron expression for EventBridge
         formatted_schedule = self._format_schedule_expression(cron_expression)
+        logger.info(f"Formatted start schedule expression: {formatted_schedule}")
+        
         if not formatted_schedule:
             logger.error(f"Invalid cron expression: {cron_expression}")
             raise ValueError(f"Invalid cron expression: {cron_expression}")
         
         # Create the rule with cron expression for starting
         rule_name = f"start-{instance_id}"
+        logger.info(f"Creating EventBridge start rule {rule_name} with schedule: {formatted_schedule}")
+        
         eventbridge.put_rule(
             Name=rule_name,
             ScheduleExpression=formatted_schedule,
@@ -344,19 +356,128 @@ class Ec2Utils:
             # EventBridge cron: minute hour day month day-of-week year
             minute, hour, day, month, day_of_week = fields
             
-            # Validate basic format
+            # Validate basic format first
             if not self._validate_cron_field(minute, 0, 59) or \
                not self._validate_cron_field(hour, 0, 23) or \
-               not self._validate_cron_field(day_of_week, 0, 6, allow_star=True):
+               not self._validate_dow_field(day_of_week):
                 logger.warning(f"Invalid cron expression values: {cron_expression}")
                 return None
             
+            # Convert day-of-week from standard cron (0-6, Sunday=0) to EventBridge (1-7, Sunday=7)
+            converted_dow = self._convert_day_of_week(day_of_week)
+            if not converted_dow:
+                logger.warning(f"Failed to convert day-of-week: {day_of_week}")
+                return None
+            
             # Convert to EventBridge format (add year field)
-            eventbridge_cron = f"cron({minute} {hour} {day} {month} {day_of_week} *)"
+            eventbridge_cron = f"cron({minute} {hour} {day} {month} {converted_dow} *)"
             return eventbridge_cron
         
         logger.warning(f"Invalid cron expression format: {cron_expression}")
         return None
+    
+    def _convert_day_of_week(self, day_of_week):
+        """
+        Convert day-of-week from standard cron format (0-6, Sunday=0) to EventBridge format (1-7, Sunday=7).
+        
+        Args:
+            day_of_week (str): Day of week field from cron expression
+            
+        Returns:
+            str: Converted day-of-week field or None if invalid
+        """
+        if day_of_week == '*':
+            return '*'
+            
+        # Handle comma-separated values
+        if ',' in day_of_week:
+            values = day_of_week.split(',')
+            converted_values = []
+            for val in values:
+                converted_val = self._convert_single_dow(val.strip())
+                if converted_val is None:
+                    return None
+                converted_values.append(converted_val)
+            return ','.join(converted_values)
+        
+        # Handle ranges
+        if '-' in day_of_week:
+            try:
+                start, end = day_of_week.split('-')
+                start_converted = self._convert_single_dow(start.strip())
+                end_converted = self._convert_single_dow(end.strip())
+                if start_converted is None or end_converted is None:
+                    return None
+                return f"{start_converted}-{end_converted}"
+            except ValueError:
+                return None
+        
+        # Handle single value
+        return self._convert_single_dow(day_of_week)
+    
+    def _convert_single_dow(self, value):
+        """
+        Convert a single day-of-week value from standard cron (0-6) to EventBridge (1-7).
+        
+        Args:
+            value (str): Single day-of-week value
+            
+        Returns:
+            str: Converted value or None if invalid
+        """
+        if value == '0':  # Sunday
+            return '7'
+        elif value.isdigit() and 1 <= int(value) <= 6:
+            return value
+        else:
+            return None
+    
+    def _validate_dow_field(self, day_of_week):
+        """
+        Validate day-of-week field for standard cron format (0-6, where 0=Sunday).
+        
+        Args:
+            day_of_week (str): Day of week field from cron expression
+            
+        Returns:
+            bool: True if valid, False otherwise
+        """
+        if day_of_week == '*':
+            return True
+            
+        # Handle comma-separated values
+        if ',' in day_of_week:
+            values = day_of_week.split(',')
+            return all(self._validate_single_dow_value(val.strip()) for val in values)
+        
+        # Handle ranges
+        if '-' in day_of_week:
+            try:
+                start, end = day_of_week.split('-')
+                return (self._validate_single_dow_value(start.strip()) and 
+                       self._validate_single_dow_value(end.strip()))
+            except ValueError:
+                return False
+        
+        # Handle step values
+        if '/' in day_of_week:
+            try:
+                base, step = day_of_week.split('/')
+                return (self._validate_dow_field(base) and 
+                       step.isdigit() and int(step) > 0)
+            except ValueError:
+                return False
+        
+        # Single value
+        return self._validate_single_dow_value(day_of_week)
+    
+    def _validate_single_dow_value(self, value):
+        """Validate a single day-of-week value for standard cron (0-6)."""
+        try:
+            val = int(value)
+            return 0 <= val <= 6  # Standard cron allows 0-6
+        except ValueError:
+            return False
     
     def _validate_cron_field(self, field, min_val, max_val, allow_star=True):
         """

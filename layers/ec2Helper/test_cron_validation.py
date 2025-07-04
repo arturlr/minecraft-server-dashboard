@@ -30,10 +30,12 @@ def test_cron_expressions():
     ec2_utils = Ec2Utils()
     
     test_cases = [
-        # Valid cases
+        # Valid cases - with day-of-week conversion
         ("30 14 * * 1,2,3", "cron(30 14 * * 1,2,3 *)"),  # Standard 5-field cron
-        ("0 9 * * 0", "cron(0 9 * * 0 *)"),  # Sunday at 9 AM
+        ("0 9 * * 0", "cron(0 9 * * 7 *)"),  # Sunday at 9 AM (0 -> 7)
         ("15 22 * * 1-5", "cron(15 22 * * 1-5 *)"),  # Weekdays at 10:15 PM
+        ("00 03 * * 1,2,3,4,5,6,0", "cron(00 03 * * 1,2,3,4,5,6,7 *)"),  # The failing case
+        ("00 12 * * 1,2,3,4,5,6,0", "cron(00 12 * * 1,2,3,4,5,6,7 *)"),  # Start schedule
         ("cron(30 14 * * 1,2,3 *)", "cron(30 14 * * 1,2,3 *)"),  # Already formatted
         
         # Invalid cases
