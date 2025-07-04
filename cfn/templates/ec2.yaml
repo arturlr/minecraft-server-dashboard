@@ -447,6 +447,12 @@ Outputs:
     Export:
       Name: !Sub "${ProjectName}-${EnvironmentName}-IAMEC2InstanceProfileArn"
 
+  IAMEC2RoleArn:
+    Description: IAMEC2RoleArn
+    Value: !GetAtt Ec2MinecraftDashboardInstanceRole.Arn
+    Export:
+      Name: !Sub "${ProjectName}-${EnvironmentName}-IAMEC2RoleArn"
+
   BootstrapSSMDoc:
     Description: Document for SSM
     Value: !Ref BootstrapSSMDoc

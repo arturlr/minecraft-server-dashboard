@@ -11,6 +11,7 @@ const addUserForm = ref();
 const snackbar = ref(false)
 const snackColor = ref(null)
 const snackTimeout = ref(3500)
+const snackText = ref('')
 
 // Available shutdown methods
 const shutdownMethodOptions = ref([
@@ -28,7 +29,8 @@ const serverConfigInput = reactive({
     alarmEvaluationPeriod: 0,
     runCommand: null,
     workDir: null,
-    scheduleExpression: '',
+    stopScheduleExpression: '',
+    startScheduleExpression: '',
     shutdownMethod: null 
 });
 
@@ -37,6 +39,8 @@ const groupMembers = ref([])
 // Variables for weekday scheduling
 const selectedWeekdays = ref([]);
 const selectedTime = ref(null);
+const selectedStartTime = ref(null);
+const enableStartSchedule = ref(false);
 // Weekdays options for selection
 const weekdayOptions = ref([
   { text: 'Select All', value: 'ALL' },
@@ -115,8 +119,8 @@ function handleWeekdaySelection(newValue) {
 
 // Computed property for the hint
 const selectedMethodHint = computed(() => {
-    if (serverConfigInput.shutdownMethod) {
-        return `${serverConfigInput.shutdownMethod.abbr}, ${serverConfigInput.shutdownMethod.metric}`;
+    if (selectedShutdownMethod.value) {
+        return `${selectedShutdownMethod.value.abbr} - ${selectedShutdownMethod.value.metric}`;
     }
     return '';
 });
@@ -141,6 +145,26 @@ const generatedCronExpression = computed(() => {
     return `${minutes} ${hours} * * ${cronWeekdays}`;
 });
 
+// Computed property to generate start schedule cron expression
+const generatedStartCronExpression = computed(() => {
+    if (!enableStartSchedule.value || !selectedStartTime.value || selectedWeekdays.value.length === 0 || 
+        (selectedWeekdays.value.length === 1 && selectedWeekdays.value[0] === 'ALL')) {
+        return null;
+    }
+    
+    const [hours, minutes] = selectedStartTime.value.split(':');
+    
+    // Filter out the "ALL" option if present
+    const weekdaysToUse = selectedWeekdays.value.filter(day => day !== 'ALL');
+    
+    // Cron format: minutes hours * * days_of_week (0-6, where 0 is Sunday)
+    // Convert our weekday codes to cron numbers
+    const weekdayMap = { 'SUN': 0, 'MON': 1, 'TUE': 2, 'WED': 3, 'THU': 4, 'FRI': 5, 'SAT': 6 };
+    const cronWeekdays = weekdaysToUse.map(day => weekdayMap[day]).join(',');
+    
+    return `${minutes} ${hours} * * ${cronWeekdays}`;
+});
+
 function generateUniqueId() {
   const timestamp = Date.now();
   const randomNumber = Math.random();
@@ -153,13 +177,32 @@ function openConfigDialog() {
   configDialogVisible.value = true;
 }
 
-function openUsersDialog() {
+async function openUsersDialog() {
   usersDialogVisible.value = true;
+  await getServerUsers();
 }
 
 onMounted(async () => {
     await getServerSettings();
+    await getServerUsers();
 });
+
+async function getServerUsers() {
+    try {
+        const users = await serverStore.getServerUsers(serverStore.selectedServerId);
+        if (users && Array.isArray(users)) {
+            groupMembers.value = users.map(user => ({
+                id: user.id || user.email,
+                email: user.email,
+                fullname: user.fullName || user.email.split('@')[0],
+                avatar: null // You can add avatar logic here if needed
+            }));
+        }
+    } catch (error) {
+        console.error('Error loading server users:', error);
+        groupMembers.value = [];
+    }
+}
 
 function getEpochTime (days) {
     const currentTime = new Date().getTime(); // Get the current time in milliseconds
@@ -204,6 +247,21 @@ function parseCronExpression(cronExpression) {
     }
 }
 
+// Parse start schedule cron expression
+function parseStartCronExpression(cronExpression) {
+    if (!cronExpression) return;
+    
+    const parts = cronExpression.split(' ');
+    if (parts.length !== 5) return;
+    
+    const minutes = parts[0];
+    const hours = parts[1];
+    
+    // Set start time
+    selectedStartTime.value = `${hours.padStart(2, '0')}:${minutes.padStart(2, '0')}`;
+    enableStartSchedule.value = true;
+}
+
 async function getServerSettings() {
     try {
         settingsDialogLoading.value = true;
@@ -213,31 +271,37 @@ async function getServerSettings() {
             return;
         }
 
-        // Users are processed separately 
+        // Process server configuration data
         const updates = {
             id: serverStore.selectedServerId,
             alarmThreshold: Number(serverSettings.alarmThreshold) || 0,
             alarmEvaluationPeriod: Number(serverSettings.alarmEvaluationPeriod) || 0,
-            runCommand: serverSettings.runCommand || null,
-            workDir: serverSettings.workDir || null,            
-            scheduleExpression: serverSettings.scheduleExpression || '',
+            runCommand: serverSettings.runCommand || '',
+            workDir: serverSettings.workDir || '',            
+            stopScheduleExpression: serverSettings.stopScheduleExpression || '',
+            startScheduleExpression: serverSettings.startScheduleExpression || '',
             shutdownMethod: null
         };
 
-        groupMembers.value = JSON.parse(serverSettings.groupMembers || '[]')
-
         // Find the shutdown method
         const methodFromServer = serverSettings.shutdownMethod || 'CPUUtilization';
-        updates.shutdownMethod = shutdownMethodOptions.value.find(
+        const foundMethod = shutdownMethodOptions.value.find(
             option => option.metric === methodFromServer
-        ) || shutdownMethodOptions.value[0].metric;
+        );
+        updates.shutdownMethod = foundMethod || shutdownMethodOptions.value[0];
+        
+        // Set the selected shutdown method for the UI
+        selectedShutdownMethod.value = updates.shutdownMethod;
 
         // Update all values at once
         Object.assign(serverConfigInput, updates);
 
-        // Handle schedule expression after the state update
-        if (serverSettings.scheduleExpression) {
-            parseCronExpression(serverSettings.scheduleExpression);
+        // Handle schedule expressions after the state update
+        if (serverSettings.stopScheduleExpression) {
+            parseCronExpression(serverSettings.stopScheduleExpression);
+        }
+        if (serverSettings.startScheduleExpression) {
+            parseStartCronExpression(serverSettings.startScheduleExpression);
         }
         
     } catch (error) {
@@ -254,8 +318,11 @@ function resetForm() {
         serverConfigInput.runCommand = "",
         serverConfigInput.workDir = "",
         //serverConfigInput.groupMember = '[]',
-        serverConfigInput.scheduleExpression = "",
-        serverConfigInput.shutdownMethod = shutdownMethodOptions.value[0].metric                
+        serverConfigInput.stopScheduleExpression = "",
+        serverConfigInput.startScheduleExpression = "",
+        serverConfigInput.shutdownMethod = shutdownMethodOptions.value[0].metric
+        selectedStartTime.value = null;
+        enableStartSchedule.value = false;               
 }
 
 async function onSubmit() {
@@ -263,17 +330,34 @@ async function onSubmit() {
         if (isValid) {
             settingsDialogLoading.value = true;
 
-            serverConfigInput.shutdownMethod = selectedShutdownMethod.value.metric
-            serverConfigInput.id = serverStore.selectedServerId
-            serverConfigInput.scheduleExpression = generatedCronExpression.value
+            // Prepare the configuration data
+            const configData = {
+                ...serverConfigInput,
+                id: serverStore.selectedServerId,
+                shutdownMethod: selectedShutdownMethod.value.metric,
+                stopScheduleExpression: generatedCronExpression.value || '',
+                startScheduleExpression: generatedStartCronExpression.value || ''
+            };
             
-            const serverSettings = await serverStore.putServerConfig(serverConfigInput);
-            if (serverSettings === serverStore.selectedServerId) {
-                snackText.value = "Setting Updated Successfully";
+            try {
+                const serverSettings = await serverStore.putServerConfig(configData);
+                if (serverSettings && serverSettings.id) {
+                    snackText.value = "Settings Updated Successfully";
+                    snackbar.value = true;
+                    snackColor.value = "primary";
+                    configDialogVisible.value = false;
+                } else {
+                    snackText.value = "Failed to update settings";
+                    snackbar.value = true;
+                    snackColor.value = "error";
+                }
+            } catch (error) {
+                console.error('Error updating server config:', error);
+                snackText.value = "Error updating settings";
                 snackbar.value = true;
-                snackColor.value = "primary";
-                configDialogVisible.value = false;
+                snackColor.value = "error";
             }
+            
             settingsDialogLoading.value = false;
         }
     })
@@ -317,7 +401,7 @@ async function addUser() {
     <div class="d-flex mb-4 pt-4 pl-4">
     <v-tooltip top>
       <template v-slot:activator="{ on, attrs }">
-        <v-icon
+        <v-icon 
           size="large"
           class="mr-2 custom-icon"
           v-bind="attrs"
@@ -345,216 +429,491 @@ async function addUser() {
   </div>
 
     <!-- Configuration Dialog -->
-    <v-dialog v-model="configDialogVisible" max-width="800px">
-        <v-card>
-            <v-progress-linear v-if="settingsDialogLoading" indeterminate height="5" value="5" color="teal">
-            </v-progress-linear>
-            <v-card-title class="text-h5">
-                Server Configuration
-                <v-spacer></v-spacer>
-                <v-btn icon @click="configDialogVisible = false">
-                    <v-icon>mdi-close</v-icon>
-                </v-btn>
+    <v-dialog v-model="configDialogVisible" max-width="900px" persistent scrollable>
+        <v-card class="elevation-8">
+            <v-progress-linear 
+                v-if="settingsDialogLoading" 
+                indeterminate 
+                height="3" 
+                color="primary"
+                class="position-absolute"
+                style="top: 0; z-index: 1;"
+            ></v-progress-linear>
+            
+            <!-- Header -->
+            <v-card-title class="bg-primary text-white pa-6">
+                <div class="d-flex align-center w-100">
+                    <v-icon class="me-3" size="28">mdi-cog</v-icon>
+                    <div>
+                        <div class="text-h5 font-weight-bold">Server Configuration</div>
+                        <div class="text-body-2 opacity-90">Manage your Minecraft server settings</div>
+                    </div>
+                    <v-spacer></v-spacer>
+                    <v-btn 
+                        icon 
+                        variant="text" 
+                        @click="configDialogVisible = false"
+                        class="text-white"
+                    >
+                        <v-icon>mdi-close</v-icon>
+                    </v-btn>
+                </div>
             </v-card-title>
-            <v-card-text>
+
+            <v-card-text class="pa-0">
                 <v-form ref="settingsForm">
-                    <v-container>
-                        <v-row>
-                            <v-col cols="12">
-                                <h3 class="text-h5 mb-4">Server Shutdown Configuration</h3>
-                                <span class="font-weight-light">Configure when to automatically shutdown the Minecraft server</span>
-                            </v-col>
-                        </v-row>
+                    <!-- Shutdown Configuration Section -->
+                    <div class="pa-6 border-b">
+                        <div class="mb-6">
+                            <div class="d-flex align-center mb-2">
+                                <v-icon class="me-2 text-orange" size="24">mdi-power</v-icon>
+                                <h3 class="text-h6 font-weight-bold">Auto-Shutdown Configuration</h3>
+                            </div>
+                            <p class="text-body-2 text-medium-emphasis ma-0">
+                                Configure when to automatically shutdown the Minecraft server to save costs
+                            </p>
+                        </div>
 
                         <!-- Method Selection -->
-                        <v-row>
-                            <v-col cols="4">
+                        <v-row class="mb-4">
+                            <v-col cols="12" md="6">
                                 <v-select 
                                     :items="shutdownMethodOptions" 
                                     item-title="abbr" 
                                     item-value="metric"
                                     :hint="selectedMethodHint" 
-                                    dense 
                                     label="Shutdown Method" 
-                                    single-line 
                                     persistent-hint 
                                     return-object                                     
                                     v-model="selectedShutdownMethod"
                                     :rules="isRequiredOnlyRules"
+                                    variant="outlined"
+                                    prepend-inner-icon="mdi-timer"
+                                    color="primary"
                                 >
                                 </v-select>
                             </v-col>
                         </v-row>
 
-                        <!-- Schedule-based alarm configuration -->
-                        <v-row v-if="selectedShutdownMethod?.metric === 'Schedule'">
-                            <v-col cols="12">
-                                <span class="font-weight-light">Set a schedule to automatically shutdown the server on specific days and time.</span>
-                            </v-col>
-                            <v-col cols="6">
-                                <v-select
-                                    v-model="selectedWeekdays"
-                                    :items="weekdayOptions"
-                                    item-title="text"
-                                    item-value="value"
-                                    label="Select Days"
-                                    multiple
-                                    chips
-                                    hint="Select days when the server should shutdown"
-                                    persistent-hint
-                                    :rules="[v => v.length > 0 || 'At least one day must be selected']"
-                                    @update:model-value="handleWeekdaySelection"
-                                ></v-select>
-                            </v-col>
-                            <v-col cols="6">
-                                <v-select
-                                    v-model="selectedTime"
-                                    :items="timeOptions"
-                                    item-title="text"
-                                    item-value="value"
-                                    label="Shutdown Time"
-                                    hint="Select time when the server should shutdown"
-                                    persistent-hint
-                                    :rules="[v => !!v || 'Please select a time']"
-                                    :disabled="!selectedWeekdays.length"
-                                ></v-select>
-                            </v-col>
-                            <v-col cols="12" v-if="generatedCronExpression">
-                                <v-alert type="info" variant="tonal" density="compact">
-                                    The server will shutdown at {{ selectedTime }} on 
-                                    {{ selectedWeekdays.includes('ALL') ? 'all days' : 
-                                    selectedWeekdays.filter(day => day !== 'ALL').join(', ') }}
-                                    <br>
-                                    <small>Cron expression: {{ generatedCronExpression }}</small>
+                        <!-- Schedule-based Configuration -->
+                        <v-expand-transition>
+                            <div v-if="selectedShutdownMethod?.metric === 'Schedule'">
+                                <v-card variant="tonal" color="blue" class="mb-4">
+                                    <v-card-text class="pa-4">
+                                        <div class="d-flex align-center mb-3">
+                                            <v-icon class="me-2" color="blue">mdi-calendar-clock</v-icon>
+                                            <span class="font-weight-medium">Schedule Configuration</span>
+                                        </div>
+                                        <p class="text-body-2 ma-0">
+                                            Set a schedule to automatically shutdown the server on specific days and times.
+                                        </p>
+                                    </v-card-text>
+                                </v-card>
+
+                                <v-row>
+                                    <v-col cols="12" md="6">
+                                        <v-select
+                                            v-model="selectedWeekdays"
+                                            :items="weekdayOptions"
+                                            item-title="text"
+                                            item-value="value"
+                                            label="Select Days"
+                                            multiple
+                                            chips
+                                            hint="Choose which days to apply the shutdown schedule"
+                                            persistent-hint
+                                            :rules="[v => v.length > 0 || 'At least one day must be selected']"
+                                            @update:model-value="handleWeekdaySelection"
+                                            variant="outlined"
+                                            prepend-inner-icon="mdi-calendar"
+                                        ></v-select>
+                                    </v-col>
+                                    <v-col cols="12" md="6">
+                                        <v-select
+                                            v-model="selectedTime"
+                                            :items="timeOptions"
+                                            item-title="text"
+                                            item-value="value"
+                                            label="Shutdown Time"
+                                            hint="Time when the server should shutdown"
+                                            persistent-hint
+                                            :rules="[v => !!v || 'Please select a time']"
+                                            :disabled="!selectedWeekdays.length"
+                                            variant="outlined"
+                                            prepend-inner-icon="mdi-clock"
+                                        ></v-select>
+                                    </v-col>
+                                </v-row>
+
+                                <v-row>
+                                    <v-col cols="12">
+                                        <v-checkbox
+                                            v-model="enableStartSchedule"
+                                            label="Also schedule server start time"
+                                            hint="Enable automatic server startup at a specified time"
+                                            persistent-hint
+                                            density="comfortable"
+                                            color="primary"
+                                        ></v-checkbox>
+                                    </v-col>
+                                </v-row>
+
+                                <v-expand-transition>
+                                    <v-row v-if="enableStartSchedule">
+                                        <v-col cols="12" md="6">
+                                            <v-select
+                                                v-model="selectedStartTime"
+                                                :items="timeOptions"
+                                                item-title="text"
+                                                item-value="value"
+                                                label="Start Time"
+                                                hint="Time when the server should start"
+                                                persistent-hint
+                                                :rules="enableStartSchedule ? [v => !!v || 'Please select a start time'] : []"
+                                                :disabled="!selectedWeekdays.length"
+                                                variant="outlined"
+                                                prepend-inner-icon="mdi-play"
+                                            ></v-select>
+                                        </v-col>
+                                    </v-row>
+                                </v-expand-transition>
+
+                                <v-expand-transition>
+                                    <div v-if="generatedCronExpression">
+                                        <v-alert 
+                                            type="info" 
+                                            variant="tonal" 
+                                            class="mt-4"
+                                            border="start"
+                                            border-color="info"
+                                        >
+                                            <template v-slot:prepend>
+                                                <v-icon>mdi-information</v-icon>
+                                            </template>
+                                            <div class="font-weight-medium mb-2">Schedule Summary</div>
+                                            <div v-if="enableStartSchedule && selectedStartTime" class="mb-2">
+                                                Server will <strong>start at {{ selectedStartTime }}</strong> and <strong>shutdown at {{ selectedTime }}</strong> on 
+                                                {{ selectedWeekdays.includes('ALL') ? 'all days' : 
+                                                selectedWeekdays.filter(day => day !== 'ALL').join(', ') }}
+                                            </div>
+                                            <div v-else class="mb-2">
+                                                Server will <strong>shutdown at {{ selectedTime }}</strong> on 
+                                                {{ selectedWeekdays.includes('ALL') ? 'all days' : 
+                                                selectedWeekdays.filter(day => day !== 'ALL').join(', ') }}
+                                            </div>
+                                            <div class="text-caption">
+                                                <div v-if="enableStartSchedule && selectedStartTime">
+                                                    Start cron: <code>{{ generatedStartCronExpression }}</code>
+                                                </div>
+                                                <div>Shutdown cron: <code>{{ generatedCronExpression }}</code></div>
+                                            </div>
+                                        </v-alert>
+                                    </div>
+                                </v-expand-transition>
+                            </div>
+                        </v-expand-transition>
+
+                        <!-- Metric-based Configuration -->
+                        <v-expand-transition>
+                            <div v-if="selectedShutdownMethod && selectedShutdownMethod.metric !== 'Schedule'">
+                                <v-card variant="tonal" color="orange" class="mb-4">
+                                    <v-card-text class="pa-4">
+                                        <div class="d-flex align-center mb-3">
+                                            <v-icon class="me-2" color="orange">mdi-chart-line</v-icon>
+                                            <span class="font-weight-medium">Metric-Based Configuration</span>
+                                        </div>
+                                        <p class="text-body-2 ma-0">
+                                            Set threshold and evaluation period for automatic server shutdown based on {{ selectedShutdownMethod.abbr }}.
+                                        </p>
+                                    </v-card-text>
+                                </v-card>
+
+                                <v-row>
+                                    <v-col cols="12" md="6">
+                                        <v-text-field
+                                            v-model="serverConfigInput.alarmThreshold"
+                                            label="Threshold"
+                                            :hint="selectedShutdownMethod.metric === 'CPUUtilization' ? 'Percentage of CPU utilization' : 'Number of connected users'"
+                                            persistent-hint
+                                            :suffix="selectedShutdownMethod.metric === 'CPUUtilization' ? '%' : ''"
+                                            :rules="onlyNumbersRules"
+                                            variant="outlined"
+                                            prepend-inner-icon="mdi-speedometer"
+                                        ></v-text-field>
+                                    </v-col>
+                                    <v-col cols="12" md="6">
+                                        <v-text-field
+                                            v-model="serverConfigInput.alarmEvaluationPeriod"
+                                            label="Evaluation Period"
+                                            hint="Number of minutes to evaluate the threshold"
+                                            persistent-hint
+                                            suffix="minutes"
+                                            :rules="onlyNumbersRules"
+                                            variant="outlined"
+                                            prepend-inner-icon="mdi-timer-sand"
+                                        ></v-text-field>
+                                    </v-col>
+                                </v-row>
+
+                                <v-alert 
+                                    type="info" 
+                                    variant="tonal" 
+                                    class="mt-4"
+                                    border="start"
+                                    border-color="info"
+                                >
+                                    <template v-slot:prepend>
+                                        <v-icon>mdi-information</v-icon>
+                                    </template>
+                                    <div class="font-weight-medium">Shutdown Condition</div>
+                                    <div>
+                                        The server will shutdown when {{ selectedShutdownMethod.abbr }} is below 
+                                        <strong>{{ serverConfigInput.alarmThreshold }}{{ selectedShutdownMethod.metric === 'CPUUtilization' ? '%' : ' users' }}</strong> 
+                                        for <strong>{{ serverConfigInput.alarmEvaluationPeriod }} minutes</strong>
+                                    </div>
                                 </v-alert>
-                            </v-col>
-                        </v-row>
+                            </div>
+                        </v-expand-transition>
+                    </div>
 
-                        <!-- Metric-based alarm configuration -->
-                        <v-row v-if="selectedShutdownMethod && selectedShutdownMethod.metric !== 'Schedule'">
-                            <v-col cols="12">
-                                <span class="font-weight-light">Set threshold and evaluation period for automatic server shutdown based on {{ selectedShutdownMethod.abbr }}.</span>
-                            </v-col>
-                            <v-col cols="6">
-                                <v-text-field
-                                    v-model="serverConfigInput.alarmThreshold"
-                                    dense
-                                    label="Threshold"
-                                    :hint="selectedShutdownMethod.metric === 'CPUUtilization' ? 'Percentage of CPU utilization' : 'Number of connected users'"
-                                    persistent-hint
-                                    :suffix="selectedShutdownMethod.metric === 'CPUUtilization' ? '%' : ''"
-                                    :rules="onlyNumbersRules"
-                                ></v-text-field>
-                            </v-col>
-                            <v-col cols="6">
-                                <v-text-field
-                                    v-model="serverConfigInput.alarmEvaluationPeriod"
-                                    dense
-                                    label="Evaluation Period"
-                                    hint="Number of minutes to evaluate the threshold"
-                                    persistent-hint
-                                    suffix="minutes"
-                                    :rules="onlyNumbersRules"
-                                ></v-text-field>
-                            </v-col>
-                            <v-col cols="12">
-                                <v-alert type="info" variant="tonal" density="compact">
-                                    The server will shutdown when {{ selectedShutdownMethod.abbr }} is below 
-                                    {{ serverConfigInput.alarmThreshold }}{{ selectedShutdownMethod.metric === 'CPUUtilization' ? '%' : ' users' }} 
-                                    for {{ serverConfigInput.alarmEvaluationPeriod }} minutes
-                                </v-alert>
-                            </v-col>
-                        </v-row>
+                    <!-- Server Execution Section -->
+                    <div class="pa-6">
+                        <div class="mb-6">
+                            <div class="d-flex align-center mb-2">
+                                <v-icon class="me-2 text-green" size="24">mdi-console</v-icon>
+                                <h3 class="text-h6 font-weight-bold">Minecraft Server Execution</h3>
+                            </div>
+                            <p class="text-body-2 text-medium-emphasis ma-0">
+                                Configure the Minecraft server run command and working directory
+                            </p>
+                        </div>
 
-                        <!-- Divider -->
-                        <v-divider class="my-6"></v-divider>
-
-                        <!-- Minecraft Run Command Section -->
                         <v-row>
-                            <v-col cols="12">
-                                <h3 class="text-h5 mb-4">Minecraft Server Execution</h3>
-                                <span class="font-weight-light">Configure the Minecraft server run command and working directory</span>
-                            </v-col>
-                        </v-row>
-                        <v-row>
-                            <v-col cols="6">
+                            <v-col cols="12" md="6">
                                 <v-text-field 
-                                    dense 
                                     v-model="serverConfigInput.workDir" 
-                                    label="Working directory"
+                                    label="Working Directory"
                                     hint="Directory where the Minecraft server is located"
                                     persistent-hint
-                                    prepend-icon="mdi-folder"
+                                    prepend-inner-icon="mdi-folder"
+                                    variant="outlined"
+                                    placeholder="/home/minecraft/server"
                                 ></v-text-field>
                             </v-col>
-                            <v-col cols="6">
+                            <v-col cols="12" md="6">
                                 <v-text-field 
-                                    dense 
                                     v-model="serverConfigInput.runCommand" 
-                                    label="Run command"
+                                    label="Run Command"
                                     hint="Command to start the Minecraft server"
                                     persistent-hint
-                                    prepend-icon="mdi-console"
+                                    prepend-inner-icon="mdi-play"
+                                    variant="outlined"
+                                    placeholder="java -jar server.jar"
                                 ></v-text-field>
                             </v-col>
                         </v-row>
-                    </v-container>
+                    </div>
                 </v-form>
-
             </v-card-text>
-            <v-card-actions>
+
+            <!-- Actions -->
+            <v-card-actions class="pa-6 bg-grey-lighten-5">
                 <v-spacer></v-spacer>
-                <v-btn text @click="resetForm">Clear</v-btn>
-                <v-btn text @click="getServerSettings">Reload</v-btn>
-                <v-btn color="primary" text @click="onSubmit" :disabled="settingsDialogLoading">
-                    <v-icon left>mdi-content-save</v-icon>
-                    Save
+                <v-btn 
+                    variant="text" 
+                    @click="resetForm"
+                    prepend-icon="mdi-refresh"
+                    :disabled="settingsDialogLoading"
+                >
+                    Clear
+                </v-btn>
+                <v-btn 
+                    variant="text" 
+                    @click="getServerSettings"
+                    prepend-icon="mdi-reload"
+                    :disabled="settingsDialogLoading"
+                >
+                    Reload
+                </v-btn>
+                <v-btn 
+                    color="primary" 
+                    variant="elevated"
+                    @click="onSubmit" 
+                    :disabled="settingsDialogLoading"
+                    :loading="settingsDialogLoading"
+                    prepend-icon="mdi-content-save"
+                    class="px-6"
+                >
+                    Save Configuration
                 </v-btn>
             </v-card-actions>
         </v-card>
     </v-dialog>
 
     <!-- Users Dialog -->
-    <v-dialog v-model="usersDialogVisible" max-width="600px">
-        <v-card>
-            <v-card-title class="text-h5">
-                Manage Users
-                <v-spacer></v-spacer>
-                <v-btn icon @click="usersDialogVisible = false">
-                    <v-icon>mdi-close</v-icon>
-                </v-btn>
+    <v-dialog v-model="usersDialogVisible" max-width="700px" persistent scrollable>
+        <v-card class="elevation-8">
+            <!-- Header -->
+            <v-card-title class="bg-primary text-white pa-6">
+                <div class="d-flex align-center w-100">
+                    <v-icon class="me-3" size="28">mdi-account-group</v-icon>
+                    <div>
+                        <div class="text-h5 font-weight-bold">Manage Users</div>
+                        <div class="text-body-2 opacity-90">Control server access and permissions</div>
+                    </div>
+                    <v-spacer></v-spacer>
+                    <v-btn 
+                        icon 
+                        variant="text" 
+                        @click="usersDialogVisible = false"
+                        class="text-white"
+                    >
+                        <v-icon>mdi-close</v-icon>
+                    </v-btn>
+                </div>
             </v-card-title>
-            <v-card-text>
-                <v-container>
-                    <v-row>
-                        <v-col cols="12">
-                            <v-list lines="tow">
-                                <v-list-subheader>Current Members</v-list-subheader>
-                                    <v-list-item
-                                        v-for="user in groupMembers"
-                                        :key="user.id"
-                                        :title="user.fullname"
-                                        :subtitle="user.email"
-                                        :prepend-avatar="user.avatar"
+
+            <v-card-text class="pa-0">
+                <!-- Current Members Section -->
+                <div class="pa-6 border-b">
+                    <div class="d-flex align-center mb-4">
+                        <v-icon class="me-2 text-blue" size="24">mdi-account-multiple</v-icon>
+                        <h3 class="text-h6 font-weight-bold">Current Members</h3>
+                        <v-spacer></v-spacer>
+                        <v-chip 
+                            color="primary" 
+                            variant="tonal" 
+                            size="small"
+                            prepend-icon="mdi-account"
+                        >
+                            {{ groupMembers?.length || 0 }} members
+                        </v-chip>
+                    </div>
+
+                    <v-card variant="outlined" class="mb-4" v-if="groupMembers?.length">
+                        <v-list lines="two" class="pa-0">
+                            <v-list-item
+                                v-for="(user, index) in groupMembers"
+                                :key="user.id"
+                                :title="user.fullname"
+                                :subtitle="user.email"
+                                :prepend-avatar="user.avatar"
+                                class="px-4 py-3"
+                            >
+                                <template v-slot:prepend>
+                                    <v-avatar 
+                                        :image="user.avatar" 
+                                        color="primary"
+                                        class="me-3"
                                     >
-                                    </v-list-item>                                
-                            </v-list>
-                        </v-col>
-                    </v-row>
-                    <v-row>
-                        <v-col cols="12">
-                            <v-form ref="addUserForm">
-                                <v-text-field dense label="Email address" v-model="inviteeEmail" suffix="@gmail.com"
-                                    :rules="alphaNumericRules"></v-text-field>
-                            </v-form>
-                        </v-col>
-                    </v-row>
-                </v-container>
+                                        <v-icon v-if="!user.avatar">mdi-account</v-icon>
+                                    </v-avatar>
+                                </template>
+                                
+                                <template v-slot:append>
+                                    <v-chip 
+                                        size="small" 
+                                        color="success" 
+                                        variant="tonal"
+                                        prepend-icon="mdi-check-circle"
+                                    >
+                                        Active
+                                    </v-chip>
+                                </template>
+                            </v-list-item>
+                            
+                            <v-divider 
+                                v-if="index < groupMembers.length - 1" 
+                                :key="`divider-${index}`"
+                            ></v-divider>
+                        </v-list>
+                    </v-card>
+
+                    <v-alert 
+                        v-if="!groupMembers?.length" 
+                        type="info" 
+                        variant="tonal"
+                        border="start"
+                        border-color="info"
+                    >
+                        <template v-slot:prepend>
+                            <v-icon>mdi-information</v-icon>
+                        </template>
+                        <div class="font-weight-medium">No members found</div>
+                        <div>Add users below to grant them access to this server.</div>
+                    </v-alert>
+                </div>
+
+                <!-- Add User Section -->
+                <div class="pa-6">
+                    <div class="d-flex align-center mb-4">
+                        <v-icon class="me-2 text-green" size="24">mdi-account-plus</v-icon>
+                        <h3 class="text-h6 font-weight-bold">Add New User</h3>
+                    </div>
+
+                    <v-card variant="tonal" color="green" class="mb-4">
+                        <v-card-text class="pa-4">
+                            <div class="d-flex align-center mb-2">
+                                <v-icon class="me-2" color="green">mdi-email</v-icon>
+                                <span class="font-weight-medium">Invite by Email</span>
+                            </div>
+                            <p class="text-body-2 ma-0">
+                                Enter the Gmail address of the user you want to invite to this server.
+                            </p>
+                        </v-card-text>
+                    </v-card>
+
+                    <v-form ref="addUserForm">
+                        <v-text-field 
+                            label="Email Address" 
+                            v-model="inviteeEmail" 
+                            suffix="@gmail.com"
+                            :rules="alphaNumericRules"
+                            variant="outlined"
+                            prepend-inner-icon="mdi-email"
+                            placeholder="username"
+                            hint="Enter the Gmail username (without @gmail.com)"
+                            persistent-hint
+                            color="primary"
+                        ></v-text-field>
+                    </v-form>
+
+                    <v-alert 
+                        type="warning" 
+                        variant="tonal" 
+                        class="mt-4"
+                        border="start"
+                        border-color="warning"
+                    >
+                        <template v-slot:prepend>
+                            <v-icon>mdi-alert</v-icon>
+                        </template>
+                        <div class="font-weight-medium">Important</div>
+                        <div>
+                            Users must have a Google account and sign in through Google OAuth to access the server.
+                            They will receive access immediately after being added.
+                        </div>
+                    </v-alert>
+                </div>
             </v-card-text>
-            <v-card-actions>
+
+            <!-- Actions -->
+            <v-card-actions class="pa-6 bg-grey-lighten-5">
                 <v-spacer></v-spacer>
-                <v-btn color="primary" text @click="addUser()">
-                    <v-icon left>mdi-account-plus</v-icon>
+                <v-btn 
+                    variant="text" 
+                    @click="usersDialogVisible = false"
+                    prepend-icon="mdi-close"
+                >
+                    Cancel
+                </v-btn>
+                <v-btn 
+                    color="primary" 
+                    variant="elevated"
+                    @click="addUser()"
+                    prepend-icon="mdi-account-plus"
+                    class="px-6"
+                >
                     Add User
                 </v-btn>
             </v-card-actions>

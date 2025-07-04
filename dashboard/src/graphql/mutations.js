@@ -101,7 +101,8 @@ export const putServerConfig = /* GraphQL */ `
       runCommand
       workDir
       shutdownMethod
-      scheduleExpression
+      stopScheduleExpression
+      startScheduleExpression
       alarmThreshold
       alarmEvaluationPeriod
     }

@@ -24,6 +24,166 @@ utl = utilHelper.Utils()
 utc = pytz.utc
 pst = pytz.timezone('US/Pacific')
 
+def validate_and_configure_instance_tags(instance_id):
+    """
+    Validates that instance has proper shutdown configuration tags.
+    If no shutdown configuration exists, applies default configuration.
+    Returns validation status and any missing/invalid configurations.
+    """
+    try:
+        logger.info(f"Validating and configuring tags for instance: {instance_id}")
+        
+        # Get instance attributes from tags using ec2Helper
+        config = ec2_utils.get_instance_attributes_from_tags(instance_id)
+        
+        validation_result = {
+            'instanceId': instance_id,
+            'isValid': True,
+            'warnings': [],
+            'errors': [],
+            'configStatus': 'complete',
+            'autoConfigured': False
+        }
+        
+        shutdown_method = config.get('shutdownMethod', '')
+        
+        # Check if shutdown method is configured
+        if not shutdown_method:
+            logger.info(f"No shutdown method configured for {instance_id}, applying default configuration")
+            
+            # Apply default shutdown configuration
+            default_config = {
+                'id': instance_id,
+                'shutdownMethod': 'CPUUtilization',
+                'alarmThreshold': 5.0,  # 5% CPU threshold
+                'alarmEvaluationPeriod': 30,  # 30 minutes
+                'alarmType': 'CPUUtilization',
+                'runCommand': 'java -Xmx2G -Xms1G -jar server.jar nogui',
+                'workDir': '/home/minecraft/server'
+            }
+            
+            try:
+                # Set the default configuration using ec2Helper
+                ec2_utils.set_instance_attributes_to_tags(default_config)
+                
+                # Update the alarm configuration
+                ec2_utils.update_alarm(
+                    instance_id, 
+                    'CPUUtilization', 
+                    default_config['alarmThreshold'], 
+                    default_config['alarmEvaluationPeriod']
+                )
+                
+                validation_result['autoConfigured'] = True
+                validation_result['warnings'].append('Default shutdown configuration applied: CPU-based (5% threshold, 30min evaluation)')
+                validation_result['configStatus'] = 'auto-configured'
+                
+                logger.info(f"Successfully applied default configuration to {instance_id}")
+                
+            except Exception as config_error:
+                logger.error(f"Failed to apply default configuration to {instance_id}: {config_error}")
+                validation_result['errors'].append(f'Failed to apply default configuration: {str(config_error)}')
+                validation_result['isValid'] = False
+                validation_result['configStatus'] = 'configuration-failed'
+        elif shutdown_method == 'Schedule':
+            # Validate schedule-based configuration
+            stop_schedule = config.get('stopScheduleExpression', '')
+            if not stop_schedule:
+                validation_result['errors'].append('Schedule shutdown method selected but no stop schedule expression configured')
+                validation_result['isValid'] = False
+                validation_result['configStatus'] = 'invalid'
+            
+            # Check if start schedule is configured when stop schedule exists
+            start_schedule = config.get('startScheduleExpression', '')
+            if stop_schedule and not start_schedule:
+                validation_result['warnings'].append('Stop schedule configured but no start schedule - server will need manual start')
+                
+        elif shutdown_method in ['CPUUtilization', 'Connections']:
+            # Validate metric-based configuration
+            alarm_threshold = config.get('alarmThreshold', 0.0)
+            alarm_evaluation_period = config.get('alarmEvaluationPeriod', 0)
+            
+            if alarm_threshold <= 0:
+                validation_result['errors'].append(f'Invalid alarm threshold: {alarm_threshold}. Must be greater than 0')
+                validation_result['isValid'] = False
+                validation_result['configStatus'] = 'invalid'
+                
+            if alarm_evaluation_period <= 0:
+                validation_result['errors'].append(f'Invalid evaluation period: {alarm_evaluation_period}. Must be greater than 0')
+                validation_result['isValid'] = False
+                validation_result['configStatus'] = 'invalid'
+        
+        # Check and configure Minecraft server execution if needed
+        needs_minecraft_config = False
+        minecraft_config_updates = {}
+        
+        run_command = config.get('runCommand', '')
+        work_dir = config.get('workDir', '')
+        
+        if not run_command:
+            minecraft_config_updates['runCommand'] = 'java -Xmx2G -Xms1G -jar server.jar nogui'
+            needs_minecraft_config = True
+            
+        if not work_dir:
+            minecraft_config_updates['workDir'] = '/home/minecraft/server'
+            needs_minecraft_config = True
+        
+        # Apply Minecraft server configuration if needed
+        if needs_minecraft_config and not validation_result.get('autoConfigured', False):
+            try:
+                minecraft_config_updates['id'] = instance_id
+                ec2_utils.set_instance_attributes_to_tags(minecraft_config_updates)
+                
+                validation_result['autoConfigured'] = True
+                config_items = []
+                if 'runCommand' in minecraft_config_updates:
+                    config_items.append('run command')
+                if 'workDir' in minecraft_config_updates:
+                    config_items.append('working directory')
+                    
+                validation_result['warnings'].append(f'Default Minecraft server configuration applied: {", ".join(config_items)}')
+                
+                if validation_result['configStatus'] == 'complete':
+                    validation_result['configStatus'] = 'auto-configured'
+                    
+                logger.info(f"Applied default Minecraft configuration to {instance_id}: {config_items}")
+                
+            except Exception as minecraft_config_error:
+                logger.error(f"Failed to apply Minecraft configuration to {instance_id}: {minecraft_config_error}")
+                validation_result['warnings'].append(f'Failed to apply default Minecraft configuration: {str(minecraft_config_error)}')
+        
+        # Add warnings for missing configuration (if not auto-configured)
+        elif not validation_result.get('autoConfigured', False):
+            if not run_command:
+                validation_result['warnings'].append('No run command configured for Minecraft server')
+                if validation_result['configStatus'] == 'complete':
+                    validation_result['configStatus'] = 'incomplete'
+                    
+            if not work_dir:
+                validation_result['warnings'].append('No working directory configured for Minecraft server')
+                if validation_result['configStatus'] == 'complete':
+                    validation_result['configStatus'] = 'incomplete'
+        
+        # Log validation summary
+        if validation_result['errors']:
+            logger.warning(f"Tag validation for {instance_id} has errors: {validation_result['errors']}")
+        elif validation_result['warnings']:
+            logger.info(f"Tag validation for {instance_id} has warnings: {validation_result['warnings']}")
+        else:
+            logger.info(f"Tag validation for {instance_id} completed successfully: {validation_result['configStatus']}")
+            
+        return validation_result
+        
+    except Exception as e:
+        logger.error(f"Error validating tags for instance {instance_id}: {e}")
+        return {
+            'instanceId': instance_id,
+            'isValid': False,
+            'warnings': [],
+            'errors': [f'Failed to validate configuration: {str(e)}'],
+            'configStatus': 'error'
+        }
+
 def handler(event, context): 
     try:
         if 'request' in event:
@@ -70,10 +230,11 @@ def handler(event, context):
         logger.error("No Servers Found")
         return []  # Return empty array instead of string
 
-    # Fetch instance types and status in parallel
-    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+    # Fetch instance types, status, and tag validation in parallel
+    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
         instance_types = {executor.submit(ec2_client.describe_instance_types, InstanceTypes=[instance['InstanceType']]): instance for instance in [server for server in user_instances["Instances"]]}
         instance_status = {executor.submit(ec2_utils.describe_instance_status, instance['InstanceId']): instance for instance in [server for server in user_instances["Instances"]]}
+        tag_validation = {executor.submit(validate_and_configure_instance_tags, instance['InstanceId']): instance for instance in [server for server in user_instances["Instances"]]}
 
     listServer_result = []
     for server in user_instances["Instances"]:
@@ -84,6 +245,8 @@ def handler(event, context):
         instance_type = instance_type_future.result()
         instance_status_future = next(future for future in instance_status if future.result()['instanceId'] == instance_id)
         status = instance_status_future.result()
+        tag_validation_future = next(future for future in tag_validation if future.result()['instanceId'] == instance_id)
+        validation = tag_validation_future.result()
 
         instance_name = next((tag['Value'] for tag in server['Tags'] if tag['Key'] == 'Name'), 'Undefined')
         public_ip = server['NetworkInterfaces'][0].get('Association', {}).get('PublicIp', 'none')
@@ -108,7 +271,12 @@ def handler(event, context):
             'initStatus': status['initStatus'].lower(),
             'iamStatus': status['iamStatus'].lower(),
             'launchTime': pstLaunchTime.strftime("%m/%d/%Y - %H:%M:%S"),
-            'runningMinutes': runningMinutes
+            'runningMinutes': runningMinutes,
+            'configStatus': validation['configStatus'],
+            'configValid': validation['isValid'],
+            'configWarnings': validation['warnings'],
+            'configErrors': validation['errors'],
+            'autoConfigured': validation.get('autoConfigured', False)
         })
 
     logger.info(listServer_result)

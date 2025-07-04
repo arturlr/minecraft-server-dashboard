@@ -127,6 +127,29 @@ export const useServerStore = defineStore("server", {
             }
         },
 
+        async getServerUsers(instanceId) {
+            console.group("getServerUsers");
+            try {
+                const results = await client.graphql({
+                    query: queries.getServerUsers,
+                    variables: { instanceId: instanceId || this.selectedServerId }
+                });
+
+                if (results.data.getServerUsers === null) {
+                    console.log(`No users found for server ${instanceId || this.selectedServerId}`);
+                    return [];
+                }
+
+                console.groupEnd();
+                return results.data.getServerUsers;
+
+            } catch (error) {
+                console.error(error);
+                console.groupEnd();
+                throw error;
+            }
+        },
+
         async putServerConfig(input) {
             try {
                 console.log(input);

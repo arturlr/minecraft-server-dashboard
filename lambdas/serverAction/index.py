@@ -313,19 +313,39 @@ def handle_update_server_config(instance_id, arguments):
     logger.info("Config update response: %s", response)
         
     if response.get('shutdownMethod') == 'Schedule':
-        if response.get('scheduleExpression') is None:
+        stop_schedule = response.get('stopScheduleExpression')
+        if not stop_schedule:
             logger.error("Missing schedule expression")
-            return utl.response(400, {"err": "Missing schedule expression"})
-        # Delete existing alarm
-        ec2_utils.remove_alarm(instance_id)
-        # Configure event for scheduled shutdown
-        ec2_utils.configure_shutdown_event(instance_id, response.get('scheduleExpression'))        
+            return utl.response(400, {"err": "Missing stop schedule expression"})
+        
+        try:
+            # Delete existing alarm
+            ec2_utils.remove_alarm(instance_id)
+            # Configure event for scheduled shutdown
+            ec2_utils.configure_shutdown_event(instance_id, stop_schedule)
+            
+            # Configure start schedule if provided
+            start_schedule = response.get('startScheduleExpression')
+            if start_schedule:
+                logger.info("Configuring start schedule: %s", start_schedule)
+                ec2_utils.configure_start_event(instance_id, start_schedule)
+            else:
+                # Remove existing start event if no start schedule is provided
+                ec2_utils.remove_start_event(instance_id)
+                
+        except ValueError as ve:
+            logger.error("Invalid schedule expression: %s", str(ve))
+            return utl.response(400, {"err": f"Invalid schedule expression: {str(ve)}"})
+        except Exception as e:
+            logger.error("Error configuring schedule: %s", str(e))
+            return utl.response(500, {"err": f"Failed to configure schedule: {str(e)}"})
     else:
         if response.get('alarmEvaluationPeriod') is None or response.get('alarmThreshold') is None or response.get('shutdownMethod') is None:
             logger.error("Missing alarmEvaluationPeriod or alarmThreshold")
             return utl.response(400, {"err": "Missing alarmEvaluationPeriod or alarmThreshold"})
-        # Delete existing event
+        # Delete existing events
         ec2_utils.remove_shutdown_event(instance_id)
+        ec2_utils.remove_start_event(instance_id)
         # Set instance tags and create alarm
         ec2_utils.update_alarm(instance_id, response.get('shutdownMethod'), response.get('alarmThreshold'), response.get('alarmEvaluationPeriod'))
     
@@ -385,7 +405,8 @@ def handler(event, context):
         input = {
             'id': instance_id,
             'shutdownMethod': input_args.get('shutdownMethod', ''),
-            'scheduleExpression': input_args.get('scheduleExpression', ''),
+            'stopScheduleExpression': input_args.get('stopScheduleExpression', ''),
+            'startScheduleExpression': input_args.get('startScheduleExpression', ''),
             'alarmType': input_args.get('alarmType', ''),
             'alarmThreshold': input_args.get('alarmThreshold', ''),
             'alarmEvaluationPeriod': input_args.get('alarmEvaluationPeriod', ''),

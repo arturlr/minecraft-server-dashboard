@@ -17,6 +17,11 @@ export const listServers = /* GraphQL */ `
       initStatus
       iamStatus
       runningMinutes
+      configStatus
+      configValid
+      configWarnings
+      configErrors
+      autoConfigured
     }
   }
 `;
@@ -65,10 +70,12 @@ export const listLoginAudits = /* GraphQL */ `
 export const getServerConfig = /* GraphQL */ `
 query GetServerConfig($id: String!) {
   getServerConfig(id: $id) {
+    id
     runCommand
     workDir
     shutdownMethod
-    scheduleExpression
+    stopScheduleExpression
+    startScheduleExpression
     alarmThreshold
     alarmEvaluationPeriod
   }
@@ -76,15 +83,11 @@ query GetServerConfig($id: String!) {
 `;
 
 export const getServerUsers = /* GraphQL */ `
-  query GetServerUsers($id: String!) {
-    getServerUsers(id: $id) {
+  query GetServerUsers($instanceId: String!) {
+    getServerUsers(instanceId: $instanceId) {
       id
       email
       fullName
-      role
-      // lastLogin
-      // createdAt
-      // updatedAt
     }
   }
 `;

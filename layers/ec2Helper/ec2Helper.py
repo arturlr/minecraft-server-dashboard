@@ -85,7 +85,8 @@ class Ec2Utils:
             return {
                 'id': instance_id,
                 'shutdownMethod': tag_mapping.get('shutdownmethod', ''),  
-                'scheduleExpression': tag_mapping.get('scheduleexpression', ''),
+                'stopScheduleExpression': tag_mapping.get('stopscheduleexpression', ''),
+                'startScheduleExpression': tag_mapping.get('startscheduleexpression', ''),
                 'alarmType': tag_mapping.get('alarmtype', ''),
                 'alarmThreshold': alarm_threshold,  # Now properly typed as Float
                 'alarmEvaluationPeriod': alarm_evaluation_period,  # Now properly typed as Int
@@ -100,7 +101,8 @@ class Ec2Utils:
             return {
                 'id': instance_id,
                 'shutdownMethod': '',  
-                'scheduleExpression': '',
+                'stopScheduleExpression': '',
+                'startScheduleExpression': '',
                 'alarmType': '',
                 'alarmThreshold': 0.0,  # Default Float value
                 'alarmEvaluationPeriod': 0,  # Default Int value
@@ -209,12 +211,17 @@ class Ec2Utils:
     def configure_shutdown_event(self, instance_id, cron_expression):
         eventbridge = boto3.client('events')
         
+        # Validate and format the cron expression for EventBridge
+        formatted_schedule = self._format_schedule_expression(cron_expression)
+        if not formatted_schedule:
+            logger.error(f"Invalid cron expression: {cron_expression}")
+            raise ValueError(f"Invalid cron expression: {cron_expression}")
+        
         # Create the rule with cron expression
-        # Example: shutdown at 11:00 PM UTC every day
-        rule_name = f"shutdown-for-{instance_id}"
+        rule_name = f"shutdown-{instance_id}"
         eventbridge.put_rule(
             Name=rule_name,
-            ScheduleExpression=cron_expression,
+            ScheduleExpression=formatted_schedule,
             State='ENABLED'
         )
         
@@ -227,6 +234,7 @@ class Ec2Utils:
                 'Input': json.dumps({"InstanceId": instance_id})
             }]
         )
+        logger.info(f"Shutdown event configured for {instance_id} with schedule: {formatted_schedule}")
 
     def remove_shutdown_event(self, instance_id):
         eventbridge = boto3.client('events')
@@ -249,6 +257,160 @@ class Ec2Utils:
 
         except ClientError as e:
             logger.error(f"Error removing shutdown event: {e}")
+
+    def configure_start_event(self, instance_id, cron_expression):
+        """Configure EventBridge rule to start EC2 instance on schedule"""
+        eventbridge = boto3.client('events')
+        
+        # Validate and format the cron expression for EventBridge
+        formatted_schedule = self._format_schedule_expression(cron_expression)
+        if not formatted_schedule:
+            logger.error(f"Invalid cron expression: {cron_expression}")
+            raise ValueError(f"Invalid cron expression: {cron_expression}")
+        
+        # Create the rule with cron expression for starting
+        rule_name = f"start-{instance_id}"
+        eventbridge.put_rule(
+            Name=rule_name,
+            ScheduleExpression=formatted_schedule,
+            State='ENABLED'
+        )
+        
+        # Create the target to start the instance
+        eventbridge.put_targets(
+            Rule=rule_name,
+            Targets=[{
+                'Id': f"start-target-{instance_id}",
+                'Arn': f"arn:aws:automate:{aws_region}:ec2:start",
+                'Input': json.dumps({"InstanceId": instance_id})
+            }]
+        )
+        logger.info(f"Start event configured for {instance_id} with schedule: {formatted_schedule}")
+
+    def remove_start_event(self, instance_id):
+        """Remove EventBridge rule for starting EC2 instance"""
+        eventbridge = boto3.client('events')
+
+        # Remove the rule and target
+        rule_name = f"start-{instance_id}"
+        try:
+            # Check if rule exists
+            rules = eventbridge.list_rules(NamePrefix=rule_name)
+            if not rules.get('Rules'):
+                logger.info(f"No start event rule found for {instance_id}")
+                return
+                
+            eventbridge.remove_targets(
+                Rule=rule_name,
+                Ids=[f"start-target-{instance_id}"]
+            )
+            eventbridge.delete_rule(Name=rule_name)
+            logger.info(f"Start event removed for {instance_id}")
+
+        except ClientError as e:
+            logger.error(f"Error removing start event: {e}")
+
+    def _format_schedule_expression(self, cron_expression):
+        """
+        Format and validate cron expression for EventBridge.
+        EventBridge requires cron expressions to be in the format: cron(minutes hours day month day-of-week year)
+        
+        Args:
+            cron_expression (str): Standard cron expression (5 fields) or EventBridge format (6 fields)
+            
+        Returns:
+            str: Properly formatted EventBridge schedule expression or None if invalid
+        """
+        if not cron_expression or not isinstance(cron_expression, str):
+            return None
+            
+        cron_expression = cron_expression.strip()
+        
+        # If already in EventBridge format, validate and return
+        if cron_expression.startswith('cron(') and cron_expression.endswith(')'):
+            # Extract the cron part and validate
+            cron_part = cron_expression[5:-1]  # Remove 'cron(' and ')'
+            fields = cron_part.split()
+            if len(fields) == 6:
+                return cron_expression
+            else:
+                logger.warning(f"Invalid EventBridge cron format: {cron_expression}")
+                return None
+        
+        # Handle standard 5-field cron expression
+        fields = cron_expression.split()
+        if len(fields) == 5:
+            # Standard cron: minute hour day month day-of-week
+            # EventBridge cron: minute hour day month day-of-week year
+            minute, hour, day, month, day_of_week = fields
+            
+            # Validate basic format
+            if not self._validate_cron_field(minute, 0, 59) or \
+               not self._validate_cron_field(hour, 0, 23) or \
+               not self._validate_cron_field(day_of_week, 0, 6, allow_star=True):
+                logger.warning(f"Invalid cron expression values: {cron_expression}")
+                return None
+            
+            # Convert to EventBridge format (add year field)
+            eventbridge_cron = f"cron({minute} {hour} {day} {month} {day_of_week} *)"
+            return eventbridge_cron
+        
+        logger.warning(f"Invalid cron expression format: {cron_expression}")
+        return None
+    
+    def _validate_cron_field(self, field, min_val, max_val, allow_star=True):
+        """
+        Validate a single cron field.
+        
+        Args:
+            field (str): The cron field to validate
+            min_val (int): Minimum allowed value
+            max_val (int): Maximum allowed value
+            allow_star (bool): Whether '*' is allowed
+            
+        Returns:
+            bool: True if valid, False otherwise
+        """
+        if not field:
+            return False
+            
+        # Allow wildcard
+        if field == '*' and allow_star:
+            return True
+            
+        # Handle comma-separated values
+        if ',' in field:
+            values = field.split(',')
+            return all(self._validate_single_cron_value(val, min_val, max_val) for val in values)
+        
+        # Handle ranges
+        if '-' in field:
+            try:
+                start, end = field.split('-')
+                return (self._validate_single_cron_value(start, min_val, max_val) and 
+                       self._validate_single_cron_value(end, min_val, max_val))
+            except ValueError:
+                return False
+        
+        # Handle step values
+        if '/' in field:
+            try:
+                base, step = field.split('/')
+                return (self._validate_cron_field(base, min_val, max_val, allow_star) and 
+                       step.isdigit() and int(step) > 0)
+            except ValueError:
+                return False
+        
+        # Single value
+        return self._validate_single_cron_value(field, min_val, max_val)
+    
+    def _validate_single_cron_value(self, value, min_val, max_val):
+        """Validate a single cron value."""
+        try:
+            val = int(value)
+            return min_val <= val <= max_val
+        except ValueError:
+            return False
 
     def get_total_hours_running_per_month(self, instanceId):
         logger.info(f"------- get_total_hours_running_per_month {instanceId}")

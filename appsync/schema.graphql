@@ -49,7 +49,8 @@ type ServerConfig @aws_iam
 @aws_cognito_user_pools {
 	id: String!
 	shutdownMethod: String
-	scheduleExpression: String
+	stopScheduleExpression: String
+	startScheduleExpression: String
 	alarmThreshold: Float
 	alarmEvaluationPeriod: Int
 	runCommand: String
@@ -59,7 +60,8 @@ type ServerConfig @aws_iam
 input ServerConfigInput {
 	id: String!
 	shutdownMethod: String
-	scheduleExpression: String
+	stopScheduleExpression: String
+	startScheduleExpression: String
 	alarmThreshold: Float
 	alarmEvaluationPeriod: Int
 	runCommand: String
@@ -94,6 +96,11 @@ type ServerInfo @aws_iam
 	initStatus: String
 	iamStatus: String
 	runningMinutes: String
+	configStatus: String
+	configValid: Boolean
+	configWarnings: [String]
+	configErrors: [String]
+	autoConfigured: Boolean
 }
 
 input ServerInfoInput {
@@ -110,6 +117,11 @@ input ServerInfoInput {
 	initStatus: String
 	iamStatus: String
 	runningMinutes: String
+	configStatus: String
+	configValid: Boolean
+	configWarnings: [String]
+	configErrors: [String]
+	autoConfigured: Boolean
 }
 
 type ServerMetric @aws_iam

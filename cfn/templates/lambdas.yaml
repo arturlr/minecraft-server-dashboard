@@ -407,8 +407,22 @@ Resources:
         - arn:aws:iam::aws:policy/AmazonCognitoReadOnly
         - SSMParameterReadPolicy:
             ParameterName: !Sub "${ProjectName}*"
-        # - DynamoDBCrudPolicy:
-        #     TableName: !Ref InstancesTable
+        - Version: "2012-10-17" # Policy Document
+          Statement:
+            - Effect: Allow
+              Action:
+                - ec2:DeleteTags
+                - ec2:CreateTags
+              Resource: 'arn:aws:ec2:*:*:instance/*'
+              Condition:
+                StringEquals:
+                  'ec2:ResourceTag/App': !Ref AppValue
+        - Version: "2012-10-17" # Policy Document
+          Statement:
+            - Effect: Allow
+              Action:
+                - cloudwatch:PutMetricAlarm
+              Resource: "*"
       Environment:
         Variables:
           APP_NAME: !Ref ProjectName
@@ -463,7 +477,7 @@ Resources:
               Action:
                 - iam:PassRole
               Resource: 
-                Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-IAMEC2InstanceProfileArn"
+                - Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-IAMEC2RoleArn"
         - Version: "2012-10-17"
           Statement:
             - Effect: Allow
