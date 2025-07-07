@@ -164,6 +164,31 @@ def validate_and_configure_instance_tags(instance_id):
                 if validation_result['configStatus'] == 'complete':
                     validation_result['configStatus'] = 'incomplete'
         
+        # Check if actual AWS resources exist
+        if shutdown_method == 'Schedule':
+            # Check EventBridge rules
+            rules_status = ec2_utils.check_eventbridge_rules_exist(instance_id)
+            if not rules_status['shutdown_rule_exists']:
+                validation_result['errors'].append('Shutdown EventBridge rule not found')
+                validation_result['isValid'] = False
+                if validation_result['configStatus'] == 'complete':
+                    validation_result['configStatus'] = 'invalid'
+            
+            start_schedule = config.get('startScheduleExpression', '')
+            if start_schedule and not rules_status['start_rule_exists']:
+                validation_result['errors'].append('Start EventBridge rule not found')
+                validation_result['isValid'] = False
+                if validation_result['configStatus'] == 'complete':
+                    validation_result['configStatus'] = 'invalid'
+                    
+        elif shutdown_method in ['CPUUtilization', 'Connections']:
+            # Check CloudWatch alarm
+            if not ec2_utils.check_alarm_exists(instance_id):
+                validation_result['errors'].append('CloudWatch alarm not found')
+                validation_result['isValid'] = False
+                if validation_result['configStatus'] == 'complete':
+                    validation_result['configStatus'] = 'invalid'
+        
         # Log validation summary
         if validation_result['errors']:
             logger.warning(f"Tag validation for {instance_id} has errors: {validation_result['errors']}")

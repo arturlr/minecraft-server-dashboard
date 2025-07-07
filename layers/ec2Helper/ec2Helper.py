@@ -534,6 +534,34 @@ class Ec2Utils:
             return min_val <= val <= max_val
         except ValueError:
             return False
+    
+    def check_alarm_exists(self, instance_id):
+        """Check if CloudWatch alarm exists for the instance."""
+        alarm_name = f"{instance_id}-minecraft-server"
+        try:
+            alarms = self.cw_client.describe_alarms(AlarmNames=[alarm_name])
+            return len(alarms['MetricAlarms']) > 0
+        except Exception as e:
+            logger.error(f"Error checking alarm {alarm_name}: {e}")
+            return False
+    
+    def check_eventbridge_rules_exist(self, instance_id):
+        """Check if EventBridge rules exist for the instance."""
+        eventbridge = boto3.client('events')
+        shutdown_rule = f"shutdown-{instance_id}"
+        start_rule = f"start-{instance_id}"
+        
+        try:
+            rules = eventbridge.list_rules()
+            rule_names = [rule['Name'] for rule in rules['Rules']]
+            
+            return {
+                'shutdown_rule_exists': shutdown_rule in rule_names,
+                'start_rule_exists': start_rule in rule_names
+            }
+        except Exception as e:
+            logger.error(f"Error checking EventBridge rules for {instance_id}: {e}")
+            return {'shutdown_rule_exists': False, 'start_rule_exists': False}
 
     def get_total_hours_running_per_month(self, instanceId):
         logger.info(f"------- get_total_hours_running_per_month {instanceId}")
