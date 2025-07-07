@@ -12,11 +12,13 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 ec2_client = boto3.client('ec2')
+sqs_client = boto3.client('sqs')
 
 appValue = os.getenv('TAG_APP_VALUE')
 ec2_instance_profile_name = os.getenv('EC2_INSTANCE_PROFILE_NAME')
 ec2_instance_profile_arn = os.getenv('EC2_INSTANCE_PROFILE_ARN')
 cognito_pool_id = os.getenv('COGNITO_USER_POOL_ID')
+server_action_queue_url = os.getenv('SERVER_ACTION_QUEUE_URL')
 
 auth = authHelper.Auth(cognito_pool_id)
 ec2_utils = ec2Helper.Ec2Utils()
@@ -190,33 +192,50 @@ def check_and_create_group(instance_id, user_name):
         
     return True
 
-def action_process(action, instance_id, arguments=None):
-    """
-    Process different actions for a server instance
+def send_to_queue(action, instance_id, arguments=None, user_email=None):
+    """Send action to SQS queue for async processing"""
+    if not server_action_queue_url:
+        logger.warning("No queue URL configured, processing synchronously")
+        return action_process_sync(action, instance_id, arguments)
     
-    Args:
-        action (str): The action to perform (start/stop/restart etc)
-        instance_id (str): The EC2 instance ID
-        arguments (dict, optional): Additional arguments for config actions
-        
-    Returns:
-        dict: Response containing status code and message
-    """
+    message = {
+        'action': action,
+        'instanceId': instance_id,
+        'arguments': arguments,
+        'userEmail': user_email,
+        'timestamp': int(time.time())
+    }
+    
+    try:
+        sqs_client.send_message(
+            QueueUrl=server_action_queue_url,
+            MessageBody=json.dumps(message)
+        )
+        logger.info(f"Queued action {action} for instance {instance_id}")
+        return utl.response(202, {"msg": f"{action.capitalize()} request queued for processing"})
+    except Exception as e:
+        logger.error(f"Failed to queue action: {e}")
+        return utl.response(500, {"err": "Failed to queue action"})
+
+def action_process_sync(action, instance_id, arguments=None):
+    """Synchronous processing (fallback or read-only operations)"""
     logger.info("Action: %s InstanceId: %s", action, instance_id)
     action = action.lower().strip()
 
-    # Map of valid actions to their handlers
+    # Read-only operations processed immediately
+    if action == "getserverconfig":
+        return handle_get_server_config(instance_id)
+    
+    # Queue-able actions
     action_handlers = {
         "startserver": lambda: handle_server_action("start", instance_id),
         "restartserver": lambda: handle_server_action("restart", instance_id), 
         "stopserver": lambda: handle_server_action("stop", instance_id),
         "fixserverrole": lambda: handle_fix_role(instance_id),
-        "getserverconfig": lambda: handle_get_server_config(instance_id),
         "putserverconfig": lambda: handle_update_server_config(instance_id, arguments),
         "updateserverconfig": lambda: handle_update_server_config(instance_id, arguments)
     }
 
-    # Get the handler for the requested action
     handler = action_handlers.get(action)
     if not handler:
         return utl.response(400, {"err": f"Invalid action: {action}"})
@@ -439,8 +458,14 @@ def handler(event, context):
     # if not group_check:        
     #     logger.error("Group creation failed")        
 
-    # Calling action_process function to process the action with the mutation name
+    # Queue action for async processing or handle immediately for read-only
     field_name = event["info"]["fieldName"]
     logger.info("Received field name: %s", field_name)
-    return action_process(field_name,instance_id,input)
+    
+    # Read-only operations processed immediately
+    if field_name.lower() == "getserverconfig":
+        return action_process_sync(field_name, instance_id, input)
+    
+    # Queue other operations
+    return send_to_queue(field_name, instance_id, input, user_attributes["email"])
     

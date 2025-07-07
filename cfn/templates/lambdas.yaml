@@ -31,6 +31,22 @@ Parameters:
 
 Resources:
 
+  ServerActionQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "${ProjectName}-${EnvironmentName}-server-actions"
+      VisibilityTimeoutSeconds: 300
+      MessageRetentionPeriod: 1209600
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt ServerActionDLQ.Arn
+        maxReceiveCount: 3
+
+  ServerActionDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "${ProjectName}-${EnvironmentName}-server-actions-dlq"
+      MessageRetentionPeriod: 1209600
+
   ServersTable:
     Type: AWS::DynamoDB::Table
     Properties:
@@ -422,6 +438,8 @@ Resources:
             - Effect: Allow
               Action:
                 - cloudwatch:PutMetricAlarm
+                - events:List*
+                - events:Describe*                
               Resource: "*"
       Environment:
         Variables:
@@ -435,10 +453,74 @@ Resources:
             Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-UserPoolId"
 
 
-  ServerAction:
+  ServerActionProcessor:
     Type: AWS::Serverless::Function
     Properties:
       Timeout: 300
+      FunctionName: !Sub "${ProjectName}-${EnvironmentName}-serverActionProcessor"
+      CodeUri: ../../lambdas/serverActionProcessor/
+      Layers:
+        - !Ref UtilLayer
+        - !Ref Ec2Layer
+      Events:
+        SQSEvent:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt ServerActionQueue.Arn
+            BatchSize: 1
+      Policies:
+        - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
+        - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess
+        - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
+        - Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Action:
+                - ec2:StartInstances
+                - ec2:StopInstances
+                - ec2:RebootInstances
+                - ec2:AssociateIamInstanceProfile
+                - ec2:DisassociateIamInstanceProfile
+                - ec2:DeleteTags
+                - ec2:CreateTags
+              Resource: 'arn:aws:ec2:*:*:instance/*'
+              Condition:
+                StringEquals:
+                  'ec2:ResourceTag/App': !Ref AppValue
+        - Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Action:
+                - events:PutRule
+                - events:PutTargets
+                - events:DeleteRule
+                - events:RemoveTargets
+                - events:DisableRule
+                - events:EnableRule
+                - events:ListRules
+                - events:ListTargetsByRule
+              Resource: !Sub "arn:aws:events:${AWS::Region}:${AWS::AccountId}:rule/*"
+        - Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Action:
+                - cloudwatch:PutMetricAlarm
+                - cloudwatch:DeleteAlarms
+                - cloudwatch:DescribeAlarms
+              Resource: "*"
+      Environment:
+        Variables:
+          TAG_APP_VALUE: !Ref AppValue
+          AWS_REGION_NAME: !Sub "${AWS::Region}"
+          EC2_INSTANCE_PROFILE_NAME:  
+            Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-IAMEC2InstanceProfile"
+          EC2_INSTANCE_PROFILE_ARN:  
+            Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-IAMEC2InstanceProfileArn"
+
+  ServerAction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Timeout: 30
       FunctionName: !Sub "${ProjectName}-${EnvironmentName}-serverAction"
       CodeUri: ../../lambdas/serverAction/
       Layers:
@@ -509,6 +591,12 @@ Resources:
                 - cognito-idp:AdminAddUserToGroup
                 - cloudwatch:PutMetricAlarm
               Resource: "*"
+        - Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Action:
+                - sqs:SendMessage
+              Resource: !GetAtt ServerActionQueue.Arn
       Environment:
         Variables:
           # StepFunctionsArn: !Ref StateMachine
@@ -521,6 +609,7 @@ Resources:
           EC2_INSTANCE_PROFILE_ARN:  
             Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-IAMEC2InstanceProfileArn"
           # CONFIG_SERVER_LAMBDA_NAME: !Ref ConfigServer
+          SERVER_ACTION_QUEUE_URL: !Ref ServerActionQueue
           COGNITO_USER_POOL_ID:  
             Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-UserPoolId"
 
