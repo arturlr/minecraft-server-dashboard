@@ -312,14 +312,17 @@ def handle_update_server_config(instance_id, arguments):
 
     logger.info("Config update response: %s", response)
         
-    if response.get('shutdownMethod') == 'Schedule':
+    shutdown_method = response.get('shutdownMethod', '')
+    logger.info(f"Processing shutdown method: {shutdown_method}")
+    
+    if shutdown_method == 'Schedule':
         stop_schedule = response.get('stopScheduleExpression')
         if not stop_schedule:
             logger.error("Missing schedule expression")
             return utl.response(400, {"err": "Missing stop schedule expression"})
         
         try:
-            # Delete existing alarm
+            # Delete existing alarm (switching from alarm to schedule)
             ec2_utils.remove_alarm(instance_id)
             # Configure event for scheduled shutdown
             ec2_utils.configure_shutdown_event(instance_id, stop_schedule)
@@ -339,15 +342,23 @@ def handle_update_server_config(instance_id, arguments):
         except Exception as e:
             logger.error("Error configuring schedule: %s", str(e))
             return utl.response(500, {"err": f"Failed to configure schedule: {str(e)}"})
-    else:
-        if response.get('alarmEvaluationPeriod') is None or response.get('alarmThreshold') is None or response.get('shutdownMethod') is None:
-            logger.error("Missing alarmEvaluationPeriod or alarmThreshold")
+    elif shutdown_method in ['CPUUtilization', 'Connections']:
+        # Alarm-based shutdown
+        alarm_threshold = response.get('alarmThreshold')
+        alarm_period = response.get('alarmEvaluationPeriod')
+        
+        if alarm_threshold is None or alarm_period is None:
+            logger.error("Missing alarmEvaluationPeriod or alarmThreshold for alarm-based shutdown")
             return utl.response(400, {"err": "Missing alarmEvaluationPeriod or alarmThreshold"})
-        # Delete existing events
+        
+        # Delete existing events (switching from schedule to alarm)
         ec2_utils.remove_shutdown_event(instance_id)
         ec2_utils.remove_start_event(instance_id)
-        # Set instance tags and create alarm
-        ec2_utils.update_alarm(instance_id, response.get('shutdownMethod'), response.get('alarmThreshold'), response.get('alarmEvaluationPeriod'))
+        # Create alarm
+        ec2_utils.update_alarm(instance_id, shutdown_method, alarm_threshold, alarm_period)
+        logger.info(f"Created {shutdown_method} alarm with threshold {alarm_threshold}")
+    else:
+        logger.warning(f"Unknown shutdown method: {shutdown_method}")
     
     return response            
 

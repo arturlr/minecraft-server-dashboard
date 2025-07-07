@@ -231,12 +231,13 @@ class Ec2Utils:
             State='ENABLED'
         )
         
-        # Create the target (Lambda function or SSM Automation)
+        # Create the target for EC2 stop automation
         eventbridge.put_targets(
             Rule=rule_name,
             Targets=[{
                 'Id': f"shutdown-target-{instance_id}",
                 'Arn': f"arn:aws:automate:{aws_region}:ec2:stop",
+                'RoleArn': f"arn:aws:iam::{boto3.client('sts').get_caller_identity()['Account']}:role/aws-service-role/events.amazonaws.com/AWSServiceRoleForEvents",
                 'Input': json.dumps({"InstanceId": instance_id})
             }]
         )
@@ -294,6 +295,7 @@ class Ec2Utils:
             Targets=[{
                 'Id': f"start-target-{instance_id}",
                 'Arn': f"arn:aws:automate:{aws_region}:ec2:start",
+                'RoleArn': f"arn:aws:iam::{boto3.client('sts').get_caller_identity()['Account']}:role/aws-service-role/events.amazonaws.com/AWSServiceRoleForEvents",
                 'Input': json.dumps({"InstanceId": instance_id})
             }]
         )
