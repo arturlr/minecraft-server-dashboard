@@ -35,7 +35,7 @@ Resources:
     Type: AWS::SQS::Queue
     Properties:
       QueueName: !Sub "${ProjectName}-${EnvironmentName}-server-actions"
-      VisibilityTimeoutSeconds: 300
+      VisibilityTimeout: 300
       MessageRetentionPeriod: 1209600
       RedrivePolicy:
         deadLetterTargetArn: !GetAtt ServerActionDLQ.Arn
@@ -58,9 +58,11 @@ Resources:
         - AttributeName: id
           KeyType: HASH
       TimeToLiveSpecification:
-        AttributeName: expiration
-        Enabled: true
-
+         AttributeName: expiration
+         Enabled: true
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+       
   LogAuditTable:
     Type: AWS::DynamoDB::Table
     Properties:
@@ -72,8 +74,10 @@ Resources:
         - AttributeName: id
           KeyType: HASH
       TimeToLiveSpecification:
-        AttributeName: expiration
-        Enabled: true
+         AttributeName: expiration
+         Enabled: true
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
 
   GraphQLAPI:
     Type: AWS::Serverless::GraphQLApi

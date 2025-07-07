@@ -36,6 +36,15 @@ manifest_hash = ""
 packagetype = "Zip"
 functions = ["LambdasStack/ServerAction"]
 
+[function_build_definitions.58ef73d6-14d4-4494-b73d-63b471ac9702]
+codeuri = "/home/arturlr/dev/minecraft-server-dashboard/lambdas/serverActionProcessor"
+runtime = "python3.13"
+architecture = "x86_64"
+handler = "index.handler"
+manifest_hash = ""
+packagetype = "Zip"
+functions = ["LambdasStack/ServerActionProcessor"]
+
 [layer_build_definitions.a2f649a8-f82d-4135-b654-52793b01fb16]
 layer_name = "LambdasStack/AuthLayer"
 codeuri = "/home/arturlr/dev/minecraft-server-dashboard/layers/authHelper"

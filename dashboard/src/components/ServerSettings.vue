@@ -1,5 +1,5 @@
 <script setup>
-import { ref, reactive, computed, onMounted } from "vue";
+import { ref, reactive, computed, onMounted, watch } from "vue";
 import { useServerStore } from "../stores/server";
 import { useUserStore } from "../stores/user";
 
@@ -20,7 +20,30 @@ const shutdownMethodOptions = ref([
     { metric: 'Schedule', abbr: 'Schedule' },
 ]);
 
+// Function to update options with active label
+function updateShutdownMethodOptions() {
+    shutdownMethodOptions.value = [
+        { 
+            metric: 'CPUUtilization', 
+            abbr: selectedShutdownMethod.value?.metric === 'CPUUtilization' ? '% CPU (Active)' : '% CPU'
+        },
+        { 
+            metric: 'Connections', 
+            abbr: selectedShutdownMethod.value?.metric === 'Connections' ? '# Users (Active)' : '# Users'
+        },
+        { 
+            metric: 'Schedule', 
+            abbr: selectedShutdownMethod.value?.metric === 'Schedule' ? 'Schedule (Active)' : 'Schedule'
+        },
+    ];
+}
+
 const selectedShutdownMethod = ref(shutdownMethodOptions.value[0]) // Select first item by default
+
+// Watch for changes in selected shutdown method to update options
+watch(selectedShutdownMethod, () => {
+    updateShutdownMethodOptions();
+}, { deep: true });
 
 // ServerConfig Input - groupMembers will be processed 
 const serverConfigInput = reactive({
@@ -31,7 +54,7 @@ const serverConfigInput = reactive({
     workDir: null,
     stopScheduleExpression: '',
     startScheduleExpression: '',
-    shutdownMethod: null 
+    shutdownMethod: null
 });
 
 const groupMembers = ref([])
@@ -271,6 +294,19 @@ async function getServerSettings() {
             return;
         }
 
+        // Find the shutdown method first
+        const methodFromServer = serverSettings.shutdownMethod || 'CPUUtilization';
+        const foundMethod = [
+            { metric: 'CPUUtilization', abbr: '% CPU' },
+            { metric: 'Connections', abbr: '# Users' },
+            { metric: 'Schedule', abbr: 'Schedule' }
+        ].find(option => option.metric === methodFromServer) || 
+        { metric: 'CPUUtilization', abbr: '% CPU' };
+        
+        // Set the selected shutdown method for the UI first
+        selectedShutdownMethod.value = foundMethod;
+        updateShutdownMethodOptions();
+
         // Process server configuration data
         const updates = {
             id: serverStore.selectedServerId,
@@ -280,28 +316,20 @@ async function getServerSettings() {
             workDir: serverSettings.workDir || '',            
             stopScheduleExpression: serverSettings.stopScheduleExpression || '',
             startScheduleExpression: serverSettings.startScheduleExpression || '',
-            shutdownMethod: null
+            shutdownMethod: foundMethod
         };
-
-        // Find the shutdown method
-        const methodFromServer = serverSettings.shutdownMethod || 'CPUUtilization';
-        const foundMethod = shutdownMethodOptions.value.find(
-            option => option.metric === methodFromServer
-        );
-        updates.shutdownMethod = foundMethod || shutdownMethodOptions.value[0];
-        
-        // Set the selected shutdown method for the UI
-        selectedShutdownMethod.value = updates.shutdownMethod;
 
         // Update all values at once
         Object.assign(serverConfigInput, updates);
 
         // Handle schedule expressions after the state update
-        if (serverSettings.stopScheduleExpression) {
-            parseCronExpression(serverSettings.stopScheduleExpression);
-        }
-        if (serverSettings.startScheduleExpression) {
-            parseStartCronExpression(serverSettings.startScheduleExpression);
+        if (foundMethod.metric === 'Schedule') {
+            if (serverSettings.stopScheduleExpression) {
+                parseCronExpression(serverSettings.stopScheduleExpression);
+            }
+            if (serverSettings.startScheduleExpression) {
+                parseStartCronExpression(serverSettings.startScheduleExpression);
+            }
         }
         
     } catch (error) {
@@ -320,7 +348,8 @@ function resetForm() {
         //serverConfigInput.groupMember = '[]',
         serverConfigInput.stopScheduleExpression = "",
         serverConfigInput.startScheduleExpression = "",
-        serverConfigInput.shutdownMethod = shutdownMethodOptions.value[0].metric
+        serverConfigInput.shutdownMethod = { metric: 'CPUUtilization', abbr: '% CPU' }
+        selectedShutdownMethod.value = { metric: 'CPUUtilization', abbr: '% CPU' };
         selectedStartTime.value = null;
         enableStartSchedule.value = false;               
 }
@@ -332,9 +361,12 @@ async function onSubmit() {
 
             // Prepare the configuration data
             const configData = {
-                ...serverConfigInput,
                 id: serverStore.selectedServerId,
                 shutdownMethod: selectedShutdownMethod.value.metric,
+                alarmThreshold: serverConfigInput.alarmThreshold,
+                alarmEvaluationPeriod: serverConfigInput.alarmEvaluationPeriod,
+                runCommand: serverConfigInput.runCommand || '',
+                workDir: serverConfigInput.workDir || '',
                 stopScheduleExpression: generatedCronExpression.value || '',
                 startScheduleExpression: generatedStartCronExpression.value || ''
             };
@@ -398,11 +430,11 @@ async function addUser() {
 
 <template>
     <!-- Main buttons to open dialogs -->
-    <div class="d-flex mb-4 pt-4 pl-4">
+    <div class="pl-4">
     <v-tooltip top>
       <template v-slot:activator="{ on, attrs }">
         <v-icon 
-          size="large"
+          size="medium"
           class="mr-2 custom-icon"
           v-bind="attrs"
           v-on="{ ...on, click: openConfigDialog }"
@@ -416,7 +448,7 @@ async function addUser() {
     <v-tooltip top>
       <template v-slot:activator="{ on, attrs }">
         <v-icon
-          size="large"
+          size="medium"
           class="custom-icon"
           v-bind="attrs"
           v-on="{ ...on, click: openUsersDialog }"

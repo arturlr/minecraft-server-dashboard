@@ -252,7 +252,14 @@ async function subscribePutServerMetric() {
         const cpuData = JSON.parse(response.data.onPutServerMetric.cpuStats);
         const memData = JSON.parse(response.data.onPutServerMetric.memStats);
         const netData = JSON.parse(response.data.onPutServerMetric.networkStats);
-        const usersData = JSON.parse(response.data.onPutServerMetric.activeUsers);
+        let usersData = [];
+        try {
+          const parsedUsers = JSON.parse(response.data.onPutServerMetric.activeUsers);
+          usersData = Array.isArray(parsedUsers) ? parsedUsers : [];
+        } catch (error) {
+          console.warn('Failed to parse activeUsers data:', error);
+          usersData = [];
+        }
 
         if (cpuData && cpuData.length > 0) {
           // Get the last CPU value
@@ -285,14 +292,15 @@ async function subscribePutServerMetric() {
         }
         updateMetrics('mem', memData);
 
-        if (usersData.length > 0)
+        if (Array.isArray(usersData) && usersData.length > 0) {
           currentUsers.value = usersData[usersData.length - 1].y;
-        usersOptions.value = {
-          title: {
-            text: "Users - " + currentUsers.value.toString()
+          usersOptions.value = {
+            title: {
+              text: "Users - " + currentUsers.value.toString()
+            }
           }
+          updateMetrics('users', usersData);
         }
-        updateMetrics('users', usersData);
 
       },
       error: (error) => console.warn(error)

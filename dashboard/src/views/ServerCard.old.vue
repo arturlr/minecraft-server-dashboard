@@ -1,175 +1,95 @@
 <template>
   <div>
     <v-card class="my-8 pa-2 rounded-lg elevation-3 border">
-      <v-alert
-      v-model="metricAlert"
-      shaped
-      prominent
-      :type="metricAlertType"
-      dismissible
-    >
-     {{ metricMsg }}
-    </v-alert>
+      <v-alert v-model="metricAlert" shaped prominent :type="metricAlertType" dismissible>
+        {{ metricMsg }}
+      </v-alert>
       <div class="server-header gradient-bg pa-4">
-      <v-card-title class="text-h5 font-weight-medium">
-        {{ serverName }}
-        <v-chip class="ml-2" color="primary" small>
-          <v-icon small left> mdi-clock-outline </v-icon>
-          {{ (serversDict[serverId].runningMinutes / 60).toFixed(1) }} hours
-        </v-chip>
-      </v-card-title>
-    </div>
+        <v-card-title class="text-h5 font-weight-medium">
+          {{ serverName }} oi
+          <v-chip class="ml-2" color="primary" small>
+            <v-icon small left> mdi-clock-outline </v-icon>
+            {{ (serversDict[serverId].runningMinutes / 60).toFixed(1) }} hours
+          </v-chip>          
+        </v-card-title>
+        <!-- <v-card-actions class="pa-4">
+            <v-btn color="primary" outlined rounded @click="processSettingsForm()">
+              <v-icon left>settings</v-icon>
+              Settings
+            </v-btn>
+            <v-btn color="secondary" outlined rounded @click="addUserDialog = true">
+              <v-icon left>person_add</v-icon>
+              Add User
+            </v-btn>
+          </v-card-actions> -->
+      </div>
       <v-card-subtitle class="text-caption">{{ serverId }} </v-card-subtitle>
-        <v-alert
-        v-if="!iamServerCompliant"
-        dense
-        type="error"
-      >
+      <v-alert v-if="!iamServerCompliant" dense type="error">
         <v-row align="center">
           <v-col class="grow">
             This server does not have the correct IAM role and permissions to execute.
           </v-col>
-          <v-progress-circular            
-            v-if="fixButtonProgess"
-            :width="3"
-            color="black"
-            indeterminate            
-          ></v-progress-circular>
+          <v-progress-circular v-if="fixButtonProgess" :width="3" color="black" indeterminate></v-progress-circular>
           <v-col class="shrink">
-            <v-btn
-            :disabled="fixButtonProgess"
-            @click="triggerAction('config_iam',serverId, true);fixButtonProgess=true"
-            >Fix it</v-btn>
+            <v-btn :disabled="fixButtonProgess"
+              @click="triggerAction('config_iam', serverId, true); fixButtonProgess = true">Fix it</v-btn>
           </v-col>
         </v-row>
       </v-alert>
-        <v-row>
-          <v-col md="auto" class="d-flex flex-column">
-            <v-text-field
-              id="publicIp"
-              dense
-              label="Public IP"
-              :value="serversDict[serverId].publicIp"
-              append-icon="content_copy"
-              @click:append="copyPublicIp"
-              :hint="serversDict[serverId].state"
-              persistent-hint
-              outlined
-              readonly
-            >
-              <v-icon
-                large
-                @click="serverStateConfirmation = true"
-                slot="prepend"
-                v-bind:color="
-                  serversDict[serverId].state === 'stopped'
-                    ? 'error'
-                    : serversDict[serverId].state === 'running'
-                    ? 'success'
-                    : 'warning'
-                "
-              >
-                mdi-power
-              </v-icon>
-            </v-text-field>
-            <v-row class="chart-container">
-              <v-col cols="12" md="4">
-                <v-card class="chart-card pa-3 rounded-lg">
-                  <div class="chart-title text-subtitle-1 mb-2">Users Activity</div>
-                  <apexchart
-                    ref="users"
-                    height="120"
-                    :options="getEnhancedAreaChartOptions"
-                    :series="chartInit"
-                  />
-                </v-card>
-              </v-col>
-              <v-col cols="12" md="8">
-                <v-card class="chart-card pa-3 rounded-lg">
-                  <div class="chart-title text-subtitle-1 mb-2">Performance Metrics</div>
-                  <apexchart
-                    ref="lineChart"
-                    height="180"
-                    :options="getEnhancedLineChartOptions"
-                    :series="chartInit"
-                  />
-                </v-card>
-              </v-col>
-            </v-row>
+      
 
-            <v-card-actions class="pa-4">
-              <v-btn
-                color="primary"
-                outlined
-                rounded
-                @click="processSettingsForm()"
-              >
-                <v-icon left>settings</v-icon>
-                Settings
-              </v-btn>
-              <v-btn
-                color="secondary"
-                outlined
-                rounded
-                @click="addUserDialog = true"
-              >
-                <v-icon left>person_add</v-icon>
-                Add User
-              </v-btn>
-            </v-card-actions>
+          <v-text-field id="publicIp" dense label="Public IP" :value="serversDict[serverId].publicIp"
+            append-icon="content_copy" @click:append="copyPublicIp" :hint="serversDict[serverId].state" persistent-hint
+            outlined readonly>
+            <v-icon large @click="serverStateConfirmation = true" slot="prepend" v-bind:color="serversDict[serverId].state === 'stopped'
+                ? 'error'
+                : serversDict[serverId].state === 'running'
+                  ? 'success'
+                  : 'warning'
+              ">
+              mdi-power
+            </v-icon>
+          </v-text-field>
+          <v-row class="chart-container">
+            <v-col cols="12" md="4">
+              <v-card class="chart-card pa-3 rounded-lg">
+                <div class="chart-title text-subtitle-1 mb-2">Users Activity</div>
+                <apexchart ref="users" height="120" :options="getEnhancedAreaChartOptions" :series="chartInit" />
+              </v-card>
+            </v-col>
+            <v-col cols="12" md="8">
+              <v-card class="chart-card pa-3 rounded-lg">
+                <div class="chart-title text-subtitle-1 mb-2">Performance Metrics</div>
+                <apexchart ref="lineChart" height="180" :options="getEnhancedLineChartOptions" :series="chartInit" />
+              </v-card>
+            </v-col>
+          </v-row>
 
-
-      <v-list>
-        <v-list-item two-line>
-          <v-list-item-content>
-            <v-list-item-title class="font-weight-light">
-              Last event date:
-            </v-list-item-title>
-            <v-list-item-subtitle class="font-weight-light">
-              {{ serversDict[serverId].launchTime }}
-            </v-list-item-subtitle>
-          </v-list-item-content>
-        </v-list-item>
-      </v-list>
+          <v-list>
+            <v-list-item two-line>
+              <v-list-item-content>
+                <v-list-item-title class="font-weight-light">
+                  Last event date:
+                </v-list-item-title>
+                <v-list-item-subtitle class="font-weight-light">
+                  {{ serversDict[serverId].launchTime }}
+                </v-list-item-subtitle>
+              </v-list-item-content>
+            </v-list-item>
+          </v-list>
     </v-card>
 
-   
 
-    <v-snackbar
-      v-model="successAlert"
-      timeout="3500"
-      absolute
-      color="success"
-      outlined
-      left
-      centered
-      text
-    >
+
+    <v-snackbar v-model="successAlert" timeout="3500" absolute color="success" outlined left centered text>
       <strong>{{ infoMsg }}</strong>
     </v-snackbar>
 
-    <v-snackbar
-      v-model="errorAlert"
-      timeout="3500"
-      absolute
-      color="red accent-2"
-      outlined
-      left
-      centered
-      text
-    >
+    <v-snackbar v-model="errorAlert" timeout="3500" absolute color="red accent-2" outlined left centered text>
       <strong>{{ errorMsg }}</strong>
     </v-snackbar>
 
-    <v-snackbar
-      v-model="copyDialog"
-      timeout="3500"
-      absolute
-      left
-      centered
-      color="primary"
-      text
-    >
+    <v-snackbar v-model="copyDialog" timeout="3500" absolute left centered color="primary" text>
       <strong>Copied!</strong>
     </v-snackbar>
   </div>
@@ -190,7 +110,7 @@
 
 .metric-card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
 }
 
 .chart-card {
@@ -262,7 +182,7 @@ export default {
     if (this.$route.params) {
       this.serverId = this.$route.params.id;
       this.runCommand = this.serversDict[this.serverId].runCommand;
-      this.workingDir = this.serversDict[this.serverId].workingDir;      
+      this.workingDir = this.serversDict[this.serverId].workingDir;
     }
   },
   mounted() {
@@ -278,7 +198,33 @@ export default {
     ...mapState({
       serversDict: (state) => state.general.serversDict,
     }),
-    
+
+    serverName() {
+      return this.serversDict[this.serverId]?.name || 'Unknown Server';
+    },
+
+    iamServerCompliant() {
+      return this.serversDict[this.serverId]?.iamCompliant || false;
+    },
+
+    chartInit() {
+      return [];
+    },
+
+    getEnhancedAreaChartOptions() {
+      return {
+        chart: { type: 'area' },
+        xaxis: { categories: [] }
+      };
+    },
+
+    getEnhancedLineChartOptions() {
+      return {
+        chart: { type: 'line' },
+        xaxis: { categories: [] }
+      };
+    },
+
     isMobile() {
       return this.$vuetify.breakpoint.xsOnly;
     },
@@ -287,9 +233,9 @@ export default {
     async processSettingsForm(submit = false) {
       this.settingsDialog = true;
       this.settingsDialogLoading = true;
-      
+
       if (submit) {
-        let params = { am:this.alarmMetric,at:this.alarmThreshold }
+        let params = { am: this.alarmMetric, at: this.alarmThreshold }
         if (this.runCommand.length > 3) {
           params.rc = this.runCommand
         }
@@ -297,7 +243,7 @@ export default {
           params.wd = this.workingDir
         }
 
-        await this.triggerAction("set_instance_attr", params)        
+        await this.triggerAction("set_instance_attr", params)
         this.settingsDialog = false;
       } else {
         // Default values
@@ -309,23 +255,63 @@ export default {
         const infoResp = await this.triggerAction("get_instance_attr", this.serverId, true);
 
         if (infoResp) {
-          if ("runCommand" in infoResp){
+          if ("runCommand" in infoResp) {
             this.runCommand = infoResp.runCommand;
           }
-          if ("workingDir" in infoResp){
+          if ("workingDir" in infoResp) {
             this.workingDir = infoResp.workingDir;
           }
-          if ("alarmMetric" in infoResp){
+          if ("alarmMetric" in infoResp) {
             this.alarmMetric = infoResp.alarmMetric;
           }
-          if ("alarmThreshold" in infoResp){
+          if ("alarmThreshold" in infoResp) {
             this.alarmThreshold = infoResp.alarmThreshold;
           }
-        }        
+        }
       }
 
       this.settingsDialogLoading = false;
     },
+
+    copyPublicIp() {
+      const publicIp = this.serversDict[this.serverId]?.publicIp;
+      if (publicIp) {
+        navigator.clipboard.writeText(publicIp);
+        this.copyDialog = true;
+      }
+    },
+
+    async triggerAction(action, params, returnResponse = false) {
+      try {
+        const response = await API.graphql({
+          query: triggerServerAction,
+          variables: {
+            serverId: this.serverId,
+            action: action,
+            params: JSON.stringify(params)
+          }
+        });
+
+        if (returnResponse) {
+          return JSON.parse(response.data.triggerServerAction);
+        }
+
+        this.successAlert = true;
+        this.infoMsg = 'Action completed successfully';
+      } catch (error) {
+        this.errorAlert = true;
+        this.errorMsg = error.message || 'An error occurred';
+      }
+    },
+
+    subscribePutServerMetric() {
+      // Subscription logic would go here
+    },
+
+    updateMetrics() {
+      // Metrics update logic would go here
+    },
+
     resetForm() {
       this.settingsFormHasErrors = false;
 
@@ -354,8 +340,8 @@ export default {
 
       this.processSettingsForm(true);
     },
-    
-    
+
+
     async writeLog(msg) {
       // Calculating expiration time
       const d = new Date();
@@ -368,7 +354,7 @@ export default {
         expirationEpoch: expirationEpoch,
       });
     },
-    
+
   },
 };
 </script>

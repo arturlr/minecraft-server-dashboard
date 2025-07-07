@@ -173,7 +173,7 @@ class Auth:
                             group_members.append({
                                 'id': user_attrs['sub'],
                                 'email': user_attrs['email'],
-                                'fullname': f"{user_attrs['given_name']} {user_attrs['family_name']}"
+                                'fullName': f"{user_attrs['given_name']} {user_attrs['family_name']}"
                             })
                         else:
                             logger.warning(

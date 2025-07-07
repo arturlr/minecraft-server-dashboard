@@ -225,6 +225,8 @@ def action_process_sync(action, instance_id, arguments=None):
     # Read-only operations processed immediately
     if action == "getserverconfig":
         return handle_get_server_config(instance_id)
+    elif action == "getserverusers":
+        return handle_get_server_users(instance_id)
     
     # Queue-able actions
     action_handlers = {
@@ -335,13 +337,14 @@ def handle_update_server_config(instance_id, arguments):
     logger.info(f"Processing shutdown method: {shutdown_method}")
     
     if shutdown_method == 'Schedule':
+        # Schedule selected - activate schedule, deactivate alarms
         stop_schedule = response.get('stopScheduleExpression')
         if not stop_schedule:
             logger.error("Missing schedule expression")
             return utl.response(400, {"err": "Missing stop schedule expression"})
         
         try:
-            # Delete existing alarm (switching from alarm to schedule)
+            # Remove alarm (switching to schedule)
             ec2_utils.remove_alarm(instance_id)
             # Configure event for scheduled shutdown
             ec2_utils.configure_shutdown_event(instance_id, stop_schedule)
@@ -352,7 +355,6 @@ def handle_update_server_config(instance_id, arguments):
                 logger.info("Configuring start schedule: %s", start_schedule)
                 ec2_utils.configure_start_event(instance_id, start_schedule)
             else:
-                # Remove existing start event if no start schedule is provided
                 ec2_utils.remove_start_event(instance_id)
                 
         except ValueError as ve:
@@ -362,7 +364,7 @@ def handle_update_server_config(instance_id, arguments):
             logger.error("Error configuring schedule: %s", str(e))
             return utl.response(500, {"err": f"Failed to configure schedule: {str(e)}"})
     elif shutdown_method in ['CPUUtilization', 'Connections']:
-        # Alarm-based shutdown
+        # CPU/Connections selected - activate alarm, deactivate schedule
         alarm_threshold = response.get('alarmThreshold')
         alarm_period = response.get('alarmEvaluationPeriod')
         
@@ -370,7 +372,7 @@ def handle_update_server_config(instance_id, arguments):
             logger.error("Missing alarmEvaluationPeriod or alarmThreshold for alarm-based shutdown")
             return utl.response(400, {"err": "Missing alarmEvaluationPeriod or alarmThreshold"})
         
-        # Delete existing events (switching from schedule to alarm)
+        # Remove schedule events (switching to alarm)
         ec2_utils.remove_shutdown_event(instance_id)
         ec2_utils.remove_start_event(instance_id)
         # Create alarm
@@ -463,7 +465,7 @@ def handler(event, context):
     logger.info("Received field name: %s", field_name)
     
     # Read-only operations processed immediately
-    if field_name.lower() == "getserverconfig":
+    if field_name.lower() in ["getserverconfig", "getserverusers"]:
         return action_process_sync(field_name, instance_id, input)
     
     # Queue other operations
