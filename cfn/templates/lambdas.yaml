@@ -207,6 +207,12 @@ Resources:
               Version: "1.0.0"
             Pipeline:
               - getLogAuditFunction
+          putServerActionStatus:
+            Runtime:
+              Name: APPSYNC_JS
+              Version: "1.0.0"
+            Pipeline:
+              - putServerRecordFunction
         Query:
           listServers:
             Runtime:
@@ -238,6 +244,12 @@ Resources:
               Version: "1.0.0"
             Pipeline:
               - getLogAuditFunction
+          getServerActionStatus:
+            Runtime:
+              Name: APPSYNC_JS
+              Version: "1.0.0"
+            Pipeline:
+              - getServerRecordFunction
 
   ScheduledRule: 
     Type: AWS::Events::Rule
@@ -514,12 +526,15 @@ Resources:
               Resource: "*"
       Environment:
         Variables:
+          APP_NAME: !Ref ProjectName
+          ENVIRONMENT_NAME: !Ref EnvironmentName
           TAG_APP_VALUE: !Ref AppValue
           AWS_REGION_NAME: !Sub "${AWS::Region}"
           EC2_INSTANCE_PROFILE_NAME:  
             Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-IAMEC2InstanceProfile"
           EC2_INSTANCE_PROFILE_ARN:  
             Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-IAMEC2InstanceProfileArn"
+          APPSYNC_URL: !GetAtt GraphQLAPI.GraphQLUrl
 
   ServerAction:
     Type: AWS::Serverless::Function

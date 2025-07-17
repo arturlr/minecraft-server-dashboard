@@ -141,6 +141,26 @@ input ServerMetricInput {
 	activeUsers: AWSJSON
 }
 
+# New type for server action status
+type ServerActionStatus @aws_iam
+@aws_cognito_user_pools {
+	id: String!
+	action: String!
+	status: String!
+	timestamp: AWSTimestamp!
+	message: String
+	userEmail: AWSEmail
+}
+
+input ServerActionStatusInput {
+	id: String!
+	action: String!
+	status: String!
+	timestamp: AWSTimestamp!
+	message: String
+	userEmail: AWSEmail
+}
+
 type Mutation {
 	putServerMetric(input: ServerMetricInput!): ServerMetric
 		@aws_iam @aws_cognito_user_pools
@@ -164,6 +184,9 @@ type Mutation {
 		@aws_cognito_user_pools 
 	putLogAudit(input: LogAuditInput!): LogAudit
 		@aws_iam @aws_cognito_user_pools
+	# New mutation for server action status
+	putServerActionStatus(input: ServerActionStatusInput!): ServerActionStatus
+		@aws_iam @aws_cognito_user_pools
 }
 
 type Query {
@@ -177,6 +200,9 @@ type Query {
 		@aws_cognito_user_pools
 	getLogAudit(id: String!): [LogAudit]
 		@aws_cognito_user_pools  
+	# New query for server action status
+	getServerActionStatus(id: String!): ServerActionStatus
+		@aws_cognito_user_pools
 }
 
 type Subscription {
@@ -187,6 +213,12 @@ type Subscription {
 
 	onChangeState: ServerInfo
 		@aws_subscribe(mutations: ["changeServerState"])  
+@aws_cognito_user_pools
+@aws_iam
+
+	# New subscription for server action status
+	onPutServerActionStatus(id: String!): ServerActionStatus
+		@aws_subscribe(mutations: ["putServerActionStatus"])
 @aws_cognito_user_pools
 @aws_iam
 }

@@ -91,3 +91,16 @@ export const getServerUsers = /* GraphQL */ `
     }
   }
 `;
+
+export const getServerActionStatus = /* GraphQL */ `
+  query GetServerActionStatus($id: String!) {
+    getServerActionStatus(id: $id) {
+      id
+      action
+      status
+      timestamp
+      message
+      userEmail
+    }
+  }
+`;

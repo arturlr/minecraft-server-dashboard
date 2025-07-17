@@ -6,7 +6,6 @@ import time
 import authHelper
 import ec2Helper
 import utilHelper
-import botocore.exceptions
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -23,118 +22,6 @@ server_action_queue_url = os.getenv('SERVER_ACTION_QUEUE_URL')
 auth = authHelper.Auth(cognito_pool_id)
 ec2_utils = ec2Helper.Ec2Utils()
 utl = utilHelper.Utils()
-
-class IamProfile:
-    def __init__(self, instance_id):
-        self.ec2_client = boto3.client('ec2')
-        self.instance_id = instance_id
-        self.association_id = None
-
-    def manage_iam_profile(self):
-        try:
-            iam_profile = ec2_utils.describe_iam_profile(self.instance_id, "associated")
-
-            if iam_profile and iam_profile['Arn'] == ec2_instance_profile_arn:
-                logger.info("Instance IAM Profile is already valid: %s", iam_profile['Arn'])
-                return True
-            elif iam_profile:
-                logger.info("Instance IAM Profile is invalid: %s", iam_profile['Arn'])
-                self.association_id = iam_profile['AssociationId']
-                rsp = self.disassociate_iam_profile()
-                if not rsp:
-                    return False
-        except Exception as e:
-            # If we can't describe the profile, log it but continue with attachment
-            logger.warning("Error describing IAM profile: %s. Will attempt to attach profile anyway.", str(e))
-            # If the error is about an invalid association ID, we can continue
-
-        logger.info("Attaching IAM role to the Minecraft Instance")
-        return self.attach_iam_profile()
-
-    # This method handles disassociating an IAM instance profile from an EC2 instance
-    # Parameters:
-    #   association_id: The ID of the IAM instance profile association to remove
-    def disassociate_iam_profile(self):
-        logger.info("Disassociating IAM profile: %s", self.association_id)
-        try:
-            # Call EC2 API to remove the profile association
-            self.ec2_client.disassociate_iam_instance_profile(AssociationId=self.association_id)
-        except botocore.exceptions.ClientError as e:
-            if "InvalidAssociationID.NotFound" in str(e):
-                # Handle the case where the association ID doesn't exist
-                logger.warning("Association ID not found: %s. This is not an error, continuing...", self.association_id)
-                # Return True to continue with attaching the profile
-                return True
-            else:
-                logger.error("Error disassociating IAM profile: %s", str(e))
-                return False
-        except Exception as e:
-            logger.error("Error disassociating IAM profile: %s", str(e))
-            return False
-
-        # Helper function that checks if profile is fully disassociated
-        # Returns True if profile is confirmed disassociated, False otherwise
-        def check_disassociated_status():
-            try:
-                return ec2_utils.describe_iam_profile(self.instance_id, "disassociated", self.association_id) is not None
-            except Exception as e:
-                # If we get an error checking the status, assume it's disassociated
-                logger.warning("Error checking disassociation status: %s. Assuming profile is disassociated.", str(e))
-                return True
-
-        # Retry checking disassociation status for up to 30 times with 5 second delays
-        # Return False if profile is not disassociated after all retries
-        if not utl.retry_operation(check_disassociated_status, max_retries=30, delay=5):
-            logger.warning("Profile timeout during disassociating")
-            # Even if we time out, we'll try to attach the new profile anyway
-            return True
-
-        # Profile was successfully disassociated
-        return True
-    
-    def attach_iam_profile(self):
-        # This method attaches an IAM instance profile to an EC2 instance
-        # The profile name and ARN are specified in environment variables
-        logger.info("Attaching IAM profile: %s", ec2_instance_profile_name)
-        
-        try:
-            # Call EC2 API to associate the IAM profile with the instance
-            response = self.ec2_client.associate_iam_instance_profile(
-                IamInstanceProfile={"Name": ec2_instance_profile_name},
-                InstanceId=self.instance_id
-            )
-        except botocore.exceptions.ClientError as e:
-            error_msg = str(e)
-            # Check if this is an unauthorized operation
-            if "UnauthorizedOperation" in error_msg:
-                logger.error("Unauthorized operation when attaching IAM profile: %s", error_msg)
-                return {"status": "error", "message": error_msg, "code": "UnauthorizedOperation"}
-            else:
-                logger.error("Error attaching IAM profile: %s", error_msg)
-                return False
-        except Exception as e:
-            logger.error("Error attaching IAM profile: %s", str(e))
-            return False
-
-        # Define helper function to check if profile is properly attached
-        def check_associated_status():
-            try:
-                # Get current IAM profile info for the instance
-                iam_profile = ec2_utils.describe_iam_profile(self.instance_id, "associated")
-                # Verify profile ARN matches expected ARN
-                return iam_profile and iam_profile['Arn'] == ec2_instance_profile_arn
-            except Exception as e:
-                logger.warning("Error checking association status: %s", str(e))
-                return False
-
-        # Retry checking profile association status for up to 30 times with 5 second delays
-        # Return False if profile is not attached after all retries
-        if not utl.retry_operation(check_associated_status, max_retries=30, delay=5):
-            logger.warning("Profile timeout during association")
-            return False
-
-        # Profile was successfully attached
-        return True
 
 def check_authorization(event, instance_id, user_attributes):
     """
@@ -218,31 +105,18 @@ def send_to_queue(action, instance_id, arguments=None, user_email=None):
         return utl.response(500, {"err": "Failed to queue action"})
 
 def action_process_sync(action, instance_id, arguments=None):
-    """Synchronous processing (fallback or read-only operations)"""
+    """Synchronous processing for read-only operations"""
     logger.info("Action: %s InstanceId: %s", action, instance_id)
     action = action.lower().strip()
 
-    # Read-only operations processed immediately
+    # Only handle read-only operations synchronously
     if action == "getserverconfig":
         return handle_get_server_config(instance_id)
     elif action == "getserverusers":
         return handle_get_server_users(instance_id)
-    
-    # Queue-able actions
-    action_handlers = {
-        "startserver": lambda: handle_server_action("start", instance_id),
-        "restartserver": lambda: handle_server_action("restart", instance_id), 
-        "stopserver": lambda: handle_server_action("stop", instance_id),
-        "fixserverrole": lambda: handle_fix_role(instance_id),
-        "putserverconfig": lambda: handle_update_server_config(instance_id, arguments),
-        "updateserverconfig": lambda: handle_update_server_config(instance_id, arguments)
-    }
-
-    handler = action_handlers.get(action)
-    if not handler:
-        return utl.response(400, {"err": f"Invalid action: {action}"})
-
-    return handler()
+    else:
+        # All other actions should be queued
+        return send_to_queue(action, instance_id, arguments)
 
 def handle_get_server_users(instance_id):
     """Helper function to handle get server users action"""
@@ -257,135 +131,12 @@ def handle_get_server_users(instance_id):
 
 def handle_get_server_config(instance_id):
     """Helper function to handle get server config action"""
-    
     instance_tags = ec2_utils.get_instance_attributes_from_tags(instance_id)
-
-    # Return the tag dictionary
     return instance_tags
-
-def handle_server_action(action, instance_id):
-    try:
-        instance = ec2_utils.list_server_by_id(instance_id)
-        if not instance.get('Instances'):
-            raise ValueError(f"Instance {instance_id} not found")
-            
-        instance_info = instance['Instances'][0]        
-        state = instance_info["State"]["Name"]
-
-        # Handle start action
-        if action == "start":
-            if state == "stopped":
-                ec2_client.start_instances(InstanceIds=[instance_id])
-                logger.info('Starting instance %s', instance_id)
-            else:
-                logger.warning('Start instance %s not possible - current state: %s', instance_id, state)
-
-        # Handle stop action        
-        elif action == "stop":
-            if state == "running":
-                ec2_client.stop_instances(InstanceIds=[instance_id])
-                logger.info('Stopping instance %s', instance_id)
-            else:
-                logger.warning('Stop instance %s not possible - current state: %s', instance_id, state)
-
-        # Handle restart action
-        elif action == "restart":
-            if state == "running":
-                ec2_client.reboot_instances(InstanceIds=[instance_id])
-                logger.info('Restarting instance %s', instance_id)
-            else:
-                logger.warning('Restart instance %s not possible - current state: %s', instance_id, state)            
-
-        return utl.response(200, f"{action.capitalize()} command submitted")
-    
-    except Exception as e:
-        logger.error("Error performing %s action on instance %s: %s", action, instance_id, str(e))
-        return utl.response(500, {"error": f"Failed to {action} instance: {str(e)}"})
-    
-def handle_fix_role(instance_id):
-    """Helper function to handle IAM role fixes"""
-    iam_profile = IamProfile(instance_id)
-    resp = iam_profile.manage_iam_profile()
-    logger.info("IAM role attachment response: %s", resp)
-    
-    # Check if the response is a dictionary with error information
-    if isinstance(resp, dict) and resp.get("status") == "error":
-        if resp.get("code") == "UnauthorizedOperation":
-            # Return a specific error for unauthorized operations
-            return utl.response(403, {
-                "err": "Unauthorized operation", 
-                "details": resp.get("message", "You do not have permission to attach IAM roles")
-            })
-    
-    if resp is True:
-        return utl.response(200, {"msg": "Successfully attached IAM role to the Minecraft Instance"})
-    
-    logger.error("Attaching IAM role failed")
-    return utl.response(500, {"err": "Attaching IAM role failed"})
-
-def handle_update_server_config(instance_id, arguments):
-    """Helper function to handle config updates"""
-    if not arguments:
-        logger.error("Missing arguments for config update")
-        return utl.response(400, {"err": "Missing required arguments"})
-    
-    response = ec2_utils.set_instance_attributes_to_tags(arguments)
-
-    logger.info("Config update response: %s", response)
-        
-    shutdown_method = response.get('shutdownMethod', '')
-    logger.info(f"Processing shutdown method: {shutdown_method}")
-    
-    if shutdown_method == 'Schedule':
-        # Schedule selected - activate schedule, deactivate alarms
-        stop_schedule = response.get('stopScheduleExpression')
-        if not stop_schedule:
-            logger.error("Missing schedule expression")
-            return utl.response(400, {"err": "Missing stop schedule expression"})
-        
-        try:
-            # Remove alarm (switching to schedule)
-            ec2_utils.remove_alarm(instance_id)
-            # Configure event for scheduled shutdown
-            ec2_utils.configure_shutdown_event(instance_id, stop_schedule)
-            
-            # Configure start schedule if provided
-            start_schedule = response.get('startScheduleExpression')
-            if start_schedule:
-                logger.info("Configuring start schedule: %s", start_schedule)
-                ec2_utils.configure_start_event(instance_id, start_schedule)
-            else:
-                ec2_utils.remove_start_event(instance_id)
-                
-        except ValueError as ve:
-            logger.error("Invalid schedule expression: %s", str(ve))
-            return utl.response(400, {"err": f"Invalid schedule expression: {str(ve)}"})
-        except Exception as e:
-            logger.error("Error configuring schedule: %s", str(e))
-            return utl.response(500, {"err": f"Failed to configure schedule: {str(e)}"})
-    elif shutdown_method in ['CPUUtilization', 'Connections']:
-        # CPU/Connections selected - activate alarm, deactivate schedule
-        alarm_threshold = response.get('alarmThreshold')
-        alarm_period = response.get('alarmEvaluationPeriod')
-        
-        if alarm_threshold is None or alarm_period is None:
-            logger.error("Missing alarmEvaluationPeriod or alarmThreshold for alarm-based shutdown")
-            return utl.response(400, {"err": "Missing alarmEvaluationPeriod or alarmThreshold"})
-        
-        # Remove schedule events (switching to alarm)
-        ec2_utils.remove_shutdown_event(instance_id)
-        ec2_utils.remove_start_event(instance_id)
-        # Create alarm
-        ec2_utils.update_alarm(instance_id, shutdown_method, alarm_threshold, alarm_period)
-        logger.info(f"Created {shutdown_method} alarm with threshold {alarm_threshold}")
-    else:
-        logger.warning(f"Unknown shutdown method: {shutdown_method}")
-    
-    return response            
 
 def handle_local_invocation(event, context):
     # Handle local invocations here
-    return action_process(event["action"], event["instanceId"])
+    return action_process_sync(event["action"], event["instanceId"])
 
 def handler(event, context):
     try:
@@ -402,9 +153,7 @@ def handler(event, context):
                 return utl.response(401,{"err": "No headers found in request" })
         else:
             # Local invocation
-            return handle_local_invocation(event, context)            
-            #logger.error("No request found in event")
-            #return utl.response(401,{"err": "No request found in event" })
+            return handle_local_invocation(event, context)
 
     except Exception as e:
         logger.error("Error processing request: %s", e)
@@ -455,12 +204,7 @@ def handler(event, context):
         logger.error("%s is not authorized", user_attributes["email"])
         return utl.response(401, resp)
 
-    # MOVE THIS FUNCTION TO CONFIG SERVER    
-    # group_check = check_and_create_group(instance_id,user_attributes["username"])    
-    # if not group_check:        
-    #     logger.error("Group creation failed")        
-
-    # Queue action for async processing or handle immediately for read-only
+    # Field name determines the action to perform
     field_name = event["info"]["fieldName"]
     logger.info("Received field name: %s", field_name)
     
@@ -468,6 +212,5 @@ def handler(event, context):
     if field_name.lower() in ["getserverconfig", "getserverusers"]:
         return action_process_sync(field_name, instance_id, input)
     
-    # Queue other operations
+    # Queue all other operations
     return send_to_queue(field_name, instance_id, input, user_attributes["email"])
-    

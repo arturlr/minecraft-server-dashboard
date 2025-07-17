@@ -67,3 +67,16 @@ export const onDeleteLoginAudit = /* GraphQL */ `
     }
   }
 `;
+
+export const onPutServerActionStatus = /* GraphQL */ `
+  subscription OnPutServerActionStatus($id: String!) {
+    onPutServerActionStatus(id: $id) {
+      id
+      action
+      status
+      timestamp
+      message
+      userEmail
+    }
+  }
+`;
