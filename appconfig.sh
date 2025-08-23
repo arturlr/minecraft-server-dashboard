@@ -13,8 +13,8 @@ WHITE='\033[1;37m'
 SET='\033[0m'
 DATESUFFIX=$(date +%Y-%m-%d-%H%M) 
 
-parent_stack=$(cat cfn/samconfig.toml | grep stack_name |  tr -d '"' | awk '{print $3}')
-region=$(cat cfn/samconfig.toml | grep region |  tr -d '"' | awk '{print $3}')
+parent_stack=$(grep stack_name cfn/samconfig.toml | tr -d '"' | awk '{print $3}')
+region=$(grep region cfn/samconfig.toml | tr -d '"' | awk '{print $3}')
 account_id=$(aws sts get-caller-identity --query "Account" --output text)
 
 # Function to extract outputs from a stack
