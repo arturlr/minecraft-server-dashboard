@@ -30,7 +30,7 @@ get_stack_outputs() {
         return 1
     fi
     
-    echo $stack_outputs > "$stack_name.json"
+    echo "$stack_outputs" > "$stack_name.json"
 }
 
 process_stacks() {
