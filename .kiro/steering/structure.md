@@ -30,9 +30,10 @@ dashboard/
 
 ### Key Frontend Components
 - **Authentication Module**: User login/logout and session management
-- **Server Dashboard**: Server metrics and status display
-- **Server Control Panel**: Start/stop/restart functionality
-- **Configuration Manager**: Server settings editor
+- **Server Dashboard**: Server metrics and status display with real-time action status
+- **Server Control Panel**: Start/stop/restart functionality with async status tracking
+- **Configuration Manager**: Server settings editor with validation feedback
+- **ServerConfigDebug**: Debug view for configuration validation warnings/errors
 - **User Management**: Server access control
 - **Cost Monitor**: Usage costs and projections
 
@@ -41,8 +42,9 @@ dashboard/
 ### Lambda Functions (`lambdas/`)
 - **eventResponse/**: Processes EC2 state changes and metrics
 - **getMonthlyCost/**: Retrieves AWS cost data from Cost Explorer API
-- **listServers/**: Lists available Minecraft servers from EC2
-- **serverAction/**: Handles server start/stop/restart operations via EC2 and SSM
+- **listServers/**: Lists available Minecraft servers from EC2 with tag validation and auto-configuration
+- **serverAction/**: Queues server actions to SQS for asynchronous processing
+- **serverActionProcessor/**: Processes server actions from SQS queue (start/stop/restart/config updates)
 
 ### Lambda Layers (`layers/`)
 - **authHelper/**: Cognito authentication utilities
@@ -66,10 +68,12 @@ cfn/
 ### Key AWS Resources
 - **AppSync API**: GraphQL API with resolvers and data sources
 - **Lambda Functions**: Backend compute resources
+- **SQS Queues**: Asynchronous server action processing (main queue + DLQ)
 - **DynamoDB Tables**: Data storage for server information
 - **Cognito Resources**: User authentication and authorization
 - **IAM Roles**: Permissions for various components
-- **CloudWatch Resources**: Monitoring and metrics
+- **CloudWatch Resources**: Monitoring, metrics, and alarms for auto-shutdown
+- **EventBridge Rules**: Scheduled server start/stop events
 - **S3 Bucket**: Frontend hosting
 - **CloudFront Distribution**: Content delivery
 

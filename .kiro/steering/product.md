@@ -3,12 +3,15 @@
 The Minecraft Server Dashboard is a comprehensive web application that enables users to manage and monitor Minecraft servers hosted on AWS EC2 instances.
 
 ## Key Features
-- **Server Management**: Start, stop, restart Minecraft servers on EC2 instances
+- **Server Management**: Start, stop, restart Minecraft servers on EC2 instances with asynchronous processing
 - **Real-time Monitoring**: Live metrics for CPU, memory, network, and active players
+- **Action Status Tracking**: Real-time updates on server action progress (processing/completed/failed)
 - **Cost Tracking**: Monthly cost analysis and optimization recommendations
 - **User Access Control**: Multi-user access with admin/user roles via Cognito
-- **Automated Policies**: CPU-based and schedule-based auto-shutdown
-- **Configuration Management**: Server settings and startup commands
+- **Automated Policies**: CPU-based, connection-based, and schedule-based auto-shutdown with CloudWatch alarms
+- **Auto-Configuration**: Automatic default configuration for new servers (CPU-based shutdown, Minecraft commands)
+- **Configuration Validation**: Real-time validation of server settings with warnings and errors
+- **Configuration Management**: Server settings, startup commands, and scheduled operations
 - **Authentication**: Google OAuth integration via Amazon Cognito
 
 ## Target Users
@@ -21,11 +24,14 @@ Serverless web application with Vue.js frontend and AWS backend services (AppSyn
 
 ## Core User Workflows
 1. **Authentication**: Users log in via Google OAuth through Cognito
-2. **Server Discovery**: List available Minecraft servers from EC2 instances
-3. **Server Control**: Start/stop/restart servers with real-time status updates
-4. **Monitoring**: View live performance metrics and player activity
-5. **Cost Management**: Track monthly costs and configure auto-shutdown policies
-6. **User Management**: Admins can grant access to specific servers for other users
+2. **Server Discovery**: List available Minecraft servers from EC2 instances with automatic validation
+3. **Auto-Configuration**: New servers automatically receive default shutdown and Minecraft configurations
+4. **Server Control**: Start/stop/restart servers with asynchronous processing and real-time status updates
+5. **Configuration Validation**: Real-time feedback on configuration issues with warnings and errors
+6. **Monitoring**: View live performance metrics and player activity
+7. **Cost Management**: Track monthly costs and configure auto-shutdown policies (CPU/connections/schedule)
+8. **Scheduled Operations**: Configure automatic server start/stop times using cron expressions
+9. **User Management**: Admins can grant access to specific servers for other users
 
 ## Business Value
 - **Cost Optimization**: Automated shutdown policies reduce unnecessary EC2 costs

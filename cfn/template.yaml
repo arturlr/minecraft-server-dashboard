@@ -67,39 +67,43 @@ Resources:
         EnvironmentName: !Ref EnvironmentName
         AppValue: !Ref AppValue
 
-# Your existing Outputs section
-# Outputs:
-#   IdentityPoolId:
-#     Description: Cognito IdentityPool Id
-#     Value: 
-#       Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-UserPoolId"
+Outputs:
+  GraphQLAPIEndpoint:
+    Description: AppSync GraphQL API Endpoint
+    Value: 
+      Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-GraphQLAPIEndpoint"
 
-#   CognitoUserPoolClientId:
-#     Description: Cognito UserPool ClientId
-#     Value: 
-#       Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CognitoUserPoolClient"
+  CloudFrontDomain:
+    Description: CloudFront Distribution Domain Name
+    Value: 
+      Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CloudFrontDomain"
 
-#   CognitoDomainName:
-#     Description: Cognito DomainName
-#     Value: 
-#       Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CognitoDomainName"
+  CognitoUserPoolClientId:
+    Description: Cognito User Pool Client ID
+    Value: 
+      Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-UserPoolClientId"
 
-#   CloudFrontUrl:
-#     Description: CloudFront Url
-#     Value: 
-#       Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CloudFrontDomain"
+  CognitoUserPoolId:
+    Description: Cognito User Pool ID
+    Value: 
+      Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-UserPoolId"
 
-#   AppSyncUrl:
-#     Description: AppSync Url
-#     Value: 
-#       Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-GraphQLAPIEndpoint"
+  CognitoIdentityPool:
+    Description: Cognito Identity Pool ID
+    Value: 
+      Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CognitoIdentityPool"
 
-#   WebAppBucketName:
-#     Description: S3 Web Bucket Name
-#     Value: 
-#       Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-WebBucket"
+  CognitoDomainName:
+    Description: Cognito Domain Name
+    Value: 
+      Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CognitoDomainName"
 
-  # SupportBucketName:
-  #   Description: S3 Support Bucket Name
-  #   Value: 
-  #     Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-SupportBucket"
+  WebAppBucket:
+    Description: S3 Web Application Bucket Name
+    Value: 
+      Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-WebBucket"
+
+  SupportBucket:
+    Description: S3 Support Bucket Name
+    Value: 
+      Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-SupportBucket"
