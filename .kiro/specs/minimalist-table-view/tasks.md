@@ -1,6 +1,33 @@
 # Implementation Plan
 
-- [ ] 1. Create ServerStatusChip component
+- [x] 1. Create AppToolbar component
+  - Create new component file `dashboard/src/components/AppToolbar.vue`
+  - Import useUserStore and signOut from AWS Amplify
+  - Add computed properties for fullname, email, and isAdmin from userStore
+  - Implement userSignOut method to sign out and redirect to /auth
+  - Add template with v-app-bar component with primary color
+  - Display app title "Minecraft Server Dashboard"
+  - Add user info section with account icon, name, and email
+  - Add admin chip when user is admin
+  - Add sign-out button with logout icon
+  - Add responsive design for mobile (hide email on small screens)
+  - _Requirements: 7.1, 7.2, 7.3, 7.4, 7.5_
+
+- [x] 2. Create IamAlert component
+  - Create new component file `dashboard/src/components/IamAlert.vue`
+  - Implement props interface for servers array (servers with IAM issues)
+  - Add emit definition for fix-iam event
+  - Add reactive state for fixingServers Set to track loading states
+  - Add template with v-alert component (warning type, tonal variant)
+  - Display alert only when servers array has items
+  - Add alert title "IAM Role Issues Detected"
+  - Add v-list displaying each server with IAM issues
+  - Add "Fix IAM Role" button for each server with loading state
+  - Emit fix-iam event with serverId when button clicked
+  - Add responsive design for mobile (stack buttons on small screens)
+  - _Requirements: 6.1, 6.2, 6.3_
+
+- [x] 3. Create ServerStatusChip component
   - Create new component file `dashboard/src/components/ServerStatusChip.vue`
   - Implement props interface for state and size
   - Add computed properties for chip color based on state (running=success, stopped=error, transitional=warning)
@@ -8,32 +35,31 @@
   - Add template with v-chip component displaying icon and state text
   - _Requirements: 1.3_
 
-- [ ] 2. Create ServerActionsMenu component
+- [x] 4. Create ServerActionsMenu component
   - Create new component file `dashboard/src/components/ServerActionsMenu.vue`
   - Implement props interface for serverId, serverState, and iamStatus
   - Add emit definitions for open-config, open-stats, open-power, and copy-ip events
-  - Create template with icon buttons for statistics, configuration, power, and copy IP
+  - Create template with power button as FIRST action, followed by statistics, configuration, and copy IP
   - Add v-tooltip components for each action button
   - Add computed property for power icon color based on server state
-  - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5_
+  - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6_
 
-- [ ] 3. Create ServerTable component
+- [x] 5. Create ServerTable component
   - Create new component file `dashboard/src/components/ServerTable.vue`
   - Implement props interface for servers array and loading boolean
   - Add emit definitions for open-config, open-stats, open-power, and copy-ip events
-  - Configure v-data-table with headers for name, instance ID, state, public IP, CPU, RAM, disk, IAM status, running time, and actions
+  - Configure v-data-table with headers for name, instance ID, state, public IP, CPU, RAM, disk, running time, and actions (NO IAM status column)
   - Add search input field bound to table search property
   - Implement custom slot for state column using ServerStatusChip component
   - Implement custom slot for actions column using ServerActionsMenu component
-  - Add custom slot for IAM status column with warning icon for non-ok status
   - Add custom slot for running time column with formatted time display
   - Add custom slot for RAM column to display memory in GB (memSize / 1024)
   - Add empty state template when no servers available
   - Add loading skeleton template
   - Configure responsive column visibility using CSS classes
-  - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 7.1, 7.2_
+  - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 8.1, 8.2_
 
-- [ ] 4. Create PowerControlDialog component
+- [x] 6. Create PowerControlDialog component
   - Create new component file `dashboard/src/components/PowerControlDialog.vue`
   - Implement props interface for visible, serverId, serverName, serverState, and iamStatus
   - Add emit definitions for update:visible and action-complete events
@@ -47,7 +73,7 @@
   - Add error handling with emit to parent for snackbar display
   - _Requirements: 5.1, 5.2, 5.3, 5.4, 6.3, 6.4_
 
-- [ ] 5. Create ServerConfigDialog component
+- [x] 7. Create ServerConfigDialog component
   - Create new component file `dashboard/src/components/ServerConfigDialog.vue`
   - Implement props interface for visible and serverId
   - Add emit definitions for update:visible and config-saved events
@@ -59,7 +85,7 @@
   - Add loading indicator overlay during configuration operations
   - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 7.3_
 
-- [ ] 6. Create ServerStatsDialog component
+- [x] 8. Create ServerStatsDialog component
   - Create new component file `dashboard/src/components/ServerStatsDialog.vue`
   - Implement props interface for visible and serverId
   - Add emit definition for update:visible event
@@ -75,13 +101,17 @@
   - Add onUnmounted lifecycle hook to ensure cleanup of subscriptions
   - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5, 7.4, 9.2, 9.3_
 
-- [ ] 7. Refactor HomeView to use table layout
+- [x] 9. Refactor HomeView to use table layout
   - Update `dashboard/src/views/HomeView.vue` to remove single-server card layout
   - Add reactive state for configDialogVisible, statsDialogVisible, and powerDialogVisible
   - Add reactive state for selectedServerId for dialog operations
   - Add reactive state for snackbar (visible, text, color, timeout)
-  - Import and register ServerTable, ServerConfigDialog, ServerStatsDialog, and PowerControlDialog components
+  - Import and register AppToolbar, IamAlert, ServerTable, ServerConfigDialog, ServerStatsDialog, and PowerControlDialog components
   - Remove ServerCharts and ServerSettings direct usage from template
+  - Add AppToolbar component at the top of the template
+  - Add computed property serversWithIamIssues to filter servers where iamStatus !== 'ok'
+  - Add IamAlert component with servers prop bound to serversWithIamIssues
+  - Wire up IamAlert fix-iam event to fixIamRole method
   - Add ServerTable component to template with servers prop bound to serverStore.serversList
   - Wire up ServerTable events (open-config, open-stats, open-power, copy-ip) to handler methods
   - Add ServerConfigDialog component with v-model:visible and serverId props
@@ -91,12 +121,13 @@
   - Implement openStatsDialog method to set selectedServerId and show stats dialog
   - Implement openPowerDialog method to set selectedServerId and show power dialog
   - Implement copyToClipboard method for IP address copying
+  - Implement fixIamRole method to execute fixServerRole mutation
   - Implement handleActionComplete method to display snackbar notifications
   - Update onMounted to call serverStore.listServers and subscribe to onChangeState
   - Add onUnmounted to clean up state change subscription
-  - _Requirements: 1.1, 2.2, 2.3, 2.4, 5.5, 8.1, 8.2, 8.3, 10.1, 10.2, 10.3, 10.5_
+  - _Requirements: 1.1, 2.2, 2.3, 2.4, 5.5, 6.4, 6.5, 7.1, 7.5, 9.1, 9.2, 9.3, 11.1, 11.2, 11.3, 11.5_
 
-- [ ] 8. Update ServerSettings component integration
+- [x] 10. Update ServerSettings component integration
   - Modify `dashboard/src/components/ServerSettings.vue` to work within dialog context
   - Remove standalone dialog wrapper (keep only form content)
   - Add emit for 'config-saved' event after successful save
@@ -106,7 +137,7 @@
   - Remove internal dialog state management
   - _Requirements: 3.1, 3.2, 3.3, 3.4, 8.1_
 
-- [ ] 9. Add GraphQL subscription for state changes
+- [x] 11. Add GraphQL subscription for state changes
   - Update HomeView to subscribe to onChangeState subscription on mount
   - Implement subscription handler to call serverStore.updateServer with new state data
   - Ensure subscription updates all servers in real-time (not just selected server)
@@ -114,60 +145,51 @@
   - Add cleanup in onUnmounted lifecycle hook
   - _Requirements: 5.5, 8.5, 9.1_
 
-- [ ] 10. Implement responsive design breakpoints
+- [x] 12. Implement responsive design breakpoints
   - Add CSS media queries to ServerTable component for mobile breakpoints
   - Hide instance ID, CPU, RAM, disk, and running time columns on screens < 600px
   - Make dialogs full-screen on mobile devices using Vuetify's fullscreen prop
   - Adjust table padding and spacing for tablet screens (600px - 960px)
   - Test touch interactions on mobile devices
   - Add responsive classes to action buttons for better mobile usability
-  - _Requirements: 7.1, 7.2, 7.3, 7.4, 7.5_
+  - _Requirements: 8.1, 8.2, 8.3, 8.4, 8.5_
 
-- [ ] 11. Add loading and empty states
+- [x] 13. Add loading and empty states
   - Implement loading skeleton in ServerTable using v-data-table loading prop
   - Add empty state template with icon and message when serversList is empty
   - Add loading indicators to all dialog components during data fetching
   - Add loading state to power action buttons during mutation execution
   - Add progress indicators to ServerConfigDialog during save operations
-  - _Requirements: 9.1, 10.1, 10.5_
+  - _Requirements: 10.1, 11.1, 11.5_
 
-- [ ] 12. Implement error handling and notifications
+- [x] 14. Implement error handling and notifications
   - Add try-catch blocks to all GraphQL mutation calls
   - Implement error message parsing from GraphQL responses
   - Display error snackbars with appropriate colors and messages
   - Add success snackbars after successful operations
   - Implement retry logic for failed network requests
   - Add error boundaries for component failures
-  - _Requirements: 10.2, 10.3_
+  - _Requirements: 11.2, 11.3_
 
-- [ ] 13. Add IAM status handling
-  - Implement IAM warning display in ServerTable using custom slot
-  - Add click handler for IAM warning to open fix dialog
-  - Implement fixServerRole mutation in PowerControlDialog
-  - Add loading indicator during IAM fix operation
-  - Update IAM status in serverStore after successful fix
-  - Display success message after IAM fix completion
-  - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.5_
-
-- [ ] 14. Optimize performance
+- [x] 15. Optimize performance
   - Implement subscription cleanup when ServerStatsDialog closes
   - Add debounce to ServerTable search input (300ms delay)
   - Use v-if instead of v-show for dialog components
   - Implement virtual scrolling for tables with >50 servers
   - Add memoization for computed properties in table cells
   - Optimize re-renders by using proper Vue reactivity patterns
-  - _Requirements: 9.1, 9.2, 9.3, 9.4, 9.5_
+  - _Requirements: 10.1, 10.2, 10.3, 10.4, 10.5_
 
-- [ ]* 15. Add accessibility features
+- [ ]* 16. Add accessibility features
   - Add aria-label attributes to all icon buttons
   - Implement keyboard navigation for table rows
   - Add aria-expanded attributes to dialogs
   - Ensure proper focus management when opening/closing dialogs
   - Add screen reader announcements for state changes
   - Test with keyboard-only navigation
-  - _Requirements: 7.5_
+  - _Requirements: 8.5_
 
-- [ ]* 16. Write component tests
+- [ ]* 17. Write component tests
   - Write unit tests for ServerStatusChip component
   - Write unit tests for ServerActionsMenu component
   - Write unit tests for ServerTable component

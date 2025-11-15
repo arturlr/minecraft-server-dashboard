@@ -1,248 +1,285 @@
 <script setup>
-import { reactive, ref, watch, computed } from "vue";
-import Header from "../components/Header.vue";
-import ServerCharts from "../components/ServerCharts.vue";
-import ServerSettings from "../components/ServerSettings.vue";
+import { ref, computed, onMounted, onUnmounted } from "vue";
+import AppToolbar from "../components/AppToolbar.vue";
+import IamAlert from "../components/IamAlert.vue";
+import ServerTable from "../components/ServerTable.vue";
+import ServerConfigDialog from "../components/ServerConfigDialog.vue";
+import ServerStatsDialog from "../components/ServerStatsDialog.vue";
+import PowerControlDialog from "../components/PowerControlDialog.vue";
+import ErrorBoundary from "../components/ErrorBoundary.vue";
 import { generateClient } from 'aws-amplify/api';
 import { useUserStore } from "../stores/user";
 import { useServerStore } from "../stores/server";
+import * as subscriptions from "../graphql/subscriptions";
 import * as mutations from "../graphql/mutations";
-import * as queries from "../graphql/queries";
-
-const loading = ref(false)
-const copying = ref(false)
+import { parseGraphQLError, retryOperation } from "../utils/errorHandler";
 
 const userStore = useUserStore();
-const serverStore = useServerStore()
-
-const settingsDialog = ref(false)
-const addUserDialog = ref(false)
-
+const serverStore = useServerStore();
 const graphQlClient = generateClient();
 
-const copyDialog = ref(false)
-const fixButtonProgess = ref(false)
-const powerButtonDialog = ref(false)
-const snackbar = ref(false)
-const snackText = ref(null)
-const snackColor = ref(null)
-const snackTimeout = ref(3500)
+// Dialog visibility states
+const configDialogVisible = ref(false);
+const statsDialogVisible = ref(false);
+const powerDialogVisible = ref(false);
 
-const selectedServer = computed(() => serverStore.getServerById(serverStore.selectedServerId))
+// Selected server for dialog operations
+const selectedServerId = ref(null);
 
-async function copyToClipboard(text) {
+// Snackbar state
+const snackbar = ref({
+  visible: false,
+  text: '',
+  color: 'primary',
+  timeout: 3500
+});
+
+// Subscription reference
+let stateChangeSubscription = null;
+
+// Computed properties for selected server details with proper memoization
+const selectedServer = computed(() => {
+  if (!selectedServerId.value) return null;
+  return serverStore.getServerById(selectedServerId.value);
+});
+
+const selectedServerName = computed(() => {
+  const server = selectedServer.value;
+  if (!server) return '';
+  return server.name && server.name.length > 2 ? server.name : server.id;
+});
+
+const selectedServerState = computed(() => {
+  const server = selectedServer.value;
+  return server?.state || '';
+});
+
+const selectedServerIamStatus = computed(() => {
+  const server = selectedServer.value;
+  return server?.iamStatus || '';
+});
+
+// Computed property for servers with IAM issues - memoized to avoid filtering on every render
+const serversWithIamIssues = computed(() => {
+  return serverStore.serversList.filter(server => server.iamStatus !== 'ok');
+});
+
+// Dialog handler methods
+function openConfigDialog(serverId) {
+  selectedServerId.value = serverId;
+  serverStore.setSelectedServerId(serverId);
+  configDialogVisible.value = true;
+}
+
+function openStatsDialog(serverId) {
+  selectedServerId.value = serverId;
+  serverStore.setSelectedServerId(serverId);
+  statsDialogVisible.value = true;
+}
+
+function openPowerDialog(serverId) {
+  selectedServerId.value = serverId;
+  serverStore.setSelectedServerId(serverId);
+  powerDialogVisible.value = true;
+}
+
+async function copyToClipboard(serverId) {
+  const server = serverStore.getServerById(serverId);
+  if (!server || !server.publicIp) {
+    handleActionComplete('No IP address available to copy', false);
+    return;
+  }
+
   try {
-    await navigator.clipboard.writeText(text);
+    const ipAddress = `${server.publicIp}:25565`;
+    await navigator.clipboard.writeText(ipAddress);
+    handleActionComplete('Server IP address copied to clipboard!', true);
   } catch (err) {
-    console.error('Failed to copy', err);
+    console.error('Failed to copy to clipboard:', err);
+    const errorMessage = err.message?.includes('permission') 
+      ? 'Clipboard access denied. Please allow clipboard permissions.'
+      : 'Failed to copy to clipboard. Please try again.';
+    handleActionComplete(errorMessage, false);
   }
 }
 
-function formatRunningTime(minutes) {
-  const hours = minutes / 60;
-  if (hours < 1) {
-    return `${Math.round(minutes)} minutes`;
-  } else if (hours < 24) {
-    return `${hours.toFixed(1)} hours`;
-  } else {
-    const days = Math.floor(hours / 24);
-    const remainingHours = (hours % 24).toFixed(1);
-    return `${days}d ${remainingHours}h`;
-  }
-}
-
-async function copyPublicIp() {
-  copying.value = true
+async function fixIamRole(serverId) {
   try {
-    await copyToClipboard(document.querySelector('#publicIp').value)
-    snackbar.value = true
-    snackText.value = "Server IP Address copied!"
-    snackColor.value = "success"
-  } catch (err) {
-    snackbar.value = true
-    snackText.value = "Copy failed!"
-    snackColor.value = "error"
-  } finally {
-    copying.value = false
+    // Execute with retry logic for network errors
+    const result = await retryOperation(async () => {
+      return await graphQlClient.graphql({
+        query: mutations.fixServerRole,
+        variables: { instanceId: serverId }
+      });
+    });
+
+    if (result.data.fixServerRole) {
+      handleActionComplete('IAM role fixed successfully', true);
+      // Refresh server list to update IAM status
+      try {
+        await serverStore.listServers();
+      } catch (refreshError) {
+        console.error('Error refreshing server list:', refreshError);
+        // Don't show error to user since the main operation succeeded
+      }
+    } else {
+      handleActionComplete('Failed to fix IAM role. Please try again.', false);
+    }
+  } catch (error) {
+    console.error('Error fixing IAM role:', error);
+    const errorMessage = parseGraphQLError(error);
+    handleActionComplete(errorMessage, false);
   }
 }
 
-async function triggerAction(action) {
-
-  const actionResult = await graphQlClient.graphql({
-    query: mutations[action],
-    variables: { instanceId: serverStore.selectedServerId },
-  });
-
-  const rsp = JSON.parse(actionResult.data[action]);
-
-  if (action == "fixServerRole") {
-    fixButtonProgess.value = false;
-  }
-  else {
-    powerButtonDialog.value = false;
-  }
-
-  if (rsp.statusCode == 200) {
-    snackText.value = rsp.body;
-    snackbar.value = true;
-    snackColor.value = "primary"
-  }
-  else {
-    snackText.value = rsp.body;
-    snackbar.value = true;
-    snackColor.value = "error"
-  }
+function handleActionComplete(message, success) {
+  snackbar.value = {
+    visible: true,
+    text: message,
+    color: success ? 'success' : 'error',
+    timeout: success ? 3500 : 5000 // Show errors longer
+  };
 }
 
+// Handle component errors from ErrorBoundary
+function handleComponentError({ error, instance, info }) {
+  console.error('Component error caught by boundary:', error);
+  handleActionComplete(`Component error: ${error.message}`, false);
+}
 
+// Lifecycle hooks
+onMounted(async () => {
+  // Load server list with error handling
+  try {
+    await serverStore.listServers();
+  } catch (error) {
+    console.error('Error loading server list:', error);
+    const errorMessage = parseGraphQLError(error);
+    handleActionComplete(`Failed to load servers: ${errorMessage}`, false);
+  }
 
+  // Subscribe to state changes with error handling
+  try {
+    stateChangeSubscription = graphQlClient.graphql({
+      query: subscriptions.onChangeState
+    }).subscribe({
+      next: ({ data }) => {
+        if (data?.onChangeState) {
+          serverStore.updateServer(data.onChangeState);
+        }
+      },
+      error: (error) => {
+        console.error('State change subscription error:', error);
+        const errorMessage = parseGraphQLError(error);
+        handleActionComplete(`Real-time updates disconnected: ${errorMessage}`, false);
+        
+        // Attempt to reconnect after a delay
+        setTimeout(() => {
+          console.log('Attempting to reconnect to state change subscription...');
+          try {
+            stateChangeSubscription = graphQlClient.graphql({
+              query: subscriptions.onChangeState
+            }).subscribe({
+              next: ({ data }) => {
+                if (data?.onChangeState) {
+                  serverStore.updateServer(data.onChangeState);
+                }
+              },
+              error: (error) => {
+                console.error('Reconnection failed:', error);
+              }
+            });
+          } catch (reconnectError) {
+            console.error('Failed to reconnect:', reconnectError);
+          }
+        }, 5000);
+      }
+    });
+  } catch (error) {
+    console.error('Failed to subscribe to state changes:', error);
+    handleActionComplete('Failed to enable real-time updates', false);
+  }
+});
 
-
+onUnmounted(() => {
+  // Clean up subscription
+  if (stateChangeSubscription) {
+    stateChangeSubscription.unsubscribe();
+  }
+});
 </script>
 
 <template>
   <v-layout class="rounded rounded-md">
-    <Header />
+    <AppToolbar />
     <v-main>
-      <v-container fluid class="pa-4">
-        <v-snackbar v-model="snackbar" :timeout="snackTimeout" :color="snackColor" outlined left centered text>
-          {{ snackText }}
+      <ErrorBoundary @error="handleComponentError">
+        <v-container fluid class="pa-4">
+          <!-- Snackbar for notifications -->
+          <v-snackbar 
+            v-model="snackbar.visible" 
+            :timeout="snackbar.timeout" 
+            :color="snackbar.color" 
+            outlined 
+            left 
+            centered 
+            text
+          >
+            {{ snackbar.text }}
 
-          <template v-slot:actions>
-            <v-btn color="white" variant="text" @click="snackbar = false">
-              Close
-            </v-btn>
-          </template>
-        </v-snackbar>
+            <template v-slot:actions>
+              <v-btn color="white" variant="text" @click="snackbar.visible = false">
+                Close
+              </v-btn>
+            </template>
+          </v-snackbar>
 
-        <div v-if="selectedServer">
-          <v-row justify="center">
-            <v-col cols="12" sm="10" md="8" lg="6">
-              <v-card elevation="4" class="rounded-lg">
-                <v-alert v-if="!serverStore.isServerIamCompliant" closable dense type="error" class="ma-2">
-                  <v-row align="center">
-                    <v-col class="grow">
-                      <span class="font-weight-medium">IAM Role Missing:</span> This server does not have the correct permissions to execute.
-                    </v-col>
-                    <v-progress-circular v-if="fixButtonProgess" :width="3" color="black"
-                      indeterminate></v-progress-circular>
-                    <v-col class="shrink">
-                      <v-btn :disabled="fixButtonProgess" color="primary" variant="elevated"
-                        @click="triggerAction('fixServerRole'); fixButtonProgess = true">
-                        <v-icon left>mdi-wrench</v-icon>
-                        Fix Now
-                      </v-btn>
-                    </v-col>
-                  </v-row>
-                </v-alert>
-                
-                <v-card-item class="pb-0">
-                  <v-card-title class="text-h5 d-flex align-center">
-                    <v-icon icon="mdi-minecraft" size="large" class="mr-2" color="primary"></v-icon>
-                    {{ serverStore.getServerName }}
-                    <v-chip :color="selectedServer.state === 'running' ? 'success' : 'error'" size="small" class="ml-2"
-                      variant="elevated">
-                      <v-icon size="small" start>{{ selectedServer.state === 'running' ? 'mdi-play' : 'mdi-stop' }}</v-icon>
-                      {{ selectedServer.state }}
-                    </v-chip>
-                  </v-card-title>
-                  
-                  <v-card-subtitle class="pt-2 d-flex align-center text-body-1">
-                    <v-icon icon="mdi-server" class="mr-2" color="grey"></v-icon>
-                    <span class="font-weight-medium">{{ selectedServer.id }}</span>
-                    <v-spacer></v-spacer>
-                    <ServerSettings />
-                  </v-card-subtitle>
-                </v-card-item>
+          <!-- IAM Alert -->
+          <IamAlert 
+            :servers="serversWithIamIssues"
+            @fix-iam="fixIamRole"
+          />
 
-                <v-card-text class="pt-4">
-                  <v-text-field readonly label="Server Address" variant="outlined" id="publicIp"
-                    :model-value="(selectedServer.publicIp || 'Not Available') + ':25565'" class="server-address" bg-color="grey-lighten-4">
-                    <template v-slot:prepend-inner>
-                      <v-btn icon variant="text" @click="powerButtonDialog = true">
-                        <v-icon size="large" :color="serverStore.getServerStateColor">mdi-power-standby</v-icon>
-                      </v-btn>
-                    </template>
-                    <template v-slot:append-inner>
-                      <v-btn icon variant="text" @click="copyPublicIp" :loading="copying">
-                        <v-icon size="large" color="grey-darken-1">mdi-content-copy</v-icon>
-                      </v-btn>
-                    </template>
-                  </v-text-field>
-                </v-card-text>
-
-                <ServerCharts />
-
-              </v-card>
-            </v-col>
-          </v-row>
-        </div>
-      </v-container>
+          <!-- Server Table -->
+          <ServerTable
+            :servers="serverStore.serversList"
+            :loading="serverStore.loading"
+            @open-config="openConfigDialog"
+            @open-stats="openStatsDialog"
+            @open-power="openPowerDialog"
+            @copy-ip="copyToClipboard"
+          />
+        </v-container>
+      </ErrorBoundary>
     </v-main>
   </v-layout>
 
-  <v-dialog v-model="powerButtonDialog" max-width="400px" transition="dialog-bottom-transition">
-    <v-card class="rounded-lg">
-      <v-card-item class="bg-primary pa-4">
-        <template v-slot:prepend>
-          <v-icon size="large" color="white" class="mr-2">mdi-server</v-icon>
-        </template>
-        <v-card-title class="text-h5 text-white font-weight-medium pa-0">
-          {{ serverStore.getServerName }}
-        </v-card-title>
-      </v-card-item>
+  <!-- Configuration Dialog - Only render when visible -->
+  <ErrorBoundary v-if="configDialogVisible" @error="handleComponentError">
+    <ServerConfigDialog
+      v-model:visible="configDialogVisible"
+      :server-id="selectedServerId"
+      @config-saved="handleActionComplete('Configuration saved successfully!', true)"
+    />
+  </ErrorBoundary>
 
-      <v-card-text class="pt-4">
-        <v-alert v-if="selectedServer.iamStatus !== 'ok'" type="error" variant="tonal" density="comfortable">
-          <template v-slot:prepend>
-            <v-icon icon="mdi-alert-circle"></v-icon>
-          </template>
-          You need to fix the IAM role to perform any actions!
-        </v-alert>
+  <!-- Statistics Dialog - Only render when visible -->
+  <ErrorBoundary v-if="statsDialogVisible" @error="handleComponentError">
+    <ServerStatsDialog
+      v-model:visible="statsDialogVisible"
+      :server-id="selectedServerId"
+    />
+  </ErrorBoundary>
 
-        <div v-else>
-          <div v-if="selectedServer.state === 'stopped'" class="d-flex gap-2">
-            <v-btn density="compact" color="success" text-transform="none" @click="triggerAction('startServer')"
-              prepend-icon="mdi-power">
-              Start
-            </v-btn>
-          </div>
-          <div v-else class="d-flex gap-2">
-            <v-btn density="compact" color="warning" text-transform="none" @click="triggerAction('stopServer')"
-              prepend-icon="mdi-power-off">
-              Stop
-            </v-btn>
-            <v-btn density="compact" color="info" text-transform="none" @click="triggerAction('restartServer')"
-              prepend-icon="mdi-restart">
-              Restart
-            </v-btn>
-          </div>
-        </div>
-      </v-card-text>
-
-      <v-divider></v-divider>
-
-      <v-card-actions class="pa-4">
-        <v-spacer></v-spacer>
-        <v-btn color="grey-darken-1" variant="text" @click="powerButtonDialog = false" prepend-icon="mdi-close">
-          Cancel
-        </v-btn>
-      </v-card-actions>
-    </v-card>
-  </v-dialog>
-
-
+  <!-- Power Control Dialog - Only render when visible -->
+  <ErrorBoundary v-if="powerDialogVisible" @error="handleComponentError">
+    <PowerControlDialog
+      v-model:visible="powerDialogVisible"
+      :server-id="selectedServerId"
+      :server-name="selectedServerName"
+      :server-state="selectedServerState"
+      :iam-status="selectedServerIamStatus"
+      @action-complete="handleActionComplete"
+    />
+  </ErrorBoundary>
 </template>
-
-<style scoped>
-.time-chip {
-  background-color: #f5f5f5 !important;
-  color: #757575 !important;
-  font-size: 0.875rem;
-}
-
-.custom-icon {
-  color: #9e9e9e;
-}
-</style>

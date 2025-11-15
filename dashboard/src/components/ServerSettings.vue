@@ -2,12 +2,14 @@
 import { ref, reactive, computed, onMounted, watch } from "vue";
 import { useServerStore } from "../stores/server";
 import { useUserStore } from "../stores/user";
+import { parseGraphQLError, retryOperation } from "../utils/errorHandler";
+
+const emit = defineEmits(['config-saved', 'close']);
 
 const serverStore = useServerStore()
 const userStore = useUserStore();
 
 const settingsForm = ref();
-const addUserForm = ref();
 const snackbar = ref(false)
 const snackColor = ref(null)
 const snackTimeout = ref(3500)
@@ -57,8 +59,6 @@ const serverConfigInput = reactive({
     shutdownMethod: null
 });
 
-const groupMembers = ref([])
-
 // Variables for weekday scheduling
 const selectedWeekdays = ref([]);
 const selectedTime = ref(null);
@@ -78,11 +78,7 @@ const weekdayOptions = ref([
 // Time options for dropdown
 const timeOptions = ref([]);
 
-const inviteeEmail = ref()
-
 const settingsDialogLoading = ref(false);
-const configDialogVisible = ref(false);
-const usersDialogVisible = ref(false);
 
 // Generate time options in 30-minute intervals
 for (let hour = 0; hour < 24; hour++) {
@@ -188,50 +184,9 @@ const generatedStartCronExpression = computed(() => {
     return `${minutes} ${hours} * * ${cronWeekdays}`;
 });
 
-function generateUniqueId() {
-  const timestamp = Date.now();
-  const randomNumber = Math.random();
-  const hexadecimalString = randomNumber.toString(16).substring(2, 8);
-
-  return `${timestamp}-${hexadecimalString}`;
-}
-
-function openConfigDialog() {
-  configDialogVisible.value = true;
-}
-
-async function openUsersDialog() {
-  usersDialogVisible.value = true;
-  await getServerUsers();
-}
-
 onMounted(async () => {
     await getServerSettings();
-    await getServerUsers();
 });
-
-async function getServerUsers() {
-    try {
-        const users = await serverStore.getServerUsers(serverStore.selectedServerId);
-        if (users && Array.isArray(users)) {
-            groupMembers.value = users.map(user => ({
-                id: user.id || user.email,
-                email: user.email,
-                fullname: user.fullName || user.email.split('@')[0],
-                avatar: null // You can add avatar logic here if needed
-            }));
-        }
-    } catch (error) {
-        console.error('Error loading server users:', error);
-        groupMembers.value = [];
-    }
-}
-
-function getEpochTime (days) {
-    const currentTime = new Date().getTime(); // Get the current time in milliseconds
-    const epochTime = currentTime + (days * 24 * 60 * 60 * 1000); // Calculate the future time by adding the number of milliseconds for the given days
-    return epochTime;
-}
 
 // Parse cron expression to extract weekdays and time
 function parseCronExpression(cronExpression) {
@@ -288,9 +243,16 @@ function parseStartCronExpression(cronExpression) {
 async function getServerSettings() {
     try {
         settingsDialogLoading.value = true;
-        const serverSettings = await serverStore.getServerConfig();
+        
+        // Execute with retry logic for network errors
+        const serverSettings = await retryOperation(async () => {
+            return await serverStore.getServerConfig();
+        });
         
         if (!serverSettings) {
+            snackText.value = "No configuration found for this server";
+            snackbar.value = true;
+            snackColor.value = "warning";
             return;
         }
 
@@ -334,6 +296,10 @@ async function getServerSettings() {
         
     } catch (error) {
         console.error('Error loading server settings:', error);
+        const errorMessage = parseGraphQLError(error);
+        snackText.value = `Failed to load settings: ${errorMessage}`;
+        snackbar.value = true;
+        snackColor.value = "error";
     } finally {
         settingsDialogLoading.value = false;
     }
@@ -372,128 +338,58 @@ async function onSubmit() {
             };
             
             try {
-                const serverSettings = await serverStore.putServerConfig(configData);
+                // Execute with retry logic for network errors
+                const serverSettings = await retryOperation(async () => {
+                    return await serverStore.putServerConfig(configData);
+                });
+                
                 if (serverSettings && serverSettings.id) {
-                    snackText.value = "Settings Updated Successfully";
+                    snackText.value = "Configuration saved successfully!";
                     snackbar.value = true;
-                    snackColor.value = "primary";
-                    configDialogVisible.value = false;
+                    snackColor.value = "success";
+                    
+                    // Emit success event after a short delay to show the snackbar
+                    setTimeout(() => {
+                        emit('config-saved', 'Configuration saved successfully!');
+                    }, 500);
                 } else {
-                    snackText.value = "Failed to update settings";
+                    snackText.value = "Failed to save configuration. Please try again.";
                     snackbar.value = true;
                     snackColor.value = "error";
                 }
             } catch (error) {
                 console.error('Error updating server config:', error);
-                snackText.value = "Error updating settings";
+                const errorMessage = parseGraphQLError(error);
+                snackText.value = `Failed to save: ${errorMessage}`;
                 snackbar.value = true;
                 snackColor.value = "error";
             }
             
             settingsDialogLoading.value = false;
+        } else {
+            snackText.value = "Please fix validation errors before saving";
+            snackbar.value = true;
+            snackColor.value = "warning";
         }
     })
 }
 
 
-async function writeLog(msg) {
-    // Calculating expiration time
-    const d = new Date();
-    d.setDate(d.getDate() + 60);
-    const expirationEpoch = Math.round(d.getTime() / 1000);
 
-    await $store.dispatch("profile/saveAuditLogin", {
-        email: email,
-        action: msg,
-        expirationEpoch: expirationEpoch,
-    });
-}
-
-async function addUser() {
-    addUserForm.value?.validate().then(async ({ valid: isValid }) => {
-        if (isValid) {
-            const input = {
-                id: generateUniqueId(),
-                actionUser: userStore.email,
-                action: "add_user",
-                instanceId: serverStore.selectedServerId,
-                inviteeEmail: inviteeEmail.value + "@gmail.com",
-                expirationEpoch: getEpochTime(1)
-            };
-
-            const result = await serverStore.putLogAudit(input);
-            console.log(result)
-        }
-    })
-}
 </script>
 
 <template>
-    <!-- Main buttons to open dialogs -->
-    <div class="pl-4">
-    <v-tooltip top>
-      <template v-slot:activator="{ on, attrs }">
-        <v-icon 
-          size="medium"
-          class="mr-2 custom-icon"
-          v-bind="attrs"
-          v-on="{ ...on, click: openConfigDialog }"
-        >
-        mdi-cog-outline
-        </v-icon>
-      </template>
-      <span>Server Configuration</span>
-    </v-tooltip>
-
-    <v-tooltip top>
-      <template v-slot:activator="{ on, attrs }">
-        <v-icon
-          size="medium"
-          class="custom-icon"
-          v-bind="attrs"
-          v-on="{ ...on, click: openUsersDialog }"
-        >
-          mdi-account-plus-outline
-        </v-icon>
-      </template>
-      <span>Manage Users</span>
-    </v-tooltip>
-  </div>
-
-    <!-- Configuration Dialog -->
-    <v-dialog v-model="configDialogVisible" max-width="900px" persistent scrollable>
-        <v-card class="elevation-8">
-            <v-progress-linear 
-                v-if="settingsDialogLoading" 
-                indeterminate 
-                height="3" 
-                color="primary"
-                class="position-absolute"
-                style="top: 0; z-index: 1;"
-            ></v-progress-linear>
-            
-            <!-- Header -->
-            <v-card-title class="bg-primary text-white pa-6">
-                <div class="d-flex align-center w-100">
-                    <v-icon class="me-3" size="28">mdi-cog</v-icon>
-                    <div>
-                        <div class="text-h5 font-weight-bold">Server Configuration</div>
-                        <div class="text-body-2 opacity-90">Manage your Minecraft server settings</div>
-                    </div>
-                    <v-spacer></v-spacer>
-                    <v-btn 
-                        icon 
-                        variant="text" 
-                        @click="configDialogVisible = false"
-                        class="text-white"
-                    >
-                        <v-icon>mdi-close</v-icon>
-                    </v-btn>
-                </div>
-            </v-card-title>
-
-            <v-card-text class="pa-0">
-                <v-form ref="settingsForm">
+    <div>
+        <v-progress-linear 
+            v-if="settingsDialogLoading" 
+            indeterminate 
+            height="3" 
+            color="primary"
+            class="position-absolute"
+            style="top: 0; z-index: 1;"
+        ></v-progress-linear>
+        
+        <v-form ref="settingsForm">
                     <!-- Shutdown Configuration Section -->
                     <div class="pa-6 border-b">
                         <div class="mb-6">
@@ -746,221 +642,57 @@ async function addUser() {
                         </v-row>
                     </div>
                 </v-form>
-            </v-card-text>
 
-            <!-- Actions -->
-            <v-card-actions class="pa-6 bg-grey-lighten-5">
-                <v-spacer></v-spacer>
-                <v-btn 
-                    variant="text" 
-                    @click="resetForm"
-                    prepend-icon="mdi-refresh"
-                    :disabled="settingsDialogLoading"
-                >
-                    Clear
-                </v-btn>
-                <v-btn 
-                    variant="text" 
-                    @click="getServerSettings"
-                    prepend-icon="mdi-reload"
-                    :disabled="settingsDialogLoading"
-                >
-                    Reload
-                </v-btn>
-                <v-btn 
-                    color="primary" 
-                    variant="elevated"
-                    @click="onSubmit" 
-                    :disabled="settingsDialogLoading"
-                    :loading="settingsDialogLoading"
-                    prepend-icon="mdi-content-save"
-                    class="px-6"
-                >
-                    Save Configuration
-                </v-btn>
-            </v-card-actions>
-        </v-card>
-    </v-dialog>
-
-    <!-- Users Dialog -->
-    <v-dialog v-model="usersDialogVisible" max-width="700px" persistent scrollable>
-        <v-card class="elevation-8">
-            <!-- Header -->
-            <v-card-title class="bg-primary text-white pa-6">
-                <div class="d-flex align-center w-100">
-                    <v-icon class="me-3" size="28">mdi-account-group</v-icon>
-                    <div>
-                        <div class="text-h5 font-weight-bold">Manage Users</div>
-                        <div class="text-body-2 opacity-90">Control server access and permissions</div>
-                    </div>
+                <!-- Actions -->
+                <div class="pa-6 bg-grey-lighten-5">
                     <v-spacer></v-spacer>
                     <v-btn 
-                        icon 
                         variant="text" 
-                        @click="usersDialogVisible = false"
-                        class="text-white"
+                        @click="resetForm"
+                        prepend-icon="mdi-refresh"
+                        :disabled="settingsDialogLoading"
                     >
-                        <v-icon>mdi-close</v-icon>
+                        Clear
+                    </v-btn>
+                    <v-btn 
+                        variant="text" 
+                        @click="getServerSettings"
+                        prepend-icon="mdi-reload"
+                        :disabled="settingsDialogLoading"
+                    >
+                        Reload
+                    </v-btn>
+                    <v-btn 
+                        variant="text" 
+                        @click="emit('close')"
+                        prepend-icon="mdi-close"
+                        :disabled="settingsDialogLoading"
+                    >
+                        Cancel
+                    </v-btn>
+                    <v-btn 
+                        color="primary" 
+                        variant="elevated"
+                        @click="onSubmit" 
+                        :disabled="settingsDialogLoading"
+                        :loading="settingsDialogLoading"
+                        prepend-icon="mdi-content-save"
+                        class="px-6"
+                    >
+                        Save Configuration
                     </v-btn>
                 </div>
-            </v-card-title>
 
-            <v-card-text class="pa-0">
-                <!-- Current Members Section -->
-                <div class="pa-6 border-b">
-                    <div class="d-flex align-center mb-4">
-                        <v-icon class="me-2 text-blue" size="24">mdi-account-multiple</v-icon>
-                        <h3 class="text-h6 font-weight-bold">Current Members</h3>
-                        <v-spacer></v-spacer>
-                        <v-chip 
-                            color="primary" 
-                            variant="tonal" 
-                            size="small"
-                            prepend-icon="mdi-account"
-                        >
-                            {{ groupMembers?.length || 0 }} members
-                        </v-chip>
-                    </div>
+        <v-snackbar v-model="snackbar" :timeout="snackTimeout" :color="snackColor" outlined left centered text>
+            {{ snackText }}
 
-                    <v-card variant="outlined" class="mb-4" v-if="groupMembers?.length">
-                        <v-list lines="two" class="pa-0">
-                            <v-list-item
-                                v-for="(user, index) in groupMembers"
-                                :key="user.id"
-                                :title="user.fullname"
-                                :subtitle="user.email"
-                                :prepend-avatar="user.avatar"
-                                class="px-4 py-3"
-                            >
-                                <template v-slot:prepend>
-                                    <v-avatar 
-                                        :image="user.avatar" 
-                                        color="primary"
-                                        class="me-3"
-                                    >
-                                        <v-icon v-if="!user.avatar">mdi-account</v-icon>
-                                    </v-avatar>
-                                </template>
-                                
-                                <template v-slot:append>
-                                    <v-chip 
-                                        size="small" 
-                                        color="success" 
-                                        variant="tonal"
-                                        prepend-icon="mdi-check-circle"
-                                    >
-                                        Active
-                                    </v-chip>
-                                </template>
-                            </v-list-item>
-                            
-                            <v-divider 
-                                v-if="index < groupMembers.length - 1" 
-                                :key="`divider-${index}`"
-                            ></v-divider>
-                        </v-list>
-                    </v-card>
-
-                    <v-alert 
-                        v-if="!groupMembers?.length" 
-                        type="info" 
-                        variant="tonal"
-                        border="start"
-                        border-color="info"
-                    >
-                        <template v-slot:prepend>
-                            <v-icon>mdi-information</v-icon>
-                        </template>
-                        <div class="font-weight-medium">No members found</div>
-                        <div>Add users below to grant them access to this server.</div>
-                    </v-alert>
-                </div>
-
-                <!-- Add User Section -->
-                <div class="pa-6">
-                    <div class="d-flex align-center mb-4">
-                        <v-icon class="me-2 text-green" size="24">mdi-account-plus</v-icon>
-                        <h3 class="text-h6 font-weight-bold">Add New User</h3>
-                    </div>
-
-                    <v-card variant="tonal" color="green" class="mb-4">
-                        <v-card-text class="pa-4">
-                            <div class="d-flex align-center mb-2">
-                                <v-icon class="me-2" color="green">mdi-email</v-icon>
-                                <span class="font-weight-medium">Invite by Email</span>
-                            </div>
-                            <p class="text-body-2 ma-0">
-                                Enter the Gmail address of the user you want to invite to this server.
-                            </p>
-                        </v-card-text>
-                    </v-card>
-
-                    <v-form ref="addUserForm">
-                        <v-text-field 
-                            label="Email Address" 
-                            v-model="inviteeEmail" 
-                            suffix="@gmail.com"
-                            :rules="alphaNumericRules"
-                            variant="outlined"
-                            prepend-inner-icon="mdi-email"
-                            placeholder="username"
-                            hint="Enter the Gmail username (without @gmail.com)"
-                            persistent-hint
-                            color="primary"
-                        ></v-text-field>
-                    </v-form>
-
-                    <v-alert 
-                        type="warning" 
-                        variant="tonal" 
-                        class="mt-4"
-                        border="start"
-                        border-color="warning"
-                    >
-                        <template v-slot:prepend>
-                            <v-icon>mdi-alert</v-icon>
-                        </template>
-                        <div class="font-weight-medium">Important</div>
-                        <div>
-                            Users must have a Google account and sign in through Google OAuth to access the server.
-                            They will receive access immediately after being added.
-                        </div>
-                    </v-alert>
-                </div>
-            </v-card-text>
-
-            <!-- Actions -->
-            <v-card-actions class="pa-6 bg-grey-lighten-5">
-                <v-spacer></v-spacer>
-                <v-btn 
-                    variant="text" 
-                    @click="usersDialogVisible = false"
-                    prepend-icon="mdi-close"
-                >
-                    Cancel
+            <template v-slot:actions>
+                <v-btn color="white" variant="text" @click="snackbar = false">
+                    Close
                 </v-btn>
-                <v-btn 
-                    color="primary" 
-                    variant="elevated"
-                    @click="addUser()"
-                    prepend-icon="mdi-account-plus"
-                    class="px-6"
-                >
-                    Add User
-                </v-btn>
-            </v-card-actions>
-        </v-card>
-    </v-dialog>
-
-    <v-snackbar v-model="snackbar" :timeout="snackTimeout" :color="snackColor" outlined left centered text>
-        {{ snackText }}
-
-        <template v-slot:actions>
-            <v-btn color="white" variant="text" @click="snackbar = false">
-                Close
-            </v-btn>
-        </template>
-    </v-snackbar>
+            </template>
+        </v-snackbar>
+    </div>
 </template>
 
 <style scoped>

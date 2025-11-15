@@ -10,7 +10,8 @@ This design transforms the Minecraft Server Dashboard from a single-server card 
 
 ```
 HomeView.vue (Refactored)
-├── Header.vue (Existing)
+├── AppToolbar.vue (New)
+├── IamAlert.vue (New)
 ├── ServerTable.vue (New)
 │   ├── v-data-table (Vuetify)
 │   ├── ServerStatusChip.vue (New)
@@ -86,6 +87,9 @@ HomeView.vue (Refactored)
 }
 ```
 
+**Computed**:
+- `serversWithIamIssues` - Filters servers where iamStatus !== 'ok'
+
 **Methods**:
 - `openConfigDialog(serverId)` - Opens configuration dialog for specified server
 - `openStatsDialog(serverId)` - Opens statistics dialog for specified server
@@ -93,12 +97,119 @@ HomeView.vue (Refactored)
 - `closeAllDialogs()` - Closes all open dialogs
 - `handleActionComplete(message, success)` - Shows snackbar notification
 - `refreshServerList()` - Reloads server list from API
+- `fixIamRole(serverId)` - Executes fixServerRole mutation for specified server
 
 **Lifecycle**:
 - `onMounted()` - Load server list, subscribe to state changes
 - `onUnmounted()` - Unsubscribe from GraphQL subscriptions
 
-### 2. ServerTable.vue (New Component)
+### 2. AppToolbar.vue (New Component)
+
+**Purpose**: Application toolbar with user information and sign-out functionality
+
+**Props**: None (uses userStore directly)
+
+**Emits**: None (handles sign-out internally)
+
+**Computed**:
+- `fullname` - User's full name from userStore
+- `email` - User's email from userStore
+- `isAdmin` - Admin status from userStore
+
+**Methods**:
+- `userSignOut()` - Signs out user and redirects to auth page
+
+**Template Structure**:
+```vue
+<v-app-bar color="primary" dark>
+  <v-app-bar-title>Minecraft Server Dashboard</v-app-bar-title>
+  
+  <v-spacer></v-spacer>
+  
+  <div class="d-flex align-center mr-4">
+    <v-icon class="mr-2">mdi-account-circle</v-icon>
+    <div class="d-flex flex-column">
+      <span class="text-body-2 font-weight-medium">{{ fullname }}</span>
+      <span class="text-caption">{{ email }}</span>
+    </div>
+    <v-chip v-if="isAdmin" color="accent" size="small" class="ml-2">Admin</v-chip>
+  </div>
+  
+  <v-btn icon @click="userSignOut">
+    <v-icon>mdi-logout</v-icon>
+  </v-btn>
+</v-app-bar>
+```
+
+### 3. IamAlert.vue (New Component)
+
+**Purpose**: Alert banner displaying servers with IAM issues and fix buttons
+
+**Props**:
+```javascript
+{
+  servers: Array<ServerInfo> // Servers with IAM issues
+}
+```
+
+**Emits**:
+- `fix-iam(serverId)` - User clicked fix button for a server
+
+**State**:
+```javascript
+{
+  fixingServers: Set<String> // Track which servers are being fixed
+}
+```
+
+**Template Structure**:
+```vue
+<v-alert 
+  v-if="servers.length > 0"
+  type="warning" 
+  variant="tonal"
+  border="start"
+  class="mb-4"
+>
+  <template v-slot:prepend>
+    <v-icon>mdi-alert-circle</v-icon>
+  </template>
+  
+  <div class="font-weight-medium mb-2">IAM Role Issues Detected</div>
+  <div class="mb-3">
+    The following servers need IAM role fixes to enable power control:
+  </div>
+  
+  <v-list density="compact" class="bg-transparent">
+    <v-list-item 
+      v-for="server in servers" 
+      :key="server.id"
+      class="px-0"
+    >
+      <template v-slot:prepend>
+        <v-icon color="warning" size="small">mdi-server-off</v-icon>
+      </template>
+      
+      <v-list-item-title>{{ server.name || server.id }}</v-list-item-title>
+      
+      <template v-slot:append>
+        <v-btn 
+          color="warning" 
+          variant="elevated"
+          size="small"
+          @click="$emit('fix-iam', server.id)"
+          :loading="fixingServers.has(server.id)"
+          prepend-icon="mdi-wrench"
+        >
+          Fix IAM Role
+        </v-btn>
+      </template>
+    </v-list-item>
+  </v-list>
+</v-alert>
+```
+
+### 4. ServerTable.vue (New Component)
 
 **Purpose**: Displays all servers in a sortable, filterable data table
 
@@ -127,7 +238,6 @@ HomeView.vue (Refactored)
     { title: 'CPU', key: 'vCpus', sortable: true },
     { title: 'RAM (GB)', key: 'memSize', sortable: true },
     { title: 'Disk (GB)', key: 'diskSize', sortable: true },
-    { title: 'IAM Status', key: 'iamStatus', sortable: true },
     { title: 'Running Time', key: 'runningMinutes', sortable: true },
     { title: 'Actions', key: 'actions', sortable: false, align: 'end' }
   ],
@@ -161,9 +271,9 @@ HomeView.vue (Refactored)
 - `chipColor` - Returns color based on state (success/error/warning)
 - `chipIcon` - Returns icon based on state (play/stop/loading)
 
-### 4. ServerActionsMenu.vue (New Component)
+### 5. ServerActionsMenu.vue (New Component)
 
-**Purpose**: Action buttons for each table row
+**Purpose**: Action buttons for each table row with power control as first action
 
 **Props**:
 ```javascript
@@ -183,6 +293,14 @@ HomeView.vue (Refactored)
 **Template Structure**:
 ```vue
 <div class="d-flex align-center gap-1">
+  <v-tooltip text="Power Control">
+    <template v-slot:activator="{ props }">
+      <v-btn icon size="small" v-bind="props" @click="$emit('open-power')">
+        <v-icon :color="powerIconColor">mdi-power</v-icon>
+      </v-btn>
+    </template>
+  </v-tooltip>
+  
   <v-tooltip text="View Statistics">
     <template v-slot:activator="{ props }">
       <v-btn icon size="small" v-bind="props" @click="$emit('open-stats')">
@@ -199,14 +317,6 @@ HomeView.vue (Refactored)
     </template>
   </v-tooltip>
   
-  <v-tooltip text="Power Control">
-    <template v-slot:activator="{ props }">
-      <v-btn icon size="small" v-bind="props" @click="$emit('open-power')">
-        <v-icon :color="powerIconColor">mdi-power</v-icon>
-      </v-btn>
-    </template>
-  </v-tooltip>
-  
   <v-tooltip text="Copy IP Address">
     <template v-slot:activator="{ props }">
       <v-btn icon size="small" v-bind="props" @click="$emit('copy-ip')">
@@ -217,7 +327,7 @@ HomeView.vue (Refactored)
 </div>
 ```
 
-### 5. ServerConfigDialog.vue (New Component)
+### 6. ServerConfigDialog.vue (New Component)
 
 **Purpose**: Modal dialog wrapper for server configuration
 
@@ -262,7 +372,7 @@ HomeView.vue (Refactored)
 </v-dialog>
 ```
 
-### 6. ServerStatsDialog.vue (New Component)
+### 7. ServerStatsDialog.vue (New Component)
 
 **Purpose**: Modal dialog for viewing server statistics and metrics
 
@@ -331,7 +441,7 @@ HomeView.vue (Refactored)
 </v-dialog>
 ```
 
-### 7. PowerControlDialog.vue (New Component)
+### 8. PowerControlDialog.vue (New Component)
 
 **Purpose**: Dialog for server power operations (start/stop/restart)
 

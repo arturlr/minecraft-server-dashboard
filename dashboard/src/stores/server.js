@@ -6,6 +6,7 @@ import { useUserStore } from "../stores/user";
 import { ConsoleLogger } from 'aws-amplify/utils';
 import { configAmplify } from "../configAmplify";
 import { generateClient, get } from 'aws-amplify/api';
+import { parseGraphQLError } from "../utils/errorHandler";
 
 const logger = new ConsoleLogger('mineDash');
 configAmplify();
@@ -65,10 +66,13 @@ export const useServerStore = defineStore("server", {
                     return [];
                 }
 
-                // Populating serversDict
+                // Populating serversDict and serversList
                 this.serversDict = {};
+                this.serversList = [];
                 results.data.listServers.forEach(({ id, name, memSize, diskSize, vCpus, state, initStatus, iamStatus, publicIp, launchTime, runningMinutes, groupMembers }) => {
-                    this.serversDict[id] = { id, name, memSize, diskSize, vCpus, state, initStatus, iamStatus, publicIp, launchTime, runningMinutes, groupMembers };
+                    const server = { id, name, memSize, diskSize, vCpus, state, initStatus, iamStatus, publicIp, launchTime, runningMinutes, groupMembers };
+                    this.serversDict[id] = server;
+                    this.serversList.push(server);
                 });
 
                 console.groupEnd();
@@ -76,10 +80,16 @@ export const useServerStore = defineStore("server", {
                 return results.data.listServers;
 
             } catch (error) {
-                console.error(error);
+                console.error('Error in listServers:', error);
+                const errorMessage = parseGraphQLError(error);
+                console.error('Parsed error:', errorMessage);
                 this.loading = false
                 console.groupEnd();
-                throw error;
+                
+                // Re-throw with parsed error message
+                const enhancedError = new Error(errorMessage);
+                enhancedError.originalError = error;
+                throw enhancedError;
             }
         },
 
@@ -88,15 +98,23 @@ export const useServerStore = defineStore("server", {
                 //console.log('Before update:', this.serversDict[server.id]);
                 //console.log('Update payload:', server);
                 
+                // Update serversDict
                 this.serversDict[server.id] = 
                 {   ...this.serversDict[server.id],
                     state: server.state,
                     initStatus: server.initStatus,
                     publicIp: server.publicIp,
                     runningMinutes: server.runningMinutes  
-                 }
-            };                
+                 };
+                
+                // Update serversList
+                const index = this.serversList.findIndex(s => s.id === server.id);
+                if (index !== -1) {
+                    this.serversList[index] = this.serversDict[server.id];
+                }
+                
                 //console.log('After update:', this.serversDict[server.id]);
+            }
         },
                 
         setSelectedServerId(id) {
@@ -121,9 +139,15 @@ export const useServerStore = defineStore("server", {
                 return results.data.getServerConfig;
 
             } catch (error) {
-                console.error(error);
+                console.error('Error in getServerConfig:', error);
+                const errorMessage = parseGraphQLError(error);
+                console.error('Parsed error:', errorMessage);
                 console.groupEnd();
-                throw error;
+                
+                // Re-throw with parsed error message
+                const enhancedError = new Error(errorMessage);
+                enhancedError.originalError = error;
+                throw enhancedError;
             }
         },
 
@@ -152,22 +176,28 @@ export const useServerStore = defineStore("server", {
 
         async putServerConfig(input) {
             try {
-                console.log(input);
+                console.log('Saving server config:', input);
                 const results = await client.graphql({
                     query: mutations.putServerConfig,
                     variables: { input: input }
                 });
 
                 if (results.data.putServerConfig === null) {
-                    console.log(results);
+                    console.log('putServerConfig returned null:', results);
                     return null;
                 }
 
                 return results.data.putServerConfig;
 
             } catch (error) {
-                console.error(error);
-                throw error;
+                console.error('Error in putServerConfig:', error);
+                const errorMessage = parseGraphQLError(error);
+                console.error('Parsed error:', errorMessage);
+                
+                // Re-throw with parsed error message
+                const enhancedError = new Error(errorMessage);
+                enhancedError.originalError = error;
+                throw enhancedError;
             }
         },
 

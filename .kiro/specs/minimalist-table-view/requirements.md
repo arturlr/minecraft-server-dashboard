@@ -23,7 +23,7 @@ This feature transforms the Minecraft Server Dashboard frontend from a single-se
 #### Acceptance Criteria
 
 1. WHEN the HomeView loads, THE Dashboard SHALL display a Vuetify data table containing all available servers
-2. THE Server Table SHALL display columns for server name, instance ID, state, public IP address, CPU (vCPUs), RAM (memory size), disk size, and IAM status
+2. THE Server Table SHALL display columns for server name, instance ID, state, public IP address, CPU (vCPUs), RAM (memory size), and disk size
 3. THE Server Table SHALL display a status chip indicating whether each server is running, stopped, or in a transitional state
 4. THE Server Table SHALL support sorting by any column
 5. THE Server Table SHALL support searching/filtering servers by name or instance ID
@@ -35,10 +35,11 @@ This feature transforms the Minecraft Server Dashboard frontend from a single-se
 #### Acceptance Criteria
 
 1. THE Server Table SHALL include an actions column with icon buttons for each server row
-2. WHEN a user clicks the configuration icon, THE Dashboard SHALL open the Configuration Dialog for that server
-3. WHEN a user clicks the statistics icon, THE Dashboard SHALL open the Statistics Dialog for that server
-4. WHEN a user clicks the power icon, THE Dashboard SHALL open the power control dialog for that server
-5. THE Server Table SHALL display the copy IP address button in each row for quick access
+2. THE Server Table SHALL display the power control button as the first action in each row
+3. WHEN a user clicks the configuration icon, THE Dashboard SHALL open the Configuration Dialog for that server
+4. WHEN a user clicks the statistics icon, THE Dashboard SHALL open the Statistics Dialog for that server
+5. WHEN a user clicks the power icon, THE Dashboard SHALL open the power control dialog for that server
+6. THE Server Table SHALL display the copy IP address button in each row for quick access
 
 ### Requirement 3: Configuration Dialog
 
@@ -76,19 +77,31 @@ This feature transforms the Minecraft Server Dashboard frontend from a single-se
 4. THE Dashboard SHALL display a snackbar notification with the action result
 5. THE Server Table SHALL update the server state in real-time via GraphQL subscriptions
 
-### Requirement 6: IAM Status Indicator
+### Requirement 6: IAM Status Alert
 
-**User Story:** As a server administrator, I want to see IAM compliance status in the table, so that I can quickly identify servers with permission issues.
+**User Story:** As a server administrator, I want to be notified when servers have IAM issues, so that I can fix permission problems without cluttering the table view.
 
 #### Acceptance Criteria
 
-1. THE Server Table SHALL display an IAM status indicator for each server
-2. WHEN a server has IAM issues, THE Dashboard SHALL display a warning icon with error color
-3. WHEN a user clicks on an IAM warning, THE Dashboard SHALL display the fix IAM role dialog
-4. THE Dashboard SHALL provide a "Fix Now" button to automatically correct IAM permissions
-5. THE Server Table SHALL update the IAM status after successful remediation
+1. WHEN servers with IAM issues exist, THE Dashboard SHALL display a prominent alert banner above the server table
+2. THE IAM Alert SHALL list all servers with non-compliant IAM roles
+3. THE IAM Alert SHALL provide a "Fix IAM Role" button for each affected server
+4. WHEN a user clicks the fix button, THE Dashboard SHALL execute the fixServerRole mutation for that server
+5. THE Dashboard SHALL remove servers from the alert after successful IAM remediation
 
-### Requirement 7: Responsive Design
+### Requirement 7: Application Toolbar
+
+**User Story:** As a server administrator, I want a toolbar with my user information and sign-out option, so that I can easily access account functions without a navigation drawer.
+
+#### Acceptance Criteria
+
+1. THE Dashboard SHALL display a Vuetify toolbar at the top of the application
+2. THE Toolbar SHALL display the user's full name and email address
+3. THE Toolbar SHALL display an "Admin" badge when the user has admin privileges
+4. THE Toolbar SHALL include a sign-out button that logs the user out
+5. WHEN a user clicks sign-out, THE Dashboard SHALL execute the sign-out flow and redirect to the authentication page
+
+### Requirement 8: Responsive Design
 
 **User Story:** As a server administrator, I want the table view to work on different screen sizes, so that I can manage servers from any device.
 
@@ -100,7 +113,7 @@ This feature transforms the Minecraft Server Dashboard frontend from a single-se
 4. THE Statistics Dialog SHALL be full-screen on mobile devices
 5. THE Server Table SHALL maintain usability with touch interactions on mobile devices
 
-### Requirement 8: Server Selection State Management
+### Requirement 9: Server Selection State Management
 
 **User Story:** As a server administrator, I want the system to remember which server I'm viewing, so that dialog operations work correctly.
 
@@ -112,7 +125,7 @@ This feature transforms the Minecraft Server Dashboard frontend from a single-se
 4. WHEN a user closes a dialog, THE Dashboard SHALL clear or maintain the selection based on user workflow
 5. THE Dashboard SHALL ensure GraphQL subscriptions target the correct server instance
 
-### Requirement 9: Performance Optimization
+### Requirement 10: Performance Optimization
 
 **User Story:** As a server administrator, I want the table view to load quickly, so that I can access server information without delays.
 
@@ -124,7 +137,7 @@ This feature transforms the Minecraft Server Dashboard frontend from a single-se
 4. THE Server Table SHALL use virtual scrolling for lists exceeding 50 servers
 5. THE Dashboard SHALL cache server configuration data to reduce redundant API calls
 
-### Requirement 10: User Experience Enhancements
+### Requirement 11: User Experience Enhancements
 
 **User Story:** As a server administrator, I want visual feedback for all actions, so that I understand what the system is doing.
 
