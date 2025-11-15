@@ -20,7 +20,7 @@ dashboard/
 │   ├── views/         # Page-level Vue components
 │   ├── stores/        # Vuex/Pinia state management
 │   ├── router/        # Vue Router configuration
-│   ├── graphql/       # GraphQL queries, mutations, subscriptions
+│   ├── graphql/       # GraphQL queries, mutations, subscriptionscd 
 │   ├── layouts/       # Layout components
 │   └── assets/        # Static assets (CSS, images)
 ├── public/            # Public static files

@@ -82,18 +82,6 @@ main() {
     echo -e "- AWS Account ID: ${GREEN}${account_id}${SET}"
     echo ""
     
-    # Upload CloudWatch agent config if it exists
-    if [ -f "amazon-cloudwatch-agent.json" ] && [ -n "$SupportBucket" ]; then
-        echo -e "${WHITE}---- Uploading CloudWatch agent config file to S3 ----${SET}"
-        aws s3 cp amazon-cloudwatch-agent.json "s3://${SupportBucket}/amazon-cloudwatch-agent.json" --region "$region"
-        if [ $? -eq 0 ]; then
-            echo -e "${GREEN}CloudWatch agent config uploaded successfully${SET}"
-        else
-            echo -e "${YELLOW}Failed to upload CloudWatch agent config${SET}"
-        fi
-        echo ""
-    fi
-    
     # Create .env file
     echo -e "${WHITE}---- Creating dashboard/.env file ----${SET}"
     
@@ -117,6 +105,22 @@ EOF
     else
         echo -e "${RED}Failed to create .env file${SET}"
         exit 1
+    fi
+    
+    # Upload CloudWatch agent config to S3
+    echo ""
+    echo -e "${WHITE}---- Uploading CloudWatch agent config ----${SET}"
+    
+    if [ -f "amazon-cloudwatch-agent.json" ]; then
+        echo -e "Uploading amazon-cloudwatch-agent.json to s3://${SupportBucket}/"
+        if aws s3 cp amazon-cloudwatch-agent.json "s3://${SupportBucket}/amazon-cloudwatch-agent.json" --region "$region"; then
+            echo -e "${GREEN}CloudWatch config uploaded successfully${SET}"
+        else
+            echo -e "${YELLOW}Warning: Failed to upload CloudWatch config${SET}"
+        fi
+    else
+        echo -e "${YELLOW}Warning: amazon-cloudwatch-agent.json not found in current directory${SET}"
+        echo -e "${YELLOW}CloudWatch agent will not be configured on EC2 instances${SET}"
     fi
     
     echo ""

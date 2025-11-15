@@ -62,6 +62,17 @@ Resources:
                 Action:
                   - "ec2:DescribeTags"
                 Resource: "*"
+        - PolicyName: s3SupportBucketAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "s3:GetObject"
+                  - "s3:ListBucket"
+                Resource:
+                  - !Sub "${SupportBucket.Arn}"
+                  - !Sub "${SupportBucket.Arn}/*"
 
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
@@ -74,13 +85,8 @@ Resources:
       Roles:
         - !Ref Ec2MinecraftDashboardInstanceRole
 
-  AmazonCloudWatchLinuxParameter:
-    Type: AWS::SSM::Parameter
-    Properties:
-      Name: !Sub /${ProjectName}/${EnvironmentName}/cloudwatch-agent-config
-      Type: String
-      Value: '{ "agent": { "metrics_collection_interval": 60, "run_as_user": "root" }, "logs": { "logs_collected": { "files": { "collect_list": [ { "file_path": "/opt/minecraft/server/logs/latest.log", "log_group_name": "/minecraft/serverlog/{instance_id}", "retention_in_days": 3, "filters": [ { "type": "include", "expression": "Server thread/INFO" } ] } ] } } }, "metrics": { "append_dimensions": { "AutoScalingGroupName": "${aws:AutoScalingGroupName}", "InstanceId": "${aws:InstanceId}" }, "metrics_collected": { "collectd": { "metrics_aggregation_interval": 60 }, "cpu": { "measurement": [ "cpu_usage_active" ], "resources": [ "*" ], "metrics_collection_interval": 60 }, "net": { "measurement": [ "net_bytes_sent" ], "metrics_collection_interval": 60 }, "mem": { "measurement": [ "mem_used_percent" ], "metrics_collection_interval": 60 }, "statsd": { "metrics_aggregation_interval": 60, "metrics_collection_interval": 10, "service_address": ":8125" } } } }'
-      Description: Amazon CloudWatch agent config
+  # CloudWatch agent config is now stored in S3 and referenced from there
+  # The amazon-cloudwatch-agent.json file is uploaded to S3 by deployment scripts
 
   MinecraftStartupEventRule:
     Type: AWS::Events::Rule
@@ -350,8 +356,18 @@ Resources:
             name: CloudWatchStart
             inputs:
               runCommand:
-                - |
-                  sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -s -c ssm:{{ SSMParameterPrefix }}/cloudwatch-agent-config
+                - !Sub |
+                  # Download CloudWatch agent config from S3
+                  aws s3 cp s3://${SupportBucket}/amazon-cloudwatch-agent.json /tmp/amazon-cloudwatch-agent.json
+                  
+                  # Start CloudWatch agent with the config file
+                  sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
+                    -a fetch-config \
+                    -m ec2 \
+                    -s \
+                    -c file:/tmp/amazon-cloudwatch-agent.json
+                  
+                  # Check status
                   sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -m ec2 -a status      
           - action: aws:runShellScript
             name: Cron

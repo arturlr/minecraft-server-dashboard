@@ -242,8 +242,8 @@ def handler(event, context):
     
     # Use the centralized admin check from utilHelper
     if utl.is_admin_user(cognitoGroups):
-        user_instances = ec2_utils.list_instances_by_app_tag(appValue)
         logger.info("Admin user - listing all instances by app tag")
+        user_instances = ec2_utils.list_instances_by_app_tag(appValue)        
     elif cognitoGroups:
         user_instances = ec2_utils.list_instances_by_user_group(cognitoGroups)
         logger.info(user_instances)
