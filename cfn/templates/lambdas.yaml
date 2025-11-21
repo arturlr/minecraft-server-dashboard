@@ -524,6 +524,14 @@ Resources:
                 - cloudwatch:DeleteAlarms
                 - cloudwatch:DescribeAlarms
               Resource: "*"
+        - Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Action:
+                - appsync:ListGraphqlApis
+                - appsync:GetGraphqlApi
+                - appsync:GraphQL
+              Resource: "*"
       Environment:
         Variables:
           APP_NAME: !Ref ProjectName
@@ -551,50 +559,8 @@ Resources:
         - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess
         - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
         - arn:aws:iam::aws:policy/AmazonCognitoReadOnly
-        # - StepFunctionsExecutionPolicy:
-        #     StateMachineName: !GetAtt StateMachine.Name
         - SSMParameterReadPolicy:
             ParameterName: !Sub "${ProjectName}*"
-        # - DynamoDBCrudPolicy:
-        #     TableName: !Ref InstancesTable
-        - Version: "2012-10-17" # Policy Document
-          Statement:
-            - Effect: Allow
-              Action:
-                - ec2:StartInstances
-                - ec2:StopInstances
-                - ec2:RebootInstances
-                - ec2:AssociateIamInstanceProfile
-                - ec2:DisassociateIamInstanceProfile
-                - ec2:DeleteTags
-                - ec2:CreateTags
-              Resource: 'arn:aws:ec2:*:*:instance/*'
-              Condition:
-                StringEquals:
-                  'ec2:ResourceTag/App': !Ref AppValue
-        - Version: "2012-10-17" # Policy Document
-          Statement:
-            - Effect: Allow
-              Action:
-                - iam:PassRole
-              Resource: 
-                - Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-IAMEC2RoleArn"
-        - Version: "2012-10-17"
-          Statement:
-            - Effect: Allow
-              Action:
-                - events:PutRule
-                - events:PutTargets
-                - events:DeleteRule
-                - events:RemoveTargets
-                - events:DisableRule
-                - events:EnableRule
-                - events:TagResource
-                - events:UntagResource
-                - events:ListTagsForResource
-                - events:ListRules
-                - events:ListTargetsByRule
-              Resource: !Sub "arn:aws:events:${AWS::Region}:${AWS::AccountId}:rule/*"
         - Version: "2012-10-17" # Policy Document
           Statement:
             - Effect: Allow
@@ -608,7 +574,6 @@ Resources:
               Action:
                 - cognito-idp:CreateGroup
                 - cognito-idp:AdminAddUserToGroup
-                - cloudwatch:PutMetricAlarm
               Resource: "*"
         - Version: "2012-10-17"
           Statement:
@@ -616,6 +581,12 @@ Resources:
               Action:
                 - sqs:SendMessage
               Resource: !GetAtt ServerActionQueue.Arn
+        - Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Action:
+                - appsync:GraphQL
+              Resource: !Sub "${GraphQLAPI.Arn}/*"
       Environment:
         Variables:
           # StepFunctionsArn: !Ref StateMachine
@@ -629,6 +600,7 @@ Resources:
             Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-IAMEC2InstanceProfileArn"
           # CONFIG_SERVER_LAMBDA_NAME: !Ref ConfigServer
           SERVER_ACTION_QUEUE_URL: !Ref ServerActionQueue
+          APPSYNC_URL: !GetAtt GraphQLAPI.GraphQLUrl
           COGNITO_USER_POOL_ID:  
             Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-UserPoolId"
 

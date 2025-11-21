@@ -49,7 +49,7 @@ dashboard/
 ### Lambda Layers (`layers/`)
 - **authHelper/**: Cognito authentication utilities
 - **dynHelper/**: DynamoDB operations helper
-- **ec2Helper/**: EC2 instance management utilities
+- **ec2Helper/**: EC2 instance management utilities (includes CloudWatch alarm management for user-based shutdown)
 - **utilHelper/**: Common utility functions
 
 ### Infrastructure (`cfn/`)
@@ -72,10 +72,12 @@ cfn/
 - **DynamoDB Tables**: Data storage for server information
 - **Cognito Resources**: User authentication and authorization
 - **IAM Roles**: Permissions for various components
-- **CloudWatch Resources**: Monitoring, metrics, and alarms for auto-shutdown
+- **CloudWatch Resources**: Monitoring, metrics, and alarms for auto-shutdown (CPU-based and user-based)
+- **CloudWatch Custom Metrics**: UserCount metric for tracking active player connections
 - **EventBridge Rules**: Scheduled server start/stop events
 - **S3 Bucket**: Frontend hosting
 - **CloudFront Distribution**: Content delivery
+- **EC2 Bootstrap Scripts**: Installs port_count.sh and cron job for metric collection
 
 ## File Naming Conventions
 - **Vue Components**: PascalCase (e.g., `ServerCard.vue`, `Header.vue`)

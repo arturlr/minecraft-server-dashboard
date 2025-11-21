@@ -25,6 +25,8 @@ class Ec2Utils:
         self.ssm = boto3.client('ssm')        
         self.ct_client = boto3.client('cloudtrail')        
         self.cw_client = boto3.client('cloudwatch')
+        self.sts_client = boto3.client('sts')
+        self.account_id = self.sts_client.get_caller_identity()['Account']
         self.appValue = os.getenv('TAG_APP_VALUE')
         self.ec2InstanceProfileArn = os.getenv('EC2_INSTANCE_PROFILE_ARN')
 
@@ -181,12 +183,12 @@ class Ec2Utils:
             Period=60,
             EvaluationPeriods=int(alarm_evaluation_period),
             DatapointsToAlarm=int(alarm_evaluation_period),
-            Threshold=int(alarm_threshold),
+            Threshold=float(alarm_threshold),  # Use float to support decimal thresholds
             TreatMissingData="missing",
             ComparisonOperator="LessThanOrEqualToThreshold"   
         )
 
-        logger.info("Alarm configured to " + alarm_metric + " and " + alarm_threshold)
+        logger.info(f"Alarm configured to {alarm_metric} with threshold {alarm_threshold} and evaluation period {alarm_evaluation_period}")
     
     def remove_alarm(self, instance_id):
         logger.info("------- remove_alarm : " + instance_id)
@@ -237,7 +239,7 @@ class Ec2Utils:
             Targets=[{
                 'Id': f"shutdown-target-{instance_id}",
                 'Arn': f"arn:aws:automate:{aws_region}:ec2:stop",
-                'RoleArn': f"arn:aws:iam::{boto3.client('sts').get_caller_identity()['Account']}:role/aws-service-role/events.amazonaws.com/AWSServiceRoleForEvents",
+                'RoleArn': f"arn:aws:iam::{self.account_id}:role/aws-service-role/events.amazonaws.com/AWSServiceRoleForEvents",
                 'Input': json.dumps({"InstanceId": instance_id})
             }]
         )
@@ -295,7 +297,7 @@ class Ec2Utils:
             Targets=[{
                 'Id': f"start-target-{instance_id}",
                 'Arn': f"arn:aws:automate:{aws_region}:ec2:start",
-                'RoleArn': f"arn:aws:iam::{boto3.client('sts').get_caller_identity()['Account']}:role/aws-service-role/events.amazonaws.com/AWSServiceRoleForEvents",
+                'RoleArn': f"arn:aws:iam::{self.account_id}:role/aws-service-role/events.amazonaws.com/AWSServiceRoleForEvents",
                 'Input': json.dumps({"InstanceId": instance_id})
             }]
         )
@@ -329,6 +331,11 @@ class Ec2Utils:
         Format and validate cron expression for EventBridge.
         EventBridge requires cron expressions to be in the format: cron(minutes hours day month day-of-week year)
         
+        EventBridge-specific rules:
+        - Either day-of-month OR day-of-week must be '?' (not both can have specific values)
+        - Day-of-week uses 1-7 (1=Monday, 7=Sunday) or SUN-SAT
+        - Supports special characters: * ? , - / L W #
+        
         Args:
             cron_expression (str): Standard cron expression (5 fields) or EventBridge format (6 fields)
             
@@ -346,6 +353,11 @@ class Ec2Utils:
             cron_part = cron_expression[5:-1]  # Remove 'cron(' and ')'
             fields = cron_part.split()
             if len(fields) == 6:
+                minute, hour, day, month, day_of_week, year = fields
+                # Validate EventBridge-specific rule: day and day_of_week can't both have specific values
+                if not self._validate_day_fields(day, day_of_week):
+                    logger.warning(f"EventBridge requires either day-of-month OR day-of-week to be '?': {cron_expression}")
+                    return None
                 return cron_expression
             else:
                 logger.warning(f"Invalid EventBridge cron format: {cron_expression}")
@@ -370,6 +382,12 @@ class Ec2Utils:
             if not converted_dow:
                 logger.warning(f"Failed to convert day-of-week: {day_of_week}")
                 return None
+            
+            # Apply EventBridge rule: if both day and day-of-week are specified, use '?' for day
+            # This handles the common case where users specify both (which EventBridge doesn't allow)
+            if day != '*' and day != '?' and converted_dow != '*' and converted_dow != '?':
+                logger.info(f"Both day ({day}) and day-of-week ({converted_dow}) specified. Using day-of-week and setting day to '?'")
+                day = '?'
             
             # Convert to EventBridge format (add year field)
             eventbridge_cron = f"cron({minute} {hour} {day} {month} {converted_dow} *)"
@@ -534,6 +552,32 @@ class Ec2Utils:
             return min_val <= val <= max_val
         except ValueError:
             return False
+    
+    def _validate_day_fields(self, day, day_of_week):
+        """
+        Validate EventBridge-specific rule: either day-of-month OR day-of-week must be '?'
+        Both can't have specific values at the same time.
+        
+        Args:
+            day (str): Day-of-month field
+            day_of_week (str): Day-of-week field
+            
+        Returns:
+            bool: True if valid according to EventBridge rules
+        """
+        # Both wildcards is OK
+        if (day == '*' or day == '?') and (day_of_week == '*' or day_of_week == '?'):
+            return True
+        
+        # One specific, one wildcard/question is OK
+        if (day != '*' and day != '?') and (day_of_week == '*' or day_of_week == '?'):
+            return True
+        if (day == '*' or day == '?') and (day_of_week != '*' and day_of_week != '?'):
+            return True
+        
+        # Both specific is NOT OK for EventBridge
+        logger.warning(f"EventBridge validation failed: day={day}, day_of_week={day_of_week}")
+        return False
     
     def check_alarm_exists(self, instance_id):
         """Check if CloudWatch alarm exists for the instance."""

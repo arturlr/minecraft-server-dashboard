@@ -9,6 +9,7 @@ The Minecraft Server Dashboard is a comprehensive web application that enables u
 - **Cost Tracking**: Monthly cost analysis and optimization recommendations
 - **User Access Control**: Multi-user access with admin/user roles via Cognito
 - **Automated Policies**: CPU-based, connection-based, and schedule-based auto-shutdown with CloudWatch alarms
+- **User-Based Auto-Shutdown**: Automatic shutdown when player connections fall below threshold for sustained period (prevents idle server costs)
 - **Auto-Configuration**: Automatic default configuration for new servers (CPU-based shutdown, Minecraft commands)
 - **Configuration Validation**: Real-time validation of server settings with warnings and errors
 - **Configuration Management**: Server settings, startup commands, and scheduled operations
@@ -30,8 +31,9 @@ Serverless web application with Vue.js frontend and AWS backend services (AppSyn
 5. **Configuration Validation**: Real-time feedback on configuration issues with warnings and errors
 6. **Monitoring**: View live performance metrics and player activity
 7. **Cost Management**: Track monthly costs and configure auto-shutdown policies (CPU/connections/schedule)
-8. **Scheduled Operations**: Configure automatic server start/stop times using cron expressions
-9. **User Management**: Admins can grant access to specific servers for other users
+8. **User-Based Auto-Shutdown**: Configure automatic shutdown when player count falls below threshold for sustained period
+9. **Scheduled Operations**: Configure automatic server start/stop times using cron expressions
+10. **User Management**: Admins can grant access to specific servers for other users
 
 ## Business Value
 - **Cost Optimization**: Automated shutdown policies reduce unnecessary EC2 costs

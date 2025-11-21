@@ -149,8 +149,10 @@ class IamProfile:
 
 def send_to_appsync(action, instance_id, status, message=None, user_email=None):
     """Send action status to AppSync"""
+    logger.info(f"AppSync status update: action={action}, instance={instance_id}, status={status}, user={user_email}, message={message}")
+    
     if not endpoint:
-        logger.warning("No AppSync endpoint configured, skipping status update")
+        logger.warning(f"AppSync status update SKIPPED: No endpoint configured - action={action}, instance={instance_id}, status={status}")
         return False
     
     try:
@@ -170,6 +172,8 @@ def send_to_appsync(action, instance_id, status, message=None, user_email=None):
             }
         }
         
+        logger.info(f"Sending status to AppSync endpoint: action={action}, instance={instance_id}, status={status}")
+        
         headers = {"Content-Type": "application/json"}
         response = requests.post(
             endpoint,
@@ -179,189 +183,340 @@ def send_to_appsync(action, instance_id, status, message=None, user_email=None):
         )
         
         if response.status_code == 200:
-            logger.info(f"Successfully sent action status to AppSync: {action} - {status}")
+            logger.info(f"AppSync status update SUCCESS: action={action}, instance={instance_id}, status={status}")
             return True
         else:
-            logger.error(f"Failed to send action status to AppSync: {response.status_code} - {response.text}")
+            logger.error(f"AppSync status update FAILED: action={action}, instance={instance_id}, status={status}, http_code={response.status_code}, response={response.text}")
             return False
     except Exception as e:
-        logger.error(f"Error sending action status to AppSync: {e}")
+        logger.error(f"AppSync status update FAILED with exception: action={action}, instance={instance_id}, status={status}, error={str(e)}", exc_info=True)
         return False
 
 def process_server_action(message_body):
     """Process server action from SQS message"""
+    logger.info(f"Action processing started: message_body_length={len(message_body)}")
+    
+    message = None
     try:
-        message = json.loads(message_body)
+        # Parse message body
+        try:
+            message = json.loads(message_body)
+            logger.info(f"Message parsed successfully: action={message.get('action')}, instance={message.get('instanceId')}")
+        except json.JSONDecodeError as e:
+            logger.error(f"Action processing FAILED: Invalid JSON in message body - error={str(e)}, body={message_body[:200]}", exc_info=True)
+            return False
+        
+        # Extract required fields
+        if 'action' not in message:
+            logger.error(f"Action processing FAILED: Missing 'action' field in message - message={message}")
+            return False
+        if 'instanceId' not in message:
+            logger.error(f"Action processing FAILED: Missing 'instanceId' field in message - message={message}")
+            return False
+            
         action = message['action'].lower().strip()
         instance_id = message['instanceId']
         arguments = message.get('arguments')
         user_email = message.get('userEmail')
         
-        logger.info(f"Processing {action} for {instance_id} by {user_email}")
+        logger.info(f"Action processing: action={action}, instance={instance_id}, user={user_email}, has_arguments={arguments is not None}")
         
-        # Send initial status to AppSync
-        send_to_appsync(action, instance_id, "PROCESSING", f"Processing {action}", user_email)
-        
-        result = False
-        if action in ['startserver', 'stopserver', 'restartserver']:
-            result = handle_server_action(action.replace('server', ''), instance_id)
-        elif action == 'fixserverrole':
-            result = handle_fix_role(instance_id)
-        elif action in ['putserverconfig', 'updateserverconfig']:
-            result = handle_update_server_config(instance_id, arguments)
+        # Send initial PROCESSING status to AppSync
+        logger.info(f"Sending initial PROCESSING status: action={action}, instance={instance_id}")
+        status_sent = send_to_appsync(action, instance_id, "PROCESSING", f"Processing {action}", user_email)
+        if status_sent:
+            logger.info(f"Initial PROCESSING status sent successfully: action={action}, instance={instance_id}")
         else:
-            logger.error(f"Unknown action: {action}")
-            send_to_appsync(action, instance_id, "FAILED", f"Unknown action: {action}", user_email)
-            return False
+            logger.warning(f"Initial PROCESSING status failed to send: action={action}, instance={instance_id}")
+        
+        # Route to appropriate handler based on action type
+        result = False
+        error_message = None
+        
+        logger.info(f"Routing action to handler: action={action}, instance={instance_id}")
+        
+        try:
+            if action in ['start', 'startserver']:
+                logger.info(f"Routing to handle_server_action(start): instance={instance_id}")
+                result = handle_server_action('start', instance_id)
+                error_message = "Failed to start server" if not result else None
+            elif action in ['stop', 'stopserver']:
+                logger.info(f"Routing to handle_server_action(stop): instance={instance_id}")
+                result = handle_server_action('stop', instance_id)
+                error_message = "Failed to stop server" if not result else None
+            elif action in ['restart', 'restartserver']:
+                logger.info(f"Routing to handle_server_action(restart): instance={instance_id}")
+                result = handle_server_action('restart', instance_id)
+                error_message = "Failed to restart server" if not result else None
+            elif action in ['fixserverrole', 'fixrole']:
+                logger.info(f"Routing to handle_fix_role: instance={instance_id}")
+                result = handle_fix_role(instance_id)
+                error_message = "Failed to fix IAM role" if not result else None
+            elif action in ['putserverconfig', 'updateserverconfig']:
+                logger.info(f"Routing to handle_update_server_config: instance={instance_id}")
+                result = handle_update_server_config(instance_id, arguments)
+                error_message = "Failed to update server configuration" if not result else None
+            else:
+                logger.error(f"Action routing FAILED: Unknown action type - action={action}, instance={instance_id}")
+                send_to_appsync(action, instance_id, "FAILED", f"Unknown action: {action}", user_email)
+                return False
+        except Exception as handler_error:
+            logger.error(f"Handler execution FAILED with exception: action={action}, instance={instance_id}, error={str(handler_error)}", exc_info=True)
+            error_message = f"Handler error: {str(handler_error)}"
+            result = False
         
         # Send final status to AppSync
+        logger.info(f"Sending final status: action={action}, instance={instance_id}, result={result}")
         if result:
-            send_to_appsync(action, instance_id, "COMPLETED", f"Successfully completed {action}", user_email)
+            logger.info(f"Action completed successfully: action={action}, instance={instance_id}")
+            final_status_sent = send_to_appsync(action, instance_id, "COMPLETED", f"Successfully completed {action}", user_email)
+            if final_status_sent:
+                logger.info(f"Final COMPLETED status sent successfully: action={action}, instance={instance_id}")
+            else:
+                logger.warning(f"Final COMPLETED status failed to send: action={action}, instance={instance_id}")
         else:
-            send_to_appsync(action, instance_id, "FAILED", f"Failed to complete {action}", user_email)
+            final_message = error_message or f"Failed to complete {action}"
+            logger.error(f"Action failed: action={action}, instance={instance_id}, error={final_message}")
+            final_status_sent = send_to_appsync(action, instance_id, "FAILED", final_message, user_email)
+            if final_status_sent:
+                logger.info(f"Final FAILED status sent successfully: action={action}, instance={instance_id}")
+            else:
+                logger.warning(f"Final FAILED status failed to send: action={action}, instance={instance_id}")
             
         return result
             
     except Exception as e:
-        logger.error(f"Error processing message: {e}")
+        logger.error(f"Action processing FAILED with unexpected exception: error={str(e)}, message={message}", exc_info=True)
+        # Try to send failure status if we have enough information
         try:
-            send_to_appsync(
-                message.get('action', 'unknown'), 
-                message.get('instanceId', 'unknown'), 
-                "FAILED", 
-                f"Error processing message: {str(e)}", 
-                message.get('userEmail')
-            )
-        except:
-            pass
+            if message:
+                action = message.get('action', 'unknown')
+                instance_id = message.get('instanceId', 'unknown')
+                user_email = message.get('userEmail')
+                logger.info(f"Attempting to send error status to AppSync: action={action}, instance={instance_id}")
+                status_sent = send_to_appsync(
+                    action, 
+                    instance_id, 
+                    "FAILED", 
+                    f"Error processing message: {str(e)}", 
+                    user_email
+                )
+                if status_sent:
+                    logger.info(f"Error status sent successfully to AppSync: action={action}, instance={instance_id}")
+                else:
+                    logger.warning(f"Error status failed to send to AppSync: action={action}, instance={instance_id}")
+        except Exception as appsync_error:
+            logger.error(f"Failed to send error status to AppSync with exception: error={str(appsync_error)}", exc_info=True)
         return False
 
 def handle_server_action(action, instance_id):
-    """Handle EC2 instance actions"""
+    """Handle EC2 instance actions (start/stop/restart)"""
+    logger.info(f"Server action handler started: action={action}, instance={instance_id}")
+    
     try:
+        # Retrieve instance information
+        logger.info(f"Retrieving instance information: instance={instance_id}")
         instance = ec2_utils.list_server_by_id(instance_id)
         if not instance.get('Instances'):
-            raise ValueError(f"Instance {instance_id} not found")
+            logger.error(f"Server action FAILED: Instance not found - instance={instance_id}")
+            return False
             
         instance_info = instance['Instances'][0]        
         state = instance_info["State"]["Name"]
         
+        logger.info(f"Instance state retrieved: instance={instance_id}, state={state}")
+        
         # Handle start action
         if action == "start":
             if state == "stopped":
-                ec2_client.start_instances(InstanceIds=[instance_id])
-                logger.info('Starting instance %s', instance_id)
+                try:
+                    logger.info(f"Executing EC2 start_instances: instance={instance_id}")
+                    ec2_client.start_instances(InstanceIds=[instance_id])
+                    logger.info(f"Server action SUCCESS: Start initiated for instance {instance_id}")
+                    return True
+                except Exception as e:
+                    logger.error(f"Server action FAILED: Start failed for instance {instance_id}, error={str(e)}", exc_info=True)
+                    return False
             else:
-                logger.warning('Start instance %s not possible - current state: %s', instance_id, state)
+                logger.warning(f"Server action SKIPPED: Cannot start instance {instance_id} in state {state}")
                 return False
 
         # Handle stop action        
         elif action == "stop":
             if state == "running":
-                ec2_client.stop_instances(InstanceIds=[instance_id])
-                logger.info('Stopping instance %s', instance_id)
+                try:
+                    logger.info(f"Executing EC2 stop_instances: instance={instance_id}")
+                    ec2_client.stop_instances(InstanceIds=[instance_id])
+                    logger.info(f"Server action SUCCESS: Stop initiated for instance {instance_id}")
+                    return True
+                except Exception as e:
+                    logger.error(f"Server action FAILED: Stop failed for instance {instance_id}, error={str(e)}", exc_info=True)
+                    return False
             else:
-                logger.warning('Stop instance %s not possible - current state: %s', instance_id, state)
+                logger.warning(f"Server action SKIPPED: Cannot stop instance {instance_id} in state {state}")
                 return False
 
         # Handle restart action
         elif action == "restart":
             if state == "running":
-                ec2_client.reboot_instances(InstanceIds=[instance_id])
-                logger.info('Restarting instance %s', instance_id)
+                try:
+                    logger.info(f"Executing EC2 reboot_instances: instance={instance_id}")
+                    ec2_client.reboot_instances(InstanceIds=[instance_id])
+                    logger.info(f"Server action SUCCESS: Restart initiated for instance {instance_id}")
+                    return True
+                except Exception as e:
+                    logger.error(f"Server action FAILED: Restart failed for instance {instance_id}, error={str(e)}", exc_info=True)
+                    return False
             else:
-                logger.warning('Restart instance %s not possible - current state: %s', instance_id, state)
+                logger.warning(f"Server action SKIPPED: Cannot restart instance {instance_id} in state {state}")
                 return False
+        else:
+            logger.error(f"Server action FAILED: Unknown action type - action={action}, instance={instance_id}")
+            return False
                 
-        return True
     except Exception as e:
-        logger.error(f"Error in {action} action: {e}")
+        logger.error(f"Server action handler FAILED with exception: action={action}, instance={instance_id}, error={str(e)}", exc_info=True)
         return False
 
 def handle_fix_role(instance_id):
-    """Handle IAM role fix"""
-    iam_profile = IamProfile(instance_id)
-    resp = iam_profile.manage_iam_profile()
-    logger.info("IAM role attachment response: %s", resp)
+    """Handle IAM role fix for instance"""
+    logger.info(f"IAM role fix handler started: instance={instance_id}")
     
-    # Check if the response is a dictionary with error information
-    if isinstance(resp, dict) and resp.get("status") == "error":
-        if resp.get("code") == "UnauthorizedOperation":
-            logger.error("Unauthorized operation: %s", resp.get("message", ""))
-            return False
-    
-    if resp is True:
-        logger.info("Successfully attached IAM role to the Minecraft Instance")
-        return True
-    
-    logger.error("Attaching IAM role failed")
-    return False
+    try:
+        logger.info(f"Creating IamProfile manager: instance={instance_id}")
+        iam_profile = IamProfile(instance_id)
+        
+        logger.info(f"Executing IAM profile management: instance={instance_id}")
+        resp = iam_profile.manage_iam_profile()
+        logger.info(f"IAM profile management response: instance={instance_id}, response={resp}")
+        
+        # Check if the response is a dictionary with error information
+        if isinstance(resp, dict) and resp.get("status") == "error":
+            if resp.get("code") == "UnauthorizedOperation":
+                logger.error(f"IAM role fix FAILED: Unauthorized operation - instance={instance_id}, message={resp.get('message', '')}")
+                return False
+            else:
+                logger.error(f"IAM role fix FAILED: Error response - instance={instance_id}, message={resp.get('message', 'Unknown error')}")
+                return False
+        
+        if resp is True:
+            logger.info(f"IAM role fix SUCCESS: Role attached successfully - instance={instance_id}")
+            return True
+        
+        logger.error(f"IAM role fix FAILED: Unexpected response - instance={instance_id}, response={resp}")
+        return False
+        
+    except Exception as e:
+        logger.error(f"IAM role fix handler FAILED with exception: instance={instance_id}, error={str(e)}", exc_info=True)
+        return False
 
 def handle_update_server_config(instance_id, arguments):
     """Handle server configuration updates"""
-    if not arguments:
-        logger.error("Missing arguments for config update")
-        return False
+    logger.info(f"Config update handler started: instance={instance_id}, has_arguments={arguments is not None}")
     
     try:
-        response = ec2_utils.set_instance_attributes_to_tags(arguments)
-        shutdown_method = response.get('shutdownMethod', '')
-        logger.info(f"Processing shutdown method: {shutdown_method}")
+        if not arguments:
+            logger.error(f"Config update FAILED: Missing arguments - instance={instance_id}")
+            return False
         
+        logger.info(f"Config update: Processing arguments - instance={instance_id}, arguments={arguments}")
+        
+        # Set instance attributes to tags
+        try:
+            logger.info(f"Setting instance attributes to tags: instance={instance_id}")
+            response = ec2_utils.set_instance_attributes_to_tags(arguments)
+            logger.info(f"Instance attributes set successfully: instance={instance_id}, response={response}")
+        except Exception as e:
+            logger.error(f"Config update FAILED: Failed to set instance attributes to tags - instance={instance_id}, error={str(e)}", exc_info=True)
+            return False
+        
+        shutdown_method = response.get('shutdownMethod', '')
+        logger.info(f"Config update: Processing shutdown method - instance={instance_id}, method={shutdown_method}")
+        
+        # Handle Schedule-based shutdown
         if shutdown_method == 'Schedule':
             stop_schedule = response.get('stopScheduleExpression')
             if not stop_schedule:
-                logger.error("Missing schedule expression")
+                logger.error(f"Config update FAILED: Missing stop schedule expression - instance={instance_id}")
                 return False
             
             try:
                 # Remove alarm (switching to schedule)
+                logger.info(f"Config update: Removing alarm (switching to schedule) - instance={instance_id}")
                 ec2_utils.remove_alarm(instance_id)
+                logger.info(f"Alarm removed successfully: instance={instance_id}")
+                
                 # Configure event for scheduled shutdown
+                logger.info(f"Config update: Configuring shutdown schedule - instance={instance_id}, schedule={stop_schedule}")
                 ec2_utils.configure_shutdown_event(instance_id, stop_schedule)
+                logger.info(f"Shutdown schedule configured successfully: instance={instance_id}")
                 
                 # Configure start schedule if provided
                 start_schedule = response.get('startScheduleExpression')
                 if start_schedule:
-                    logger.info("Configuring start schedule: %s", start_schedule)
+                    logger.info(f"Config update: Configuring start schedule - instance={instance_id}, schedule={start_schedule}")
                     ec2_utils.configure_start_event(instance_id, start_schedule)
+                    logger.info(f"Start schedule configured successfully: instance={instance_id}")
                 else:
+                    logger.info(f"Config update: Removing start schedule - instance={instance_id}")
                     ec2_utils.remove_start_event(instance_id)
+                    logger.info(f"Start schedule removed successfully: instance={instance_id}")
                     
             except ValueError as ve:
-                logger.error("Invalid schedule expression: %s", str(ve))
+                logger.error(f"Config update FAILED: Invalid schedule expression - instance={instance_id}, error={str(ve)}", exc_info=True)
                 return False
             except Exception as e:
-                logger.error("Error configuring schedule: %s", str(e))
+                logger.error(f"Config update FAILED: Error configuring schedule - instance={instance_id}, error={str(e)}", exc_info=True)
                 return False
                 
+        # Handle CPU/Connections-based shutdown
         elif shutdown_method in ['CPUUtilization', 'Connections']:
-            # CPU/Connections selected - activate alarm, deactivate schedule
             alarm_threshold = response.get('alarmThreshold')
             alarm_period = response.get('alarmEvaluationPeriod')
             
             if alarm_threshold is None or alarm_period is None:
-                logger.error("Missing alarmEvaluationPeriod or alarmThreshold for alarm-based shutdown")
+                logger.error(f"Config update FAILED: Missing alarm parameters - instance={instance_id}, threshold={alarm_threshold}, period={alarm_period}")
                 return False
             
-            # Remove schedule events (switching to alarm)
-            ec2_utils.remove_shutdown_event(instance_id)
-            ec2_utils.remove_start_event(instance_id)
-            # Create alarm
-            ec2_utils.update_alarm(instance_id, shutdown_method, alarm_threshold, alarm_period)
-            logger.info(f"Created {shutdown_method} alarm with threshold {alarm_threshold}")
+            try:
+                # Remove schedule events (switching to alarm)
+                logger.info(f"Config update: Removing schedule events (switching to alarm) - instance={instance_id}")
+                ec2_utils.remove_shutdown_event(instance_id)
+                ec2_utils.remove_start_event(instance_id)
+                logger.info(f"Schedule events removed successfully: instance={instance_id}")
+                
+                # Create alarm
+                logger.info(f"Config update: Creating {shutdown_method} alarm - instance={instance_id}, threshold={alarm_threshold}, period={alarm_period}")
+                ec2_utils.update_alarm(instance_id, shutdown_method, alarm_threshold, alarm_period)
+                logger.info(f"Alarm created successfully: instance={instance_id}, type={shutdown_method}")
+            except Exception as e:
+                logger.error(f"Config update FAILED: Error configuring alarm - instance={instance_id}, error={str(e)}", exc_info=True)
+                return False
         else:
-            logger.warning(f"Unknown shutdown method: {shutdown_method}")
+            if shutdown_method:
+                logger.warning(f"Config update: Unknown shutdown method - instance={instance_id}, method={shutdown_method}")
+            else:
+                logger.info(f"Config update: No shutdown method specified - instance={instance_id}")
         
+        logger.info(f"Config update SUCCESS: Configuration updated successfully - instance={instance_id}")
         return True
+        
     except Exception as e:
-        logger.error(f"Error updating config: {e}")
+        logger.error(f"Config update handler FAILED with exception: instance={instance_id}, error={str(e)}", exc_info=True)
         return False
 
 def handler(event, context):
     """SQS event handler"""
-    for record in event['Records']:
+    logger.info(f"SQS handler invoked: record_count={len(event.get('Records', []))}")
+    
+    for idx, record in enumerate(event['Records']):
+        message_id = record.get('messageId', 'unknown')
+        logger.info(f"Processing SQS message {idx + 1}/{len(event['Records'])}: messageId={message_id}")
+        
         success = process_server_action(record['body'])
+        
         if not success:
-            logger.error(f"Failed to process message: {record['messageId']}")
+            logger.error(f"Message processing FAILED: messageId={message_id}")
             # Message will be retried or sent to DLQ based on SQS configuration
+        else:
+            logger.info(f"Message processing SUCCESS: messageId={message_id}")

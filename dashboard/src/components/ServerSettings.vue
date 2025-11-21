@@ -64,17 +64,27 @@ const selectedWeekdays = ref([]);
 const selectedTime = ref(null);
 const selectedStartTime = ref(null);
 const enableStartSchedule = ref(false);
+
 // Weekdays options for selection
 const weekdayOptions = ref([
   { text: 'Select All', value: 'ALL' },
-  { text: 'Monday', value: 'MON' },
-  { text: 'Tuesday', value: 'TUE' },
-  { text: 'Wednesday', value: 'WED' },
-  { text: 'Thursday', value: 'THU' },
-  { text: 'Friday', value: 'FRI' },
-  { text: 'Saturday', value: 'SAT' },
-  { text: 'Sunday', value: 'SUN' },
+  { text: 'Monday', value: 'MON', icon: 'mdi-alpha-m-circle' },
+  { text: 'Tuesday', value: 'TUE', icon: 'mdi-alpha-t-circle' },
+  { text: 'Wednesday', value: 'WED', icon: 'mdi-alpha-w-circle' },
+  { text: 'Thursday', value: 'THU', icon: 'mdi-alpha-t-circle' },
+  { text: 'Friday', value: 'FRI', icon: 'mdi-alpha-f-circle' },
+  { text: 'Saturday', value: 'SAT', icon: 'mdi-alpha-s-circle' },
+  { text: 'Sunday', value: 'SUN', icon: 'mdi-alpha-s-circle' },
 ]);
+
+// Quick schedule presets
+const schedulePresets = ref([
+  { name: 'Weekday Evenings', days: ['MON', 'TUE', 'WED', 'THU', 'FRI'], start: '17:00', stop: '23:00' },
+  { name: 'Weekend All Day', days: ['SAT', 'SUN'], start: '08:00', stop: '23:00' },
+  { name: 'Every Evening', days: ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'], start: '18:00', stop: '23:00' },
+  { name: 'Business Hours', days: ['MON', 'TUE', 'WED', 'THU', 'FRI'], start: '09:00', stop: '17:00' },
+]);
+
 // Time options for dropdown
 const timeOptions = ref([]);
 
@@ -96,6 +106,82 @@ const allWeekdayValues = computed(() => {
   return weekdayOptions.value
     .filter(option => option.value !== 'ALL')
     .map(option => option.value);
+});
+
+// Computed property to check for schedule conflicts
+const scheduleWarning = computed(() => {
+    if (!enableStartSchedule.value || !selectedStartTime.value || !selectedTime.value) {
+        return null;
+    }
+    
+    const [startHour, startMin] = selectedStartTime.value.split(':').map(Number);
+    const [stopHour, stopMin] = selectedTime.value.split(':').map(Number);
+    
+    const startMinutes = startHour * 60 + startMin;
+    const stopMinutes = stopHour * 60 + stopMin;
+    
+    if (startMinutes >= stopMinutes) {
+        return {
+            type: 'warning',
+            message: 'Start time is after or equal to stop time. Server will run for less than expected or across midnight.'
+        };
+    }
+    
+    const runningMinutes = stopMinutes - startMinutes;
+    const runningHours = Math.floor(runningMinutes / 60);
+    const remainingMinutes = runningMinutes % 60;
+    
+    if (runningMinutes < 60) {
+        return {
+            type: 'warning',
+            message: `Server will only run for ${runningMinutes} minutes per day. Consider extending the schedule.`
+        };
+    }
+    
+    return {
+        type: 'info',
+        message: `Server will run for ${runningHours}h ${remainingMinutes}m per scheduled day.`
+    };
+});
+
+// Computed property for metric-based shutdown warnings
+const metricWarning = computed(() => {
+    if (selectedShutdownMethod.value?.metric === 'Schedule') {
+        return null;
+    }
+    
+    const threshold = Number(serverConfigInput.alarmThreshold);
+    const period = Number(serverConfigInput.alarmEvaluationPeriod);
+    
+    if (!threshold || !period) {
+        return null;
+    }
+    
+    if (selectedShutdownMethod.value?.metric === 'CPUUtilization') {
+        if (threshold > 20) {
+            return {
+                type: 'warning',
+                message: 'CPU threshold above 20% may cause premature shutdowns during normal gameplay.'
+            };
+        }
+        if (period < 10) {
+            return {
+                type: 'warning',
+                message: 'Evaluation period under 10 minutes may cause false shutdowns during temporary CPU spikes.'
+            };
+        }
+    }
+    
+    if (selectedShutdownMethod.value?.metric === 'Connections') {
+        if (threshold > 0 && period < 5) {
+            return {
+                type: 'warning',
+                message: 'Short evaluation period may shutdown server when players briefly disconnect.'
+            };
+        }
+    }
+    
+    return null;
 });
 
 const isRequiredOnlyRules = [
@@ -134,6 +220,18 @@ function handleWeekdaySelection(newValue) {
     // If all weekdays were previously selected and one is deselected, remove "Select All"
     selectedWeekdays.value = newValue.filter(day => day !== 'ALL');
   }
+}
+
+// Apply a schedule preset
+function applyPreset(preset) {
+    selectedWeekdays.value = [...preset.days];
+    selectedStartTime.value = preset.start;
+    selectedTime.value = preset.stop;
+    enableStartSchedule.value = true;
+    
+    snackText.value = `Applied preset: ${preset.name}`;
+    snackbar.value = true;
+    snackColor.value = "info";
 }
 
 // Computed property for the hint
@@ -192,25 +290,51 @@ onMounted(async () => {
 function parseCronExpression(cronExpression) {
     if (!cronExpression) return;
     
-    const parts = cronExpression.split(' ');
-    if (parts.length !== 5) return;
+    let parts = cronExpression.trim().split(' ');
+    
+    // Handle EventBridge format: cron(minutes hours day month day-of-week year)
+    if (cronExpression.startsWith('cron(') && cronExpression.endsWith(')')) {
+        const cronContent = cronExpression.slice(5, -1); // Remove 'cron(' and ')'
+        parts = cronContent.split(' ');
+    }
+    
+    // Support both 5-field (standard) and 6-field (EventBridge) cron
+    if (parts.length !== 5 && parts.length !== 6) {
+        console.warn('Invalid cron expression format:', cronExpression);
+        return;
+    }
     
     const minutes = parts[0];
     const hours = parts[1];
+    // For 6-field format: parts[2] is day, parts[3] is month, parts[4] is day-of-week
+    // For 5-field format: parts[2] is day, parts[3] is month, parts[4] is day-of-week
     const weekdaysPart = parts[4];
+    
+    // Skip if weekdays is wildcard or question mark
+    if (weekdaysPart === '*' || weekdaysPart === '?') {
+        console.warn('Cron expression uses wildcard for weekdays, cannot parse specific days');
+        return;
+    }
     
     // Set time
     selectedTime.value = `${hours.padStart(2, '0')}:${minutes.padStart(2, '0')}`;
     
-    // Set weekdays
-    const weekdayMap = { '0': 'SUN', '1': 'MON', '2': 'TUE', '3': 'WED', '4': 'THU', '5': 'FRI', '6': 'SAT' };
+    // Set weekdays - handle both standard cron (0-6) and EventBridge (1-7)
+    const weekdayMap = { 
+        '0': 'SUN', '1': 'MON', '2': 'TUE', '3': 'WED', 
+        '4': 'THU', '5': 'FRI', '6': 'SAT', '7': 'SUN' // EventBridge uses 7 for Sunday
+    };
     const selectedDays = [];
     
     if (weekdaysPart.includes(',')) {
         const days = weekdaysPart.split(',');
         days.forEach(day => {
-            if (weekdayMap[day]) {
-                selectedDays.push(weekdayMap[day]);
+            if (weekdayMap[day.trim()]) {
+                const dayName = weekdayMap[day.trim()];
+                // Avoid duplicates (both 0 and 7 map to SUN)
+                if (!selectedDays.includes(dayName)) {
+                    selectedDays.push(dayName);
+                }
             }
         });
     } else if (weekdayMap[weekdaysPart]) {
@@ -229,8 +353,19 @@ function parseCronExpression(cronExpression) {
 function parseStartCronExpression(cronExpression) {
     if (!cronExpression) return;
     
-    const parts = cronExpression.split(' ');
-    if (parts.length !== 5) return;
+    let parts = cronExpression.trim().split(' ');
+    
+    // Handle EventBridge format: cron(minutes hours day month day-of-week year)
+    if (cronExpression.startsWith('cron(') && cronExpression.endsWith(')')) {
+        const cronContent = cronExpression.slice(5, -1); // Remove 'cron(' and ')'
+        parts = cronContent.split(' ');
+    }
+    
+    // Support both 5-field (standard) and 6-field (EventBridge) cron
+    if (parts.length !== 5 && parts.length !== 6) {
+        console.warn('Invalid start cron expression format:', cronExpression);
+        return;
+    }
     
     const minutes = parts[0];
     const hours = parts[1];
@@ -438,6 +573,29 @@ async function onSubmit() {
                                     </v-card-text>
                                 </v-card>
 
+                                <!-- Quick Presets -->
+                                <v-card variant="outlined" class="mb-4">
+                                    <v-card-text class="pa-4">
+                                        <div class="d-flex align-center mb-3">
+                                            <v-icon class="me-2" size="20">mdi-lightning-bolt</v-icon>
+                                            <span class="text-subtitle-2 font-weight-medium">Quick Presets</span>
+                                        </div>
+                                        <div class="d-flex flex-wrap gap-2">
+                                            <v-chip
+                                                v-for="preset in schedulePresets"
+                                                :key="preset.name"
+                                                @click="applyPreset(preset)"
+                                                variant="outlined"
+                                                color="primary"
+                                                class="cursor-pointer"
+                                                prepend-icon="mdi-clock-fast"
+                                            >
+                                                {{ preset.name }}
+                                            </v-chip>
+                                        </div>
+                                    </v-card-text>
+                                </v-card>
+
                                 <v-row>
                                     <v-col cols="12" md="6">
                                         <v-select
@@ -506,36 +664,86 @@ async function onSubmit() {
                                     </v-row>
                                 </v-expand-transition>
 
+                                <!-- Schedule Warnings -->
+                                <v-expand-transition>
+                                    <v-alert 
+                                        v-if="scheduleWarning"
+                                        :type="scheduleWarning.type" 
+                                        variant="tonal" 
+                                        class="mt-4"
+                                        border="start"
+                                    >
+                                        <template v-slot:prepend>
+                                            <v-icon>{{ scheduleWarning.type === 'warning' ? 'mdi-alert' : 'mdi-information' }}</v-icon>
+                                        </template>
+                                        {{ scheduleWarning.message }}
+                                    </v-alert>
+                                </v-expand-transition>
+
+                                <!-- Schedule Summary -->
                                 <v-expand-transition>
                                     <div v-if="generatedCronExpression">
-                                        <v-alert 
-                                            type="info" 
-                                            variant="tonal" 
-                                            class="mt-4"
-                                            border="start"
-                                            border-color="info"
-                                        >
-                                            <template v-slot:prepend>
-                                                <v-icon>mdi-information</v-icon>
-                                            </template>
-                                            <div class="font-weight-medium mb-2">Schedule Summary</div>
-                                            <div v-if="enableStartSchedule && selectedStartTime" class="mb-2">
-                                                Server will <strong>start at {{ selectedStartTime }}</strong> and <strong>shutdown at {{ selectedTime }}</strong> on 
-                                                {{ selectedWeekdays.includes('ALL') ? 'all days' : 
-                                                selectedWeekdays.filter(day => day !== 'ALL').join(', ') }}
-                                            </div>
-                                            <div v-else class="mb-2">
-                                                Server will <strong>shutdown at {{ selectedTime }}</strong> on 
-                                                {{ selectedWeekdays.includes('ALL') ? 'all days' : 
-                                                selectedWeekdays.filter(day => day !== 'ALL').join(', ') }}
-                                            </div>
-                                            <div class="text-caption">
-                                                <div v-if="enableStartSchedule && selectedStartTime">
-                                                    Start cron: <code>{{ generatedStartCronExpression }}</code>
+                                        <v-card variant="outlined" class="mt-4" color="primary">
+                                            <v-card-text class="pa-4">
+                                                <div class="d-flex align-center mb-3">
+                                                    <v-icon class="me-2" color="primary">mdi-calendar-check</v-icon>
+                                                    <span class="font-weight-bold">Schedule Summary</span>
                                                 </div>
-                                                <div>Shutdown cron: <code>{{ generatedCronExpression }}</code></div>
-                                            </div>
-                                        </v-alert>
+                                                
+                                                <!-- Visual Day Indicators -->
+                                                <div class="d-flex gap-2 mb-4 flex-wrap">
+                                                    <v-chip
+                                                        v-for="day in weekdayOptions.filter(d => d.value !== 'ALL')"
+                                                        :key="day.value"
+                                                        :color="selectedWeekdays.includes(day.value) ? 'primary' : 'default'"
+                                                        :variant="selectedWeekdays.includes(day.value) ? 'flat' : 'outlined'"
+                                                        size="small"
+                                                        class="font-weight-medium"
+                                                    >
+                                                        {{ day.text.substring(0, 3) }}
+                                                    </v-chip>
+                                                </div>
+
+                                                <div v-if="enableStartSchedule && selectedStartTime" class="mb-3">
+                                                    <div class="d-flex align-center mb-2">
+                                                        <v-icon size="20" class="me-2" color="success">mdi-play-circle</v-icon>
+                                                        <span class="text-body-2">
+                                                            Server <strong class="text-success">starts</strong> at 
+                                                            <strong>{{ selectedStartTime }}</strong>
+                                                        </span>
+                                                    </div>
+                                                    <div class="d-flex align-center">
+                                                        <v-icon size="20" class="me-2" color="error">mdi-stop-circle</v-icon>
+                                                        <span class="text-body-2">
+                                                            Server <strong class="text-error">stops</strong> at 
+                                                            <strong>{{ selectedTime }}</strong>
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                <div v-else class="mb-3">
+                                                    <div class="d-flex align-center">
+                                                        <v-icon size="20" class="me-2" color="error">mdi-stop-circle</v-icon>
+                                                        <span class="text-body-2">
+                                                            Server <strong class="text-error">stops</strong> at 
+                                                            <strong>{{ selectedTime }}</strong>
+                                                        </span>
+                                                    </div>
+                                                </div>
+
+                                                <v-divider class="my-3"></v-divider>
+
+                                                <div class="text-caption text-medium-emphasis">
+                                                    <div v-if="enableStartSchedule && selectedStartTime" class="mb-1">
+                                                        <v-icon size="16" class="me-1">mdi-code-braces</v-icon>
+                                                        Start: <code class="text-caption">{{ generatedStartCronExpression }}</code>
+                                                    </div>
+                                                    <div>
+                                                        <v-icon size="16" class="me-1">mdi-code-braces</v-icon>
+                                                        Stop: <code class="text-caption">{{ generatedCronExpression }}</code>
+                                                    </div>
+                                                </div>
+                                            </v-card-text>
+                                        </v-card>
                                     </div>
                                 </v-expand-transition>
                             </div>
@@ -583,23 +791,49 @@ async function onSubmit() {
                                     </v-col>
                                 </v-row>
 
-                                <v-alert 
-                                    type="info" 
-                                    variant="tonal" 
-                                    class="mt-4"
-                                    border="start"
-                                    border-color="info"
-                                >
-                                    <template v-slot:prepend>
-                                        <v-icon>mdi-information</v-icon>
-                                    </template>
-                                    <div class="font-weight-medium">Shutdown Condition</div>
-                                    <div>
-                                        The server will shutdown when {{ selectedShutdownMethod.abbr }} is below 
-                                        <strong>{{ serverConfigInput.alarmThreshold }}{{ selectedShutdownMethod.metric === 'CPUUtilization' ? '%' : ' users' }}</strong> 
-                                        for <strong>{{ serverConfigInput.alarmEvaluationPeriod }} minutes</strong>
-                                    </div>
-                                </v-alert>
+                                <!-- Metric Warning -->
+                                <v-expand-transition>
+                                    <v-alert 
+                                        v-if="metricWarning"
+                                        :type="metricWarning.type" 
+                                        variant="tonal" 
+                                        class="mt-4"
+                                        border="start"
+                                    >
+                                        <template v-slot:prepend>
+                                            <v-icon>mdi-alert</v-icon>
+                                        </template>
+                                        {{ metricWarning.message }}
+                                    </v-alert>
+                                </v-expand-transition>
+
+                                <!-- Shutdown Condition Summary -->
+                                <v-card variant="outlined" class="mt-4" color="orange">
+                                    <v-card-text class="pa-4">
+                                        <div class="d-flex align-center mb-3">
+                                            <v-icon class="me-2" color="orange">mdi-information</v-icon>
+                                            <span class="font-weight-bold">Shutdown Condition</span>
+                                        </div>
+                                        <div class="text-body-2">
+                                            The server will <strong class="text-error">automatically shutdown</strong> when 
+                                            {{ selectedShutdownMethod.abbr }} is 
+                                            <strong class="text-orange">≤ {{ serverConfigInput.alarmThreshold }}{{ selectedShutdownMethod.metric === 'CPUUtilization' ? '%' : ' users' }}</strong> 
+                                            for <strong class="text-orange">{{ serverConfigInput.alarmEvaluationPeriod }} consecutive minutes</strong>
+                                        </div>
+                                        
+                                        <v-divider class="my-3"></v-divider>
+                                        
+                                        <div class="d-flex align-center text-caption text-medium-emphasis">
+                                            <v-icon size="16" class="me-1">mdi-lightbulb-on-outline</v-icon>
+                                            <span>
+                                                <strong>Tip:</strong> 
+                                                {{ selectedShutdownMethod.metric === 'CPUUtilization' 
+                                                    ? 'Lower CPU thresholds (3-5%) work well for idle detection' 
+                                                    : 'Set to 0 users to shutdown when server is empty' }}
+                                            </span>
+                                        </div>
+                                    </v-card-text>
+                                </v-card>
                             </div>
                         </v-expand-transition>
                     </div>
@@ -697,11 +931,36 @@ async function onSubmit() {
 
 <style scoped>
 .custom-icon {
-  color: #9e9e9e; /* Gray color by default */
+  color: #9e9e9e;
   transition: color 0.3s ease;
 }
 
 .custom-icon:hover {
-  color: #1976d2; /* Primary blue color on hover */
+  color: #1976d2;
+}
+
+.cursor-pointer {
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.cursor-pointer:hover {
+  transform: translateY(-2px);
+}
+
+.gap-2 {
+  gap: 8px;
+}
+
+code {
+  background-color: rgba(0, 0, 0, 0.05);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: 'Courier New', monospace;
+  font-size: 0.875em;
+}
+
+.border-b {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.12);
 }
 </style>

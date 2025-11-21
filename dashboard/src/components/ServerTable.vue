@@ -37,7 +37,7 @@
                 v-bind="props" 
                 @click.stop="$emit('open-power', item.id)"
               >
-                <v-icon :color="getPowerIconColor(item.state)">mdi-power</v-icon>
+                <v-icon size="x-large" :color="getPowerIconColor(item.state)">mdi-power</v-icon>
               </v-btn>
             </template>
           </v-tooltip>

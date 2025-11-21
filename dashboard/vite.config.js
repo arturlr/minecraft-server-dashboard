@@ -13,5 +13,12 @@ export default defineConfig({
       replacement: './runtimeConfig.browser',
     }
   ]
+  },
+  test: {
+    globals: true,
+    environment: 'happy-dom',
+    css: {
+      include: /.+/,
+    },
   }
 })

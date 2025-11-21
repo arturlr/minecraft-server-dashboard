@@ -37,23 +37,32 @@ def check_authorization(event, instance_id, user_attributes):
     cognito_groups = event["identity"].get("groups", [])
     user_email = user_attributes["email"]
     
+    logger.info(f"Authorization check: user={user_email}, instance={instance_id}, groups={cognito_groups}")
+    
     # Use the centralized authorization check from utilHelper
-    is_authorized, auth_reason = utl.check_user_authorization(
-        cognito_groups, 
-        instance_id, 
-        user_email, 
-        ec2_utils
-    )
-    
-    if is_authorized:
-        if auth_reason == "admin_group":
-            logger.info("Authorized server action for admin user %s on instance %s", user_email, instance_id)
-        elif auth_reason == "instance_group":
-            logger.info("Authorized server action for group member %s on instance %s", user_email, instance_id)
-        elif auth_reason == "instance_owner":
-            logger.info("Authorized server action as owner for email %s on instance %s", user_email, instance_id)
-    
-    return is_authorized
+    try:
+        is_authorized, auth_reason = utl.check_user_authorization(
+            cognito_groups, 
+            instance_id, 
+            user_email, 
+            ec2_utils
+        )
+        
+        if is_authorized:
+            if auth_reason == "admin_group":
+                logger.info(f"Authorization SUCCESS: Admin user {user_email} authorized for instance {instance_id}")
+            elif auth_reason == "instance_group":
+                logger.info(f"Authorization SUCCESS: Group member {user_email} authorized for instance {instance_id}")
+            elif auth_reason == "instance_owner":
+                logger.info(f"Authorization SUCCESS: Owner {user_email} authorized for instance {instance_id}")
+        else:
+            logger.warning(f"Authorization DENIED: User {user_email} not authorized for instance {instance_id}")
+        
+        return is_authorized
+        
+    except Exception as e:
+        logger.error(f"Authorization check FAILED with exception: user={user_email}, instance={instance_id}, error={str(e)}", exc_info=True)
+        raise
 
 def check_and_create_group(instance_id, user_name):
     """
@@ -79,29 +88,211 @@ def check_and_create_group(instance_id, user_name):
         
     return True
 
-def send_to_queue(action, instance_id, arguments=None, user_email=None):
-    """Send action to SQS queue for async processing"""
-    if not server_action_queue_url:
-        logger.warning("No queue URL configured, processing synchronously")
-        return action_process_sync(action, instance_id, arguments)
+def send_status_to_appsync(action, instance_id, status, message=None, user_email=None):
+    """
+    Send action status update to AppSync for real-time subscriptions
     
-    message = {
-        'action': action,
-        'instanceId': instance_id,
-        'arguments': arguments,
-        'userEmail': user_email,
-        'timestamp': int(time.time())
+    Args:
+        action: Action being performed
+        instance_id: EC2 instance ID
+        status: Status of the action (PROCESSING, COMPLETED, FAILED)
+        message: Optional status message
+        user_email: Email of user who initiated the action
+        
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    logger.info(f"AppSync status update: action={action}, instance={instance_id}, status={status}, user={user_email}")
+    
+    appsync_url = os.getenv('APPSYNC_URL')
+    if not appsync_url:
+        logger.warning(f"AppSync status update SKIPPED: APPSYNC_URL not configured for action={action}, instance={instance_id}")
+        return False
+    
+    mutation = """
+    mutation PutServerActionStatus($input: ServerActionStatusInput!) {
+        putServerActionStatus(input: $input) {
+            id
+            action
+            status
+            timestamp
+            message
+            userEmail
+        }
+    }
+    """
+    
+    variables = {
+        "input": {
+            "id": instance_id,
+            "action": action,
+            "status": status,
+            "timestamp": int(time.time()),
+            "message": message,
+            "userEmail": user_email
+        }
     }
     
     try:
-        sqs_client.send_message(
+        # Get AWS credentials for signing the request
+        session = boto3.Session()
+        credentials = session.get_credentials()
+        
+        # Prepare the GraphQL request
+        headers = {
+            'Content-Type': 'application/json'
+        }
+        
+        payload = {
+            'query': mutation,
+            'variables': variables
+        }
+        
+        # Use requests_aws4auth if available, otherwise use IAM auth
+        try:
+            from requests_aws4auth import AWS4Auth
+            region = os.getenv('AWS_REGION', 'us-east-1')
+            auth_header = AWS4Auth(
+                credentials.access_key,
+                credentials.secret_key,
+                region,
+                'appsync',
+                session_token=credentials.token
+            )
+            
+            import requests
+            response = requests.post(
+                appsync_url,
+                auth=auth_header,
+                json=payload,
+                headers=headers
+            )
+            
+            if response.status_code == 200:
+                logger.info(f"AppSync status update SUCCESS: action={action}, instance={instance_id}, status={status}")
+                return True
+            else:
+                logger.error(f"AppSync status update FAILED: action={action}, instance={instance_id}, status={status}, http_code={response.status_code}, response={response.text}")
+                return False
+                
+        except ImportError as ie:
+            # Fallback: log the status update but don't fail
+            logger.warning(f"AppSync status update SKIPPED: requests_aws4auth not available - action={action}, instance={instance_id}, error={str(ie)}")
+            logger.info(f"Status update (not sent): {action} on {instance_id} - {status}: {message}")
+            return False
+            
+    except Exception as e:
+        logger.error(f"AppSync status update FAILED with exception: action={action}, instance={instance_id}, status={status}, error={str(e)}", exc_info=True)
+        return False
+
+def validate_queue_message(action, instance_id, arguments=None, user_email=None):
+    """
+    Validate message before sending to queue
+    
+    Args:
+        action: Action to perform (required)
+        instance_id: EC2 instance ID (required)
+        arguments: Optional arguments for the action
+        user_email: Email of user initiating the action (optional)
+        
+    Returns:
+        tuple: (is_valid, error_message)
+    """
+    # Validate required fields
+    if not action or not isinstance(action, str) or not action.strip():
+        return False, "Action is required and must be a non-empty string"
+    
+    if not instance_id or not isinstance(instance_id, str) or not instance_id.strip():
+        return False, "Instance ID is required and must be a non-empty string"
+    
+    # Validate action is one of the allowed types
+    allowed_actions = [
+        'start', 'stop', 'restart',
+        'startServer', 'stopServer', 'restartServer',
+        'fixServerRole', 'fixserverrole',
+        'putServerConfig', 'putserverconfig',
+        'updateServerConfig', 'updateserverconfig'
+    ]
+    if action.lower() not in [a.lower() for a in allowed_actions]:
+        return False, f"Invalid action: {action}. Must be one of {allowed_actions}"
+    
+    # Validate optional fields if provided
+    if arguments is not None and not isinstance(arguments, dict):
+        return False, "Arguments must be a dictionary if provided"
+    
+    if user_email is not None and (not isinstance(user_email, str) or not user_email.strip()):
+        return False, "User email must be a non-empty string if provided"
+    
+    return True, None
+
+def send_to_queue(action, instance_id, arguments=None, user_email=None):
+    """
+    Send action to SQS queue for async processing and send initial PROCESSING status to AppSync
+    
+    Args:
+        action: Action to perform (start, stop, restart, etc.)
+        instance_id: EC2 instance ID
+        arguments: Optional arguments for the action
+        user_email: Email of user initiating the action
+        
+    Returns:
+        dict: Response with 202 status if successful, 400 for validation errors, 500 if failed
+    """
+    logger.info(f"Queue operation initiated: action={action}, instance={instance_id}, user={user_email}")
+    
+    if not server_action_queue_url:
+        logger.error(f"Queue operation FAILED: No queue URL configured for action={action}, instance={instance_id}")
+        return utl.response(500, {"err": "Queue not configured"})
+    
+    # Validate message before sending
+    is_valid, error_message = validate_queue_message(action, instance_id, arguments, user_email)
+    if not is_valid:
+        logger.error(f"Queue operation FAILED: Message validation failed for action={action}, instance={instance_id}, error={error_message}")
+        return utl.response(400, {"err": error_message})
+    
+    # Build message with all required fields
+    message = {
+        'action': action,
+        'instanceId': instance_id,
+        'timestamp': int(time.time())
+    }
+    
+    # Include optional fields only if provided
+    if arguments is not None:
+        message['arguments'] = arguments
+    
+    if user_email is not None:
+        message['userEmail'] = user_email
+    
+    logger.info(f"Queue operation: Sending message to SQS - action={action}, instance={instance_id}, queue={server_action_queue_url}")
+    
+    try:
+        # Send message to SQS queue
+        response = sqs_client.send_message(
             QueueUrl=server_action_queue_url,
             MessageBody=json.dumps(message)
         )
-        logger.info(f"Queued action {action} for instance {instance_id}")
+        message_id = response.get('MessageId', 'unknown')
+        logger.info(f"Queue operation SUCCESS: Message sent to SQS - action={action}, instance={instance_id}, messageId={message_id}")
+        
+        # Send initial PROCESSING status to AppSync
+        logger.info(f"Sending initial PROCESSING status to AppSync: action={action}, instance={instance_id}")
+        status_sent = send_status_to_appsync(
+            action=action,
+            instance_id=instance_id,
+            status="PROCESSING",
+            message=f"{action.capitalize()} request queued for processing",
+            user_email=user_email
+        )
+        
+        if status_sent:
+            logger.info(f"Initial status update SUCCESS: action={action}, instance={instance_id}")
+        else:
+            logger.warning(f"Initial status update FAILED: action={action}, instance={instance_id}")
+        
         return utl.response(202, {"msg": f"{action.capitalize()} request queued for processing"})
     except Exception as e:
-        logger.error(f"Failed to queue action: {e}")
+        logger.error(f"Queue operation FAILED with exception: action={action}, instance={instance_id}, error={str(e)}", exc_info=True)
         return utl.response(500, {"err": "Failed to queue action"})
 
 def action_process_sync(action, instance_id, arguments=None):
@@ -139,7 +330,19 @@ def handle_local_invocation(event, context):
     return action_process_sync(event["action"], event["instanceId"])
 
 def handler(event, context):
+    """
+    Main handler for ServerAction Lambda
+    Validates authorization and routes requests to appropriate handlers
+    
+    Args:
+        event: Lambda event from AppSync
+        context: Lambda context
+        
+    Returns:
+        dict: Response with appropriate status code and body
+    """
     try:
+        # Check for authorization header
         if 'request' in event:
             if 'headers' in event['request']:
                 if 'authorization' in event['request']['headers']:
@@ -147,29 +350,34 @@ def handler(event, context):
                     token = event['request']['headers']['authorization']
                 else:
                     logger.error("No Authorization header found")
-                    return utl.response(401,{"err": "No Authorization header found" })
+                    return utl.response(401, {"err": "No Authorization header found"})
             else:
                 logger.error("No headers found in request")
-                return utl.response(401,{"err": "No headers found in request" })
+                return utl.response(401, {"err": "No headers found in request"})
         else:
             # Local invocation
             return handle_local_invocation(event, context)
 
     except Exception as e:
-        logger.error("Error processing request: %s", e)
-        return utl.response(401,{"err": str(e) })
+        logger.error("Error processing request headers: %s", e)
+        return utl.response(401, {"err": str(e)})
 
-    # Get user info
-    user_attributes = auth.process_token(token)    
+    # Get user info from JWT token
+    try:
+        user_attributes = auth.process_token(token)
+    except Exception as e:
+        logger.error(f"Token processing FAILED: error={str(e)}", exc_info=True)
+        return utl.response(401, {"err": "Invalid token"})
 
     # Check if claims are valid
     if user_attributes is None:
         logger.error("Invalid Token")
-        return "Invalid Token"
+        return utl.response(401, {"err": "Invalid token"})
 
+    # Validate arguments exist
     if not event.get("arguments"):
         logger.error("No arguments found in the event")
-        return {"error": "No arguments found in the event"}
+        return utl.response(400, {"err": "No arguments found in the event"})
 
     # Extract instance_id from arguments
     instance_id = (event["arguments"].get("instanceId") or 
@@ -178,12 +386,12 @@ def handler(event, context):
 
     if not instance_id:
         logger.error("Instance id is not present in the event") 
-        return {"error": "Instance id is not present in the event"}
+        return utl.response(400, {"err": "Instance id is not present in the event"})
 
     # Extract input arguments if present
-    input = None
+    input_data = None
     if input_args := event["arguments"].get("input"):
-        input = {
+        input_data = {
             'id': instance_id,
             'shutdownMethod': input_args.get('shutdownMethod', ''),
             'stopScheduleExpression': input_args.get('stopScheduleExpression', ''),
@@ -197,20 +405,24 @@ def handler(event, context):
     
     logger.info("Received instanceId: %s", instance_id)
 
-    is_authorized = check_authorization(event, instance_id, user_attributes)
+    # Check authorization
+    try:
+        is_authorized = check_authorization(event, instance_id, user_attributes)
+    except Exception as e:
+        logger.error(f"Authorization check FAILED with exception: user={user_attributes.get('email', 'unknown')}, instance={instance_id}, error={str(e)}", exc_info=True)
+        return utl.response(500, {"err": "Authorization check failed"})
 
     if not is_authorized:
-        resp = {"err": "User not authorized"}
-        logger.error("%s is not authorized", user_attributes["email"])
-        return utl.response(401, resp)
+        logger.error("%s is not authorized for instance %s", user_attributes["email"], instance_id)
+        return utl.response(401, {"err": "User not authorized"})
 
     # Field name determines the action to perform
     field_name = event["info"]["fieldName"]
-    logger.info("Received field name: %s", field_name)
+    logger.info("Received field name: %s for user %s", field_name, user_attributes["email"])
     
     # Read-only operations processed immediately
     if field_name.lower() in ["getserverconfig", "getserverusers"]:
-        return action_process_sync(field_name, instance_id, input)
+        return action_process_sync(field_name, instance_id, input_data)
     
-    # Queue all other operations
-    return send_to_queue(field_name, instance_id, input, user_attributes["email"])
+    # Queue all write operations
+    return send_to_queue(field_name, instance_id, input_data, user_attributes["email"])

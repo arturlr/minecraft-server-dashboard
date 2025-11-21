@@ -97,6 +97,21 @@ cd layers/authHelper && make
   - Automatic rule creation/deletion based on configuration
   - Integration with CloudWatch alarms (mutually exclusive)
 
+### User-Based Auto-Shutdown
+- **Pattern**: CloudWatch custom metrics and alarms for player connection monitoring
+- **Components**:
+  - `port_count.sh`: Bash script that counts TCP connections on port 25565 (Minecraft)
+  - Cron Job: Executes script every minute on EC2 instance
+  - CloudWatch Custom Metric: `UserCount` metric in `MinecraftDashboard` namespace
+  - CloudWatch Alarm: Monitors UserCount and triggers EC2 stop when threshold breached
+- **Configuration**:
+  - Threshold: Number of connected players (0-N)
+  - Evaluation Period: Minutes below threshold before shutdown (1-60)
+  - Statistic: Maximum (captures peak connections in period)
+  - Action: EC2 stop automation when alarm fires
+- **Benefits**: Automatic shutdown when server is idle, prevents premature shutdown during brief disconnections
+- **Cost Savings**: ~$20-50/month in EC2 costs vs ~$0.40/month in CloudWatch costs (50-125x ROI)
+
 ## Code Style Conventions
 - Use ES6+ features and async/await for asynchronous operations
 - Follow Vue 3 Composition API patterns
