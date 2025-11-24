@@ -32,9 +32,13 @@ dashboard/
 - **Authentication Module**: User login/logout and session management
 - **Server Dashboard**: Server metrics and status display with real-time action status
 - **Server Control Panel**: Start/stop/restart functionality with async status tracking
-- **Configuration Manager**: Server settings editor with validation feedback
+- **Configuration Manager**: Server settings editor with validation feedback and smart warnings
+  - Quick schedule presets (weekday evenings, weekends, business hours)
+  - Visual schedule summary with day chips and runtime calculations
+  - Smart validation warnings (timing conflicts, short durations, high thresholds)
+  - Separate user management with dedicated query
 - **ServerConfigDebug**: Debug view for configuration validation warnings/errors
-- **User Management**: Server access control
+- **User Management**: Server access control with separate data loading
 - **Cost Monitor**: Usage costs and projections
 
 ## Backend Structure
@@ -43,14 +47,19 @@ dashboard/
 - **eventResponse/**: Processes EC2 state changes and metrics
 - **getMonthlyCost/**: Retrieves AWS cost data from Cost Explorer API
 - **listServers/**: Lists available Minecraft servers from EC2 with tag validation and auto-configuration
-- **serverAction/**: Queues server actions to SQS for asynchronous processing
-- **serverActionProcessor/**: Processes server actions from SQS queue (start/stop/restart/config updates)
+- **serverAction/**: Validates and queues server control actions (start/stop/restart/config) to SQS for asynchronous processing
+- **serverActionProcessor/**: Processes server control actions from SQS queue (start/stop/restart/config updates)
+- **fixServerRole/**: Handles IAM instance profile management synchronously (associate/disassociate profiles)
 
 ### Lambda Layers (`layers/`)
 - **authHelper/**: Cognito authentication utilities
 - **dynHelper/**: DynamoDB operations helper
-- **ec2Helper/**: EC2 instance management utilities (includes CloudWatch alarm management for user-based shutdown)
-- **utilHelper/**: Common utility functions
+- **ec2Helper/**: EC2 instance management utilities
+  - CloudWatch alarm management (CPU-based and user-based shutdown)
+  - EventBridge rule management for scheduled operations
+  - Cron expression validation and formatting (5-field to 6-field EventBridge format)
+  - IAM instance profile operations
+- **utilHelper/**: Common utility functions including authorization checks
 
 ### Infrastructure (`cfn/`)
 ```

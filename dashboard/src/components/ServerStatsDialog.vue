@@ -29,6 +29,7 @@ const loading = ref(false);
 const error = ref(null);
 const reconnectAttempts = ref(0);
 const maxReconnectAttempts = 3;
+const serverChartsRef = ref(null);
 
 // Computed properties for server data with proper memoization
 const server = computed(() => serverStore.serversDict[props.serverId] || {});
@@ -57,6 +58,25 @@ const runningTime = computed(() => {
   if (minutes === 0) return '0 hours';
   const hours = (minutes / 60).toFixed(1);
   return `${hours} hours`;
+});
+
+// Computed property for formatted last update time
+const lastUpdateFormatted = computed(() => {
+  if (!serverChartsRef.value?.lastUpdateTime) {
+    return 'No data yet';
+  }
+  const date = serverChartsRef.value.lastUpdateTime;
+  const now = new Date();
+  const diffSeconds = Math.floor((now - date) / 1000);
+  
+  if (diffSeconds < 60) {
+    return 'Just now';
+  } else if (diffSeconds < 3600) {
+    const minutes = Math.floor(diffSeconds / 60);
+    return `${minutes} minute${minutes > 1 ? 's' : ''} ago`;
+  } else {
+    return date.toLocaleTimeString();
+  }
 });
 
 // Subscribe to metrics
@@ -229,35 +249,41 @@ const closeDialog = () => {
 
         <!-- Server Specs Section -->
         <v-row class="mb-4">
-          <v-col>
+          <v-col cols="12" md="8">
             <v-chip-group column>
-              <v-chip variant="label">
+              <v-chip variant="tonal">
                 <v-icon class="mr-1">mdi-chip</v-icon>
                 {{ vCpus }} vCPU
               </v-chip>
 
-              <v-chip variant="label">
+              <v-chip variant="tonal">
                 <v-icon class="mr-1">mdi-memory</v-icon>
                 {{ memSize }} GB
               </v-chip>
 
-              <v-chip variant="label">
+              <v-chip variant="tonal">
                 <v-icon class="mr-1">mdi-disc</v-icon>
                 {{ diskSize }} GB
               </v-chip>
 
-              <v-chip variant="label">
+              <v-chip variant="tonal">
                 <v-icon class="mr-1">mdi-clock-outline</v-icon>
                 {{ runningTime }}
               </v-chip>
             </v-chip-group>
+          </v-col>
+          <v-col cols="12" md="4" class="d-flex align-center justify-end">
+            <div class="text-caption text-medium-emphasis">
+              <v-icon size="small" class="mr-1">mdi-update</v-icon>
+              Last updated: {{ lastUpdateFormatted }}
+            </div>
           </v-col>
         </v-row>
 
         <!-- Charts Section -->
         <v-row>
           <v-col cols="12">
-            <ServerCharts />
+            <ServerCharts ref="serverChartsRef" />
           </v-col>
         </v-row>
       </v-card-text>

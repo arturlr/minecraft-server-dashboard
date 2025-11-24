@@ -68,14 +68,6 @@ aws s3 sync dist/ s3://[VITE_BUCKET_NAME]
 
 ### 2. Backend Lambda Functions (`./lambdas`)
 
-#### configServer
-- **Purpose**: Handles server initialization and configuration
-- **Triggers**: AppSync API calls
-- **Key Operations**:
-  - Set up new Minecraft server instances
-  - Configure CloudWatch agent
-  - Update server settings
-
 #### eventResponse
 - **Purpose**: Processes EC2 state changes and metrics
 - **Triggers**: CloudWatch Events, AppSync API calls
@@ -101,12 +93,31 @@ aws s3 sync dist/ s3://[VITE_BUCKET_NAME]
   - Format server list for frontend display
 
 #### serverAction
-- **Purpose**: Manages server start/stop/restart operations
+- **Purpose**: Validates and queues server control operations
 - **Triggers**: AppSync API calls
 - **Key Operations**:
+  - Validate user authorization
+  - Queue start/stop/restart/config actions to SQS
+  - Send initial PROCESSING status to AppSync
+  - Handle read-only operations (getServerConfig, getServerUsers) synchronously
+
+#### serverActionProcessor
+- **Purpose**: Processes server control actions asynchronously
+- **Triggers**: SQS queue messages
+- **Key Operations**:
   - Start/stop/restart EC2 instances
-  - Execute commands on instances via SSM
-  - Update server state in DynamoDB
+  - Update server configuration (tags, alarms, schedules)
+  - Manage EventBridge rules for scheduled operations
+  - Send status updates to AppSync (COMPLETED/FAILED)
+
+#### fixServerRole
+- **Purpose**: Manages IAM instance profile association
+- **Triggers**: AppSync API calls (direct, synchronous)
+- **Key Operations**:
+  - Validate existing IAM profile on EC2 instance
+  - Disassociate incorrect profiles
+  - Associate correct instance profile
+  - Retry with exponential backoff for eventual consistency
 
 ### 3. AppSync API (`./appsync`)
 

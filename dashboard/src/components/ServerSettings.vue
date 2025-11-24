@@ -56,7 +56,8 @@ const serverConfigInput = reactive({
     workDir: null,
     stopScheduleExpression: '',
     startScheduleExpression: '',
-    shutdownMethod: null
+    shutdownMethod: null,
+    timezone: 'UTC'
 });
 
 // Variables for weekday scheduling
@@ -83,6 +84,20 @@ const schedulePresets = ref([
   { name: 'Weekend All Day', days: ['SAT', 'SUN'], start: '08:00', stop: '23:00' },
   { name: 'Every Evening', days: ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'], start: '18:00', stop: '23:00' },
   { name: 'Business Hours', days: ['MON', 'TUE', 'WED', 'THU', 'FRI'], start: '09:00', stop: '17:00' },
+]);
+
+// Common timezone options
+const timezoneOptions = ref([
+  { text: 'UTC', value: 'UTC' },
+  { text: 'US/Eastern (EST/EDT)', value: 'America/New_York' },
+  { text: 'US/Central (CST/CDT)', value: 'America/Chicago' },
+  { text: 'US/Mountain (MST/MDT)', value: 'America/Denver' },
+  { text: 'US/Pacific (PST/PDT)', value: 'America/Los_Angeles' },
+  { text: 'Europe/London (GMT/BST)', value: 'Europe/London' },
+  { text: 'Europe/Paris (CET/CEST)', value: 'Europe/Paris' },
+  { text: 'Asia/Tokyo (JST)', value: 'Asia/Tokyo' },
+  { text: 'Asia/Shanghai (CST)', value: 'Asia/Shanghai' },
+  { text: 'Australia/Sydney (AEDT/AEST)', value: 'Australia/Sydney' },
 ]);
 
 // Time options for dropdown
@@ -242,137 +257,79 @@ const selectedMethodHint = computed(() => {
     return '';
 });
 
-// Computed property to generate the cron expression from weekdays and time
-const generatedCronExpression = computed(() => {
-    if (!selectedTime.value || selectedWeekdays.value.length === 0 || 
-        (selectedWeekdays.value.length === 1 && selectedWeekdays.value[0] === 'ALL')) {
+// Helper to generate cron expression from time and weekdays (in local timezone)
+function generateCronExpression(time, weekdays) {
+    if (!time || !weekdays?.length || (weekdays.length === 1 && weekdays[0] === 'ALL')) {
         return null;
     }
     
-    const [hours, minutes] = selectedTime.value.split(':');
+    const [hours, minutes] = time.split(':');
     
-    // Filter out the "ALL" option if present
-    const weekdaysToUse = selectedWeekdays.value.filter(day => day !== 'ALL');
+    const weekdayToCron = { 'SUN': 0, 'MON': 1, 'TUE': 2, 'WED': 3, 'THU': 4, 'FRI': 5, 'SAT': 6 };
+    const cronWeekdays = weekdays
+        .filter(day => day !== 'ALL')
+        .map(day => weekdayToCron[day])
+        .join(',');
     
-    // Cron format: minutes hours * * days_of_week (0-6, where 0 is Sunday)
-    // Convert our weekday codes to cron numbers
-    const weekdayMap = { 'SUN': 0, 'MON': 1, 'TUE': 2, 'WED': 3, 'THU': 4, 'FRI': 5, 'SAT': 6 };
-    const cronWeekdays = weekdaysToUse.map(day => weekdayMap[day]).join(',');
-    
+    // Return standard 5-field cron expression in LOCAL timezone - backend will convert to UTC
     return `${minutes} ${hours} * * ${cronWeekdays}`;
-});
+}
+
+// Computed property to generate the cron expression from weekdays and time
+const generatedCronExpression = computed(() => 
+    generateCronExpression(selectedTime.value, selectedWeekdays.value)
+);
 
 // Computed property to generate start schedule cron expression
-const generatedStartCronExpression = computed(() => {
-    if (!enableStartSchedule.value || !selectedStartTime.value || selectedWeekdays.value.length === 0 || 
-        (selectedWeekdays.value.length === 1 && selectedWeekdays.value[0] === 'ALL')) {
-        return null;
-    }
-    
-    const [hours, minutes] = selectedStartTime.value.split(':');
-    
-    // Filter out the "ALL" option if present
-    const weekdaysToUse = selectedWeekdays.value.filter(day => day !== 'ALL');
-    
-    // Cron format: minutes hours * * days_of_week (0-6, where 0 is Sunday)
-    // Convert our weekday codes to cron numbers
-    const weekdayMap = { 'SUN': 0, 'MON': 1, 'TUE': 2, 'WED': 3, 'THU': 4, 'FRI': 5, 'SAT': 6 };
-    const cronWeekdays = weekdaysToUse.map(day => weekdayMap[day]).join(',');
-    
-    return `${minutes} ${hours} * * ${cronWeekdays}`;
-});
+const generatedStartCronExpression = computed(() => 
+    enableStartSchedule.value ? generateCronExpression(selectedStartTime.value, selectedWeekdays.value) : null
+);
 
 onMounted(async () => {
     await getServerSettings();
 });
 
-// Parse cron expression to extract weekdays and time
-function parseCronExpression(cronExpression) {
+// Weekday mapping for standard cron (0-6, Sunday=0)
+const WEEKDAY_MAP = { 
+    '0': 'SUN', '1': 'MON', '2': 'TUE', '3': 'WED', 
+    '4': 'THU', '5': 'FRI', '6': 'SAT'
+};
+
+// Parse standard cron expression to extract time and weekdays (stored in local timezone)
+function parseCronExpression(cronExpression, isStartSchedule = false) {
     if (!cronExpression) return;
     
-    let parts = cronExpression.trim().split(' ');
+    const parts = cronExpression.trim().split(' ');
     
-    // Handle EventBridge format: cron(minutes hours day month day-of-week year)
-    if (cronExpression.startsWith('cron(') && cronExpression.endsWith(')')) {
-        const cronContent = cronExpression.slice(5, -1); // Remove 'cron(' and ')'
-        parts = cronContent.split(' ');
-    }
-    
-    // Support both 5-field (standard) and 6-field (EventBridge) cron
-    if (parts.length !== 5 && parts.length !== 6) {
-        console.warn('Invalid cron expression format:', cronExpression);
+    // Expect standard 5-field cron: minute hour day month day-of-week
+    if (parts.length !== 5) {
+        console.warn('Invalid cron expression format (expected 5 fields):', cronExpression);
         return;
     }
     
-    const minutes = parts[0];
-    const hours = parts[1];
-    // For 6-field format: parts[2] is day, parts[3] is month, parts[4] is day-of-week
-    // For 5-field format: parts[2] is day, parts[3] is month, parts[4] is day-of-week
-    const weekdaysPart = parts[4];
+    const [minutes, hours, , , weekdaysPart] = parts;
+    const time = `${hours.padStart(2, '0')}:${minutes.padStart(2, '0')}`;
     
-    // Skip if weekdays is wildcard or question mark
-    if (weekdaysPart === '*' || weekdaysPart === '?') {
+    // Set time based on schedule type
+    if (isStartSchedule) {
+        selectedStartTime.value = time;
+        enableStartSchedule.value = true;
+        return; // Start schedule doesn't need weekday parsing
+    }
+    
+    selectedTime.value = time;
+    
+    // Parse weekdays if not wildcard
+    if (weekdaysPart === '*') {
         console.warn('Cron expression uses wildcard for weekdays, cannot parse specific days');
         return;
     }
     
-    // Set time
-    selectedTime.value = `${hours.padStart(2, '0')}:${minutes.padStart(2, '0')}`;
+    const selectedDays = weekdaysPart.split(',')
+        .map(day => WEEKDAY_MAP[day.trim()])
+        .filter((day, index, self) => day && self.indexOf(day) === index); // Remove duplicates
     
-    // Set weekdays - handle both standard cron (0-6) and EventBridge (1-7)
-    const weekdayMap = { 
-        '0': 'SUN', '1': 'MON', '2': 'TUE', '3': 'WED', 
-        '4': 'THU', '5': 'FRI', '6': 'SAT', '7': 'SUN' // EventBridge uses 7 for Sunday
-    };
-    const selectedDays = [];
-    
-    if (weekdaysPart.includes(',')) {
-        const days = weekdaysPart.split(',');
-        days.forEach(day => {
-            if (weekdayMap[day.trim()]) {
-                const dayName = weekdayMap[day.trim()];
-                // Avoid duplicates (both 0 and 7 map to SUN)
-                if (!selectedDays.includes(dayName)) {
-                    selectedDays.push(dayName);
-                }
-            }
-        });
-    } else if (weekdayMap[weekdaysPart]) {
-        selectedDays.push(weekdayMap[weekdaysPart]);
-    }
-    
-    selectedWeekdays.value = selectedDays;
-    
-    // Check if all weekdays are selected
-    if (selectedDays.length === 7) {
-        selectedWeekdays.value.push('ALL');
-    }
-}
-
-// Parse start schedule cron expression
-function parseStartCronExpression(cronExpression) {
-    if (!cronExpression) return;
-    
-    let parts = cronExpression.trim().split(' ');
-    
-    // Handle EventBridge format: cron(minutes hours day month day-of-week year)
-    if (cronExpression.startsWith('cron(') && cronExpression.endsWith(')')) {
-        const cronContent = cronExpression.slice(5, -1); // Remove 'cron(' and ')'
-        parts = cronContent.split(' ');
-    }
-    
-    // Support both 5-field (standard) and 6-field (EventBridge) cron
-    if (parts.length !== 5 && parts.length !== 6) {
-        console.warn('Invalid start cron expression format:', cronExpression);
-        return;
-    }
-    
-    const minutes = parts[0];
-    const hours = parts[1];
-    
-    // Set start time
-    selectedStartTime.value = `${hours.padStart(2, '0')}:${minutes.padStart(2, '0')}`;
-    enableStartSchedule.value = true;
+    selectedWeekdays.value = selectedDays.length === 7 ? [...selectedDays, 'ALL'] : selectedDays;
 }
 
 async function getServerSettings() {
@@ -413,7 +370,8 @@ async function getServerSettings() {
             workDir: serverSettings.workDir || '',            
             stopScheduleExpression: serverSettings.stopScheduleExpression || '',
             startScheduleExpression: serverSettings.startScheduleExpression || '',
-            shutdownMethod: foundMethod
+            shutdownMethod: foundMethod,
+            timezone: serverSettings.timezone || 'UTC'
         };
 
         // Update all values at once
@@ -422,10 +380,10 @@ async function getServerSettings() {
         // Handle schedule expressions after the state update
         if (foundMethod.metric === 'Schedule') {
             if (serverSettings.stopScheduleExpression) {
-                parseCronExpression(serverSettings.stopScheduleExpression);
+                parseCronExpression(serverSettings.stopScheduleExpression, false);
             }
             if (serverSettings.startScheduleExpression) {
-                parseStartCronExpression(serverSettings.startScheduleExpression);
+                parseCronExpression(serverSettings.startScheduleExpression, true);
             }
         }
         
@@ -450,6 +408,7 @@ function resetForm() {
         serverConfigInput.stopScheduleExpression = "",
         serverConfigInput.startScheduleExpression = "",
         serverConfigInput.shutdownMethod = { metric: 'CPUUtilization', abbr: '% CPU' }
+        serverConfigInput.timezone = 'UTC'
         selectedShutdownMethod.value = { metric: 'CPUUtilization', abbr: '% CPU' };
         selectedStartTime.value = null;
         enableStartSchedule.value = false;               
@@ -469,7 +428,8 @@ async function onSubmit() {
                 runCommand: serverConfigInput.runCommand || '',
                 workDir: serverConfigInput.workDir || '',
                 stopScheduleExpression: generatedCronExpression.value || '',
-                startScheduleExpression: generatedStartCronExpression.value || ''
+                startScheduleExpression: generatedStartCronExpression.value || '',
+                timezone: serverConfigInput.timezone || 'UTC'
             };
             
             try {
@@ -514,7 +474,7 @@ async function onSubmit() {
 </script>
 
 <template>
-    <div>
+    <div class="position-relative">
         <v-progress-linear 
             v-if="settingsDialogLoading" 
             indeterminate 
@@ -523,6 +483,25 @@ async function onSubmit() {
             class="position-absolute"
             style="top: 0; z-index: 1;"
         ></v-progress-linear>
+        
+        <!-- Loading Overlay -->
+        <v-overlay
+            :model-value="settingsDialogLoading"
+            contained
+            class="align-center justify-center"
+            persistent
+        >
+            <div class="text-center">
+                <v-progress-circular
+                    indeterminate
+                    size="64"
+                    width="6"
+                    color="primary"
+                ></v-progress-circular>
+                <div class="mt-4 text-h6">Loading server settings...</div>
+                <div class="text-body-2 text-medium-emphasis mt-2">Please wait</div>
+            </div>
+        </v-overlay>
         
         <v-form ref="settingsForm">
                     <!-- Shutdown Configuration Section -->
@@ -555,6 +534,20 @@ async function onSubmit() {
                                     color="primary"
                                 >
                                 </v-select>
+                            </v-col>
+                            <v-col cols="12" md="6" v-if="selectedShutdownMethod?.metric === 'Schedule'">
+                                <v-select
+                                    v-model="serverConfigInput.timezone"
+                                    :items="timezoneOptions"
+                                    item-title="text"
+                                    item-value="value"
+                                    label="Timezone"
+                                    hint="Your local timezone for schedule times"
+                                    persistent-hint
+                                    variant="outlined"
+                                    prepend-inner-icon="mdi-earth"
+                                    color="primary"
+                                ></v-select>
                             </v-col>
                         </v-row>
 
@@ -621,7 +614,7 @@ async function onSubmit() {
                                             item-title="text"
                                             item-value="value"
                                             label="Shutdown Time"
-                                            hint="Time when the server should shutdown"
+                                            :hint="`Time when the server should shutdown (${serverConfigInput.timezone})`"
                                             persistent-hint
                                             :rules="[v => !!v || 'Please select a time']"
                                             :disabled="!selectedWeekdays.length"
@@ -653,7 +646,7 @@ async function onSubmit() {
                                                 item-title="text"
                                                 item-value="value"
                                                 label="Start Time"
-                                                hint="Time when the server should start"
+                                                :hint="`Time when the server should start (${serverConfigInput.timezone})`"
                                                 persistent-hint
                                                 :rules="enableStartSchedule ? [v => !!v || 'Please select a start time'] : []"
                                                 :disabled="!selectedWeekdays.length"

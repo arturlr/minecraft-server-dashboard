@@ -30,13 +30,14 @@ def test_cron_expressions():
     ec2_utils = Ec2Utils()
     
     test_cases = [
-        # Valid cases - with day-of-week conversion
-        ("30 14 * * 1,2,3", "cron(30 14 * * 1,2,3 *)"),  # Standard 5-field cron
-        ("0 9 * * 0", "cron(0 9 * * 7 *)"),  # Sunday at 9 AM (0 -> 7)
-        ("15 22 * * 1-5", "cron(15 22 * * 1-5 *)"),  # Weekdays at 10:15 PM
-        ("00 03 * * 1,2,3,4,5,6,0", "cron(00 03 * * 1,2,3,4,5,6,7 *)"),  # The failing case
-        ("00 12 * * 1,2,3,4,5,6,0", "cron(00 12 * * 1,2,3,4,5,6,7 *)"),  # Start schedule
-        ("cron(30 14 * * 1,2,3 *)", "cron(30 14 * * 1,2,3 *)"),  # Already formatted
+        # Valid cases - with day-of-week conversion and EventBridge rules
+        ("30 14 * * 1,2,3", "cron(30 14 ? * 1,2,3 *)"),  # Standard 5-field cron (day must be ?)
+        ("0 9 * * 0", "cron(0 9 ? * 7 *)"),  # Sunday at 9 AM (0 -> 7, day must be ?)
+        ("15 22 * * 1-5", "cron(15 22 ? * 1-5 *)"),  # Weekdays at 10:15 PM (day must be ?)
+        ("00 03 * * 1,2,3,4,5,6,0", "cron(0 3 ? * * *)"),  # All 7 days = *, strip leading zeros
+        ("00 12 * * 1,2,3,4,5,6,0", "cron(0 12 ? * * *)"),  # All 7 days = *, strip leading zeros
+        ("30 16 * * 1,2,3,4,5,6,0", "cron(30 16 ? * * *)"),  # All 7 days = *, no leading zeros
+        ("cron(00 14 * * 1,2,3 *)", "cron(0 14 * * 1,2,3 *)"),  # Already formatted but needs zero stripping
         
         # Invalid cases
         ("", None),  # Empty string

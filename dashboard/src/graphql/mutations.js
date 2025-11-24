@@ -105,6 +105,13 @@ export const putServerConfig = /* GraphQL */ `
       startScheduleExpression
       alarmThreshold
       alarmEvaluationPeriod
+      timezone
+      isBootstrapped
+      minecraftVersion
+      latestPatchUpdate
+      createdAt
+      updatedAt
+      autoConfigured
     }
   }
 `;

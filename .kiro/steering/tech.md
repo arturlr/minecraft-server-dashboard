@@ -71,14 +71,28 @@ cd layers/authHelper && make
 ## Architecture Patterns
 
 ### Asynchronous Action Processing
-- **Pattern**: Queue-based asynchronous processing for server actions
+- **Pattern**: Queue-based asynchronous processing for server control actions
 - **Components**:
-  - `serverAction` Lambda: Receives GraphQL mutations, validates, and queues to SQS
+  - `serverAction` Lambda: Receives GraphQL mutations (start/stop/restart/config), validates, and queues to SQS
   - SQS Queue: Buffers server actions for reliable processing
-  - `serverActionProcessor` Lambda: Processes actions from queue, updates AppSync
+  - `serverActionProcessor` Lambda: Processes server control actions from queue, updates AppSync
   - Dead Letter Queue (DLQ): Captures failed messages for troubleshooting
 - **Benefits**: Improved reliability, timeout handling, decoupled processing
 - **Status Updates**: Real-time status via GraphQL subscriptions (PROCESSING/COMPLETED/FAILED)
+- **Note**: IAM profile management (`fixServerRole`) is handled synchronously by a dedicated Lambda, not queued
+
+### IAM Profile Management
+- **Pattern**: Synchronous IAM profile association/disassociation
+- **Components**:
+  - `fixServerRole` Lambda: Dedicated function for IAM profile management
+  - Direct execution (no SQS queue needed)
+- **Operations**:
+  - Validates existing IAM profile on EC2 instance
+  - Disassociates incorrect profiles
+  - Associates correct instance profile with `iam:PassRole` permission
+  - Retries with exponential backoff for eventual consistency
+- **Permissions**: Requires `iam:PassRole` on EC2 role (not instance profile ARN)
+- **Benefits**: Focused permissions, simpler architecture, faster execution
 
 ### Auto-Configuration System
 - **Pattern**: Automatic default configuration for unconfigured servers
@@ -92,10 +106,14 @@ cd layers/authHelper && make
 ### Scheduled Operations
 - **Pattern**: EventBridge rules for time-based server operations
 - **Features**:
-  - Cron expression validation
-  - Separate start/stop schedules
+  - Cron expression validation and formatting (5-field to 6-field EventBridge format)
+  - Separate start/stop schedules with independent cron expressions
   - Automatic rule creation/deletion based on configuration
   - Integration with CloudWatch alarms (mutually exclusive)
+  - Quick schedule presets (weekday evenings, weekends, business hours)
+  - Smart validation warnings (start > stop time, short duration, etc.)
+- **Cron Format**: Frontend sends standard 5-field cron, backend converts to EventBridge 6-field format
+- **Example**: `30 14 * * 1,2,3` → `cron(30 14 * * 1,2,3 *)`
 
 ### User-Based Auto-Shutdown
 - **Pattern**: CloudWatch custom metrics and alarms for player connection monitoring
@@ -119,6 +137,37 @@ cd layers/authHelper && make
 - Implement proper error handling with try/catch blocks
 - Use environment variables for configuration (VITE_ prefix for frontend)
 - Lambda functions should send status updates to AppSync for real-time UI feedback
+- Separate data concerns: server config and user data use different queries
+- Validate and format data at boundaries (e.g., cron expressions at backend entry)
+
+## Recent Improvements & Fixes
+
+### IAM Permissions (Fixed)
+- **Issue**: `iam:PassRole` permission was incorrectly targeting instance profile ARN
+- **Fix**: Updated to target EC2 role ARN (required for associating instance profiles)
+- **Location**: `cfn/templates/lambdas.yaml` - FixServerRole Lambda policies
+
+### Schedule Expression Validation (Fixed)
+- **Issue**: EventBridge rejected cron expressions from frontend
+- **Fix**: Added validation and formatting in `ec2Helper.py` to convert 5-field to 6-field format
+- **Features**: Validates ranges, handles wildcards, strips leading zeros, converts day-of-week
+- **Location**: `layers/ec2Helper/ec2Helper.py` - `_format_schedule_expression()` method
+
+### Server Settings Data Loading (Fixed)
+- **Issue**: GraphQL queries outdated, missing fields, data type mismatches
+- **Fix**: Updated queries to match schema, separated user data loading
+- **Changes**:
+  - Added `stopScheduleExpression`, `startScheduleExpression` to queries
+  - Created separate `getServerUsers` query
+  - Fixed data type handling in ServerSettings component
+- **Location**: `dashboard/src/graphql/queries.js`, `dashboard/src/components/ServerSettings.vue`
+
+### UI/UX Improvements
+- **Quick Schedule Presets**: One-click common schedules (weekday evenings, weekends, etc.)
+- **Smart Validation**: Warnings for timing conflicts, short durations, high thresholds
+- **Visual Feedback**: Day chips, runtime calculations, color-coded summaries
+- **Better Layout**: Card-based design with progressive disclosure
+- **Location**: `dashboard/src/components/ServerSettings.vue`
 
 ## GraphQL Schema & Data Models
 

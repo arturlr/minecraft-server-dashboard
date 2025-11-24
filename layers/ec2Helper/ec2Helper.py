@@ -30,131 +30,91 @@ class Ec2Utils:
         self.appValue = os.getenv('TAG_APP_VALUE')
         self.ec2InstanceProfileArn = os.getenv('EC2_INSTANCE_PROFILE_ARN')
 
-    def get_instance_attributes_from_tags(self,instance_id):
+    def get_latest_ubuntu_ami(self):
         """
-        Retrieves the instance attributes from the EC2 tags.
-
-        Args:
-            instance_id (str): The ID of the EC2 instance.
-
-        Returns:
-            dict: A dictionary containing the instance attributes with proper type conversions.
+        Get the latest Ubuntu 22.04 AMI ID from SSM Parameter Store
         """
-        try:        
-            logger.info("------- get_instance_attributes_from_tags " + instance_id)
-            paginator = self.ec2_client.get_paginator('describe_tags')
-            existing_tags = []
-            for page in paginator.paginate(
-                Filters=[
-                    {'Name': 'resource-id', 'Values': [instance_id]}
-                ]
-            ):
-                existing_tags.extend(page['Tags'])
-            
-            tag_mapping = {}
-            for tag in existing_tags:
-                tag_mapping[tag['Key'].lower()] = tag['Value']
-
-            # logger.info(f"Tag Mapping: {tag_mapping}")
-            
-            # Get values with proper type conversions
-            alarm_threshold = tag_mapping.get('alarmthreshold', '')
-            alarm_evaluation_period = tag_mapping.get('alarmevaluationperiod', '')
-            
-            # Convert alarmThreshold to Float if present
-            if alarm_threshold:
-                try:
-                    alarm_threshold = float(alarm_threshold)
-                except (ValueError, TypeError):
-                    logger.warning(f"Invalid alarmThreshold value: {alarm_threshold}. Using default 0.0")
-                    alarm_threshold = 0.0
-            else:
-                # Default value for alarmThreshold
-                alarm_threshold = 0.0
-                
-            # Convert alarmEvaluationPeriod to Int if present
-            if alarm_evaluation_period:
-                try:
-                    alarm_evaluation_period = int(alarm_evaluation_period)
-                except (ValueError, TypeError):
-                    logger.warning(f"Invalid alarmEvaluationPeriod value: {alarm_evaluation_period}. Using default 0")
-                    alarm_evaluation_period = 0
-            else:
-                # Default value for alarmEvaluationPeriod
-                alarm_evaluation_period = 0
-
-            # returning following the Appsync Schema for ServerConfig
-            return {
-                'id': instance_id,
-                'shutdownMethod': tag_mapping.get('shutdownmethod', ''),  
-                'stopScheduleExpression': tag_mapping.get('stopscheduleexpression', ''),
-                'startScheduleExpression': tag_mapping.get('startscheduleexpression', ''),
-                'alarmType': tag_mapping.get('alarmtype', ''),
-                'alarmThreshold': alarm_threshold,  # Now properly typed as Float
-                'alarmEvaluationPeriod': alarm_evaluation_period,  # Now properly typed as Int
-                'runCommand': tag_mapping.get('runcommand', ''),
-                'workDir': tag_mapping.get('workdir', ''),
-                'groupMembers': ''
-            }
-        
-        except Exception as e:
-            logger.error(f"Error getting tags: {e}")
-            # Return default values in case of error
-            return {
-                'id': instance_id,
-                'shutdownMethod': '',  
-                'stopScheduleExpression': '',
-                'startScheduleExpression': '',
-                'alarmType': '',
-                'alarmThreshold': 0.0,  # Default Float value
-                'alarmEvaluationPeriod': 0,  # Default Int value
-                'runCommand': '',
-                'workDir': '',
-                'groupMembers': ''
-            }
-        
-    def set_instance_attributes_to_tags(self,input):
-        instance_id = input.get('id', None)
-        if not instance_id:
-            raise ValueError("Instance ID is required")
-
-        logger.info("Setting instance attributes for " + instance_id)
-
-        serverConfigInput = {k: v for k, v in input.items() if k != 'id' and v is not None and v != ''}
-
-        # Getting current EC2 Tags
-        ec2_attrs = self.get_instance_attributes_from_tags(instance_id)
-
-        ec2_tag_mapping = {
-            utl.capitalize_first_letter(key): value 
-            for key, value in serverConfigInput.items()
-        }
-
-        # logger.info(f"input : {input}")
-        # logger.info(f"ec2_tag_mapping : {ec2_tag_mapping}")
+        # Parameter path for Ubuntu 22.04 (Jammy) Server HVM with EBS storage
+        parameter_name = '/aws/service/canonical/ubuntu/server/22.04/stable/current/amd64/hvm/ebs-gp2/ami-id'
         
         try:
-            # Delete existing tags based on tag_mapping
-            self.ec2_client.delete_tags(
-                Resources=[instance_id],
-                Tags=[{'Key': key} for key in ec2_attrs.keys()]
-            )
-
-            # Create new tags
-            self.ec2_client.create_tags(
-                Resources=[instance_id],
-                Tags=[{'Key': key, 'Value': str(value) } for key, value in ec2_tag_mapping.items()]
-            )
-            logger.info(f"Tags set successfully for instance {instance_id}")
- 
-            # return serverConfigInput keys and values
-            return {
-                'id': instance_id,
-                **serverConfigInput
-            }
-           
+            response = self.ssm.get_parameter(Name=parameter_name)
+            ami_id = response['Parameter']['Value']
+            print(f"Latest Ubuntu 22.04 AMI ID: {ami_id}")
+            return ami_id
         except Exception as e:
-            logger.error(f"Error setting tags: {e}")
+            print(f"Error retrieving AMI from Parameter Store: {e}")
+            return None
+
+    def create_ec2_instance(self, instance_name, instance_type='t3.micro', 
+                       subnet_id=None,
+                       security_group_id=None):
+        # None for subnet_id and security_group_id means the default one
+        try:
+            # Get the latest Ubuntu 22.04 AMI
+            ami_id = self.get_latest_ubuntu_ami()
+            print(f"Using Ubuntu 22.04 AMI: {ami_id}")
+            
+            # Define block device mappings for two EBS volumes
+            block_device_mappings = [
+                {
+                    # Root volume (OS) - size depends on AMI default
+                    'DeviceName': '/dev/sda1',
+                    'Ebs': {
+                        'VolumeSize': 16,  # 8 GB for OS
+                        'VolumeType': 'gp3',
+                        'DeleteOnTermination': True,
+                        'Encrypted': False
+                    }
+                },
+                {
+                    # Second volume for game data and logs
+                    'DeviceName': '/dev/sdf',
+                    'Ebs': {
+                        'VolumeSize': 50,  # 50 GB for game and logs
+                        'VolumeType': 'gp3',
+                        'DeleteOnTermination': True,
+                        'Encrypted': False
+                    }
+                }
+            ]
+                        
+            response = self.ec2_client.run_instances(
+                ImageId=ami_id,
+                InstanceType=instance_type,
+                MinCount=1,
+                MaxCount=1,
+                #KeyName=KEY_NAME,
+                SubnetId=subnet_id,
+                SecurityGroupIds=security_group_id,
+                IamInstanceProfile={'Arn': self.ec2InstanceProfileArn},
+                BlockDeviceMappings=block_device_mappings,
+                TagSpecifications=[
+                    {
+                        'ResourceType': 'instance',
+                        'Tags': [{'Key': 'Name', 'Value': instance_name}]
+                    },
+                    {
+                        'ResourceType': 'volume',
+                        'Tags': [
+                            {'Key': 'Name', 'Value': f"{instance_name}-volume"},
+                            {'Key': 'App', 'Value': self.appValue}
+                        ]
+                    }
+                ]
+            )
+            
+            instance_id = response['Instances'][0]['InstanceId']
+            print(f"EC2 instance created: {instance_id}")
+            print(f"Root volume (OS) on /dev/sda1")
+            print(f"Data volume (game/logs) on /dev/sdf")
+            
+            return instance_id
+        
+        except ClientError as e:
+            print(f"✗ Error: {e}")
+            return None
+
 
     def update_alarm(self, instance_id, alarm_metric, alarm_threshold, alarm_evaluation_period):
         logger.info("------- update_alarm : " + instance_id)
@@ -210,375 +170,6 @@ class Ec2Utils:
         except ClientError as e:
             logger.error(f"Error checking/deleting alarm: {e}")
 
-    def configure_shutdown_event(self, instance_id, cron_expression):
-        eventbridge = boto3.client('events')
-        
-        logger.info(f"Original cron expression: {cron_expression}")
-        
-        # Validate and format the cron expression for EventBridge
-        formatted_schedule = self._format_schedule_expression(cron_expression)
-        logger.info(f"Formatted schedule expression: {formatted_schedule}")
-        
-        if not formatted_schedule:
-            logger.error(f"Invalid cron expression: {cron_expression}")
-            raise ValueError(f"Invalid cron expression: {cron_expression}")
-        
-        # Create the rule with cron expression
-        rule_name = f"shutdown-{instance_id}"
-        logger.info(f"Creating EventBridge rule {rule_name} with schedule: {formatted_schedule}")
-        
-        eventbridge.put_rule(
-            Name=rule_name,
-            ScheduleExpression=formatted_schedule,
-            State='ENABLED'
-        )
-        
-        # Create the target for EC2 stop automation
-        eventbridge.put_targets(
-            Rule=rule_name,
-            Targets=[{
-                'Id': f"shutdown-target-{instance_id}",
-                'Arn': f"arn:aws:automate:{aws_region}:ec2:stop",
-                'RoleArn': f"arn:aws:iam::{self.account_id}:role/aws-service-role/events.amazonaws.com/AWSServiceRoleForEvents",
-                'Input': json.dumps({"InstanceId": instance_id})
-            }]
-        )
-        logger.info(f"Shutdown event configured for {instance_id} with schedule: {formatted_schedule}")
-
-    def remove_shutdown_event(self, instance_id):
-        eventbridge = boto3.client('events')
-
-        # Remove the rule and target
-        rule_name = f"shutdown-{instance_id}"
-        try:
-            # Check if rule exists
-            rules = eventbridge.list_rules(NamePrefix=rule_name)
-            if not rules.get('Rules'):
-                logger.info(f"No shutdown event rule found for {instance_id}")
-                return
-                
-            eventbridge.remove_targets(
-                Rule=rule_name,
-                Ids=[f"shutdown-target-{instance_id}"]
-            )
-            eventbridge.delete_rule(Name=rule_name)
-            logger.info(f"Shutdown event removed for {instance_id}")
-
-        except ClientError as e:
-            logger.error(f"Error removing shutdown event: {e}")
-
-    def configure_start_event(self, instance_id, cron_expression):
-        """Configure EventBridge rule to start EC2 instance on schedule"""
-        eventbridge = boto3.client('events')
-        
-        logger.info(f"Original start cron expression: {cron_expression}")
-        
-        # Validate and format the cron expression for EventBridge
-        formatted_schedule = self._format_schedule_expression(cron_expression)
-        logger.info(f"Formatted start schedule expression: {formatted_schedule}")
-        
-        if not formatted_schedule:
-            logger.error(f"Invalid cron expression: {cron_expression}")
-            raise ValueError(f"Invalid cron expression: {cron_expression}")
-        
-        # Create the rule with cron expression for starting
-        rule_name = f"start-{instance_id}"
-        logger.info(f"Creating EventBridge start rule {rule_name} with schedule: {formatted_schedule}")
-        
-        eventbridge.put_rule(
-            Name=rule_name,
-            ScheduleExpression=formatted_schedule,
-            State='ENABLED'
-        )
-        
-        # Create the target to start the instance
-        eventbridge.put_targets(
-            Rule=rule_name,
-            Targets=[{
-                'Id': f"start-target-{instance_id}",
-                'Arn': f"arn:aws:automate:{aws_region}:ec2:start",
-                'RoleArn': f"arn:aws:iam::{self.account_id}:role/aws-service-role/events.amazonaws.com/AWSServiceRoleForEvents",
-                'Input': json.dumps({"InstanceId": instance_id})
-            }]
-        )
-        logger.info(f"Start event configured for {instance_id} with schedule: {formatted_schedule}")
-
-    def remove_start_event(self, instance_id):
-        """Remove EventBridge rule for starting EC2 instance"""
-        eventbridge = boto3.client('events')
-
-        # Remove the rule and target
-        rule_name = f"start-{instance_id}"
-        try:
-            # Check if rule exists
-            rules = eventbridge.list_rules(NamePrefix=rule_name)
-            if not rules.get('Rules'):
-                logger.info(f"No start event rule found for {instance_id}")
-                return
-                
-            eventbridge.remove_targets(
-                Rule=rule_name,
-                Ids=[f"start-target-{instance_id}"]
-            )
-            eventbridge.delete_rule(Name=rule_name)
-            logger.info(f"Start event removed for {instance_id}")
-
-        except ClientError as e:
-            logger.error(f"Error removing start event: {e}")
-
-    def _format_schedule_expression(self, cron_expression):
-        """
-        Format and validate cron expression for EventBridge.
-        EventBridge requires cron expressions to be in the format: cron(minutes hours day month day-of-week year)
-        
-        EventBridge-specific rules:
-        - Either day-of-month OR day-of-week must be '?' (not both can have specific values)
-        - Day-of-week uses 1-7 (1=Monday, 7=Sunday) or SUN-SAT
-        - Supports special characters: * ? , - / L W #
-        
-        Args:
-            cron_expression (str): Standard cron expression (5 fields) or EventBridge format (6 fields)
-            
-        Returns:
-            str: Properly formatted EventBridge schedule expression or None if invalid
-        """
-        if not cron_expression or not isinstance(cron_expression, str):
-            return None
-            
-        cron_expression = cron_expression.strip()
-        
-        # If already in EventBridge format, validate and return
-        if cron_expression.startswith('cron(') and cron_expression.endswith(')'):
-            # Extract the cron part and validate
-            cron_part = cron_expression[5:-1]  # Remove 'cron(' and ')'
-            fields = cron_part.split()
-            if len(fields) == 6:
-                minute, hour, day, month, day_of_week, year = fields
-                # Validate EventBridge-specific rule: day and day_of_week can't both have specific values
-                if not self._validate_day_fields(day, day_of_week):
-                    logger.warning(f"EventBridge requires either day-of-month OR day-of-week to be '?': {cron_expression}")
-                    return None
-                return cron_expression
-            else:
-                logger.warning(f"Invalid EventBridge cron format: {cron_expression}")
-                return None
-        
-        # Handle standard 5-field cron expression
-        fields = cron_expression.split()
-        if len(fields) == 5:
-            # Standard cron: minute hour day month day-of-week
-            # EventBridge cron: minute hour day month day-of-week year
-            minute, hour, day, month, day_of_week = fields
-            
-            # Validate basic format first
-            if not self._validate_cron_field(minute, 0, 59) or \
-               not self._validate_cron_field(hour, 0, 23) or \
-               not self._validate_dow_field(day_of_week):
-                logger.warning(f"Invalid cron expression values: {cron_expression}")
-                return None
-            
-            # Convert day-of-week from standard cron (0-6, Sunday=0) to EventBridge (1-7, Sunday=7)
-            converted_dow = self._convert_day_of_week(day_of_week)
-            if not converted_dow:
-                logger.warning(f"Failed to convert day-of-week: {day_of_week}")
-                return None
-            
-            # Apply EventBridge rule: if both day and day-of-week are specified, use '?' for day
-            # This handles the common case where users specify both (which EventBridge doesn't allow)
-            if day != '*' and day != '?' and converted_dow != '*' and converted_dow != '?':
-                logger.info(f"Both day ({day}) and day-of-week ({converted_dow}) specified. Using day-of-week and setting day to '?'")
-                day = '?'
-            
-            # Convert to EventBridge format (add year field)
-            eventbridge_cron = f"cron({minute} {hour} {day} {month} {converted_dow} *)"
-            return eventbridge_cron
-        
-        logger.warning(f"Invalid cron expression format: {cron_expression}")
-        return None
-    
-    def _convert_day_of_week(self, day_of_week):
-        """
-        Convert day-of-week from standard cron format (0-6, Sunday=0) to EventBridge format (1-7, Sunday=7).
-        
-        Args:
-            day_of_week (str): Day of week field from cron expression
-            
-        Returns:
-            str: Converted day-of-week field or None if invalid
-        """
-        if day_of_week == '*':
-            return '*'
-            
-        # Handle comma-separated values
-        if ',' in day_of_week:
-            values = day_of_week.split(',')
-            converted_values = []
-            for val in values:
-                converted_val = self._convert_single_dow(val.strip())
-                if converted_val is None:
-                    return None
-                converted_values.append(converted_val)
-            return ','.join(converted_values)
-        
-        # Handle ranges
-        if '-' in day_of_week:
-            try:
-                start, end = day_of_week.split('-')
-                start_converted = self._convert_single_dow(start.strip())
-                end_converted = self._convert_single_dow(end.strip())
-                if start_converted is None or end_converted is None:
-                    return None
-                return f"{start_converted}-{end_converted}"
-            except ValueError:
-                return None
-        
-        # Handle single value
-        return self._convert_single_dow(day_of_week)
-    
-    def _convert_single_dow(self, value):
-        """
-        Convert a single day-of-week value from standard cron (0-6) to EventBridge (1-7).
-        
-        Args:
-            value (str): Single day-of-week value
-            
-        Returns:
-            str: Converted value or None if invalid
-        """
-        if value == '0':  # Sunday
-            return '7'
-        elif value.isdigit() and 1 <= int(value) <= 6:
-            return value
-        else:
-            return None
-    
-    def _validate_dow_field(self, day_of_week):
-        """
-        Validate day-of-week field for standard cron format (0-6, where 0=Sunday).
-        
-        Args:
-            day_of_week (str): Day of week field from cron expression
-            
-        Returns:
-            bool: True if valid, False otherwise
-        """
-        if day_of_week == '*':
-            return True
-            
-        # Handle comma-separated values
-        if ',' in day_of_week:
-            values = day_of_week.split(',')
-            return all(self._validate_single_dow_value(val.strip()) for val in values)
-        
-        # Handle ranges
-        if '-' in day_of_week:
-            try:
-                start, end = day_of_week.split('-')
-                return (self._validate_single_dow_value(start.strip()) and 
-                       self._validate_single_dow_value(end.strip()))
-            except ValueError:
-                return False
-        
-        # Handle step values
-        if '/' in day_of_week:
-            try:
-                base, step = day_of_week.split('/')
-                return (self._validate_dow_field(base) and 
-                       step.isdigit() and int(step) > 0)
-            except ValueError:
-                return False
-        
-        # Single value
-        return self._validate_single_dow_value(day_of_week)
-    
-    def _validate_single_dow_value(self, value):
-        """Validate a single day-of-week value for standard cron (0-6)."""
-        try:
-            val = int(value)
-            return 0 <= val <= 6  # Standard cron allows 0-6
-        except ValueError:
-            return False
-    
-    def _validate_cron_field(self, field, min_val, max_val, allow_star=True):
-        """
-        Validate a single cron field.
-        
-        Args:
-            field (str): The cron field to validate
-            min_val (int): Minimum allowed value
-            max_val (int): Maximum allowed value
-            allow_star (bool): Whether '*' is allowed
-            
-        Returns:
-            bool: True if valid, False otherwise
-        """
-        if not field:
-            return False
-            
-        # Allow wildcard
-        if field == '*' and allow_star:
-            return True
-            
-        # Handle comma-separated values
-        if ',' in field:
-            values = field.split(',')
-            return all(self._validate_single_cron_value(val, min_val, max_val) for val in values)
-        
-        # Handle ranges
-        if '-' in field:
-            try:
-                start, end = field.split('-')
-                return (self._validate_single_cron_value(start, min_val, max_val) and 
-                       self._validate_single_cron_value(end, min_val, max_val))
-            except ValueError:
-                return False
-        
-        # Handle step values
-        if '/' in field:
-            try:
-                base, step = field.split('/')
-                return (self._validate_cron_field(base, min_val, max_val, allow_star) and 
-                       step.isdigit() and int(step) > 0)
-            except ValueError:
-                return False
-        
-        # Single value
-        return self._validate_single_cron_value(field, min_val, max_val)
-    
-    def _validate_single_cron_value(self, value, min_val, max_val):
-        """Validate a single cron value."""
-        try:
-            val = int(value)
-            return min_val <= val <= max_val
-        except ValueError:
-            return False
-    
-    def _validate_day_fields(self, day, day_of_week):
-        """
-        Validate EventBridge-specific rule: either day-of-month OR day-of-week must be '?'
-        Both can't have specific values at the same time.
-        
-        Args:
-            day (str): Day-of-month field
-            day_of_week (str): Day-of-week field
-            
-        Returns:
-            bool: True if valid according to EventBridge rules
-        """
-        # Both wildcards is OK
-        if (day == '*' or day == '?') and (day_of_week == '*' or day_of_week == '?'):
-            return True
-        
-        # One specific, one wildcard/question is OK
-        if (day != '*' and day != '?') and (day_of_week == '*' or day_of_week == '?'):
-            return True
-        if (day == '*' or day == '?') and (day_of_week != '*' and day_of_week != '?'):
-            return True
-        
-        # Both specific is NOT OK for EventBridge
-        logger.warning(f"EventBridge validation failed: day={day}, day_of_week={day_of_week}")
-        return False
-    
     def check_alarm_exists(self, instance_id):
         """Check if CloudWatch alarm exists for the instance."""
         alarm_name = f"{instance_id}-minecraft-server"
@@ -590,7 +181,9 @@ class Ec2Utils:
             return False
     
     def check_eventbridge_rules_exist(self, instance_id):
-        """Check if EventBridge rules exist for the instance."""
+        """Check if EventBridge rules exist for the instance.
+           This is a read-only check used by the listServers Lambda function
+        """
         eventbridge = boto3.client('events')
         shutdown_rule = f"shutdown-{instance_id}"
         start_rule = f"start-{instance_id}"

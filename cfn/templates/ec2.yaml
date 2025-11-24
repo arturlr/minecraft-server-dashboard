@@ -88,56 +88,6 @@ Resources:
   # CloudWatch agent config is now stored in S3 and referenced from there
   # The amazon-cloudwatch-agent.json file is uploaded to S3 by deployment scripts
 
-  MinecraftStartupEventRule:
-    Type: AWS::Events::Rule
-    Properties:
-      Description: "Trigger Minecraft server start when EC2 instance enters running state"
-      EventPattern:
-        source:
-          - "aws.ec2"
-        detail-type:
-          - "EC2 Instance State-change Notification"
-        detail:
-          state:
-            - "running"
-      State: "ENABLED"
-      Targets:
-        - Arn: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:document/${MinecraftRunnerSSMDoc}"
-          Id: "MinecraftStartupTarget"
-          RoleArn: !GetAtt MinecraftStartupRole.Arn
-          RunCommandParameters:
-            RunCommandTargets:
-              - Key: "tag:App"
-                Values:
-                  - !Ref AppValue
-
-  MinecraftStartupRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: events.amazonaws.com
-            Action: sts:AssumeRole
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/service-role/AmazonSSMAutomationRole
-      Policies:
-        - PolicyName: SSMStartAutomationExecution
-          PolicyDocument:
-            Version: "2012-10-17"
-            Statement:
-              - Effect: Allow
-                Action:
-                  - ssm:SendCommand
-                Resource:
-                  - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:instance/*"
-                  - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:document/${MinecraftRunnerSSMDoc}"
-                Condition:
-                  StringEquals:
-                    "ec2:ResourceTag/App": !Ref AppValue
-
   MinecraftRunnerSSMDoc:
     Type: AWS::SSM::Document
     Properties:
@@ -208,6 +158,9 @@ Resources:
               runCommand:
                 - '#!/bin/bash'
                 - |
+                  # Define required packages list (used by all distributions)
+                  REQUIRED_PACKAGES=("jq" "zip" "unzip" "net-tools" "wget" "screen")
+                  
                   # Function to detect the Linux distribution
                   detect_distro() {
                       if [ -f /etc/os-release ]; then
@@ -224,7 +177,69 @@ Resources:
                           DISTRO=$(uname -s)
                       fi
                       echo $DISTRO
+                  }        
+
+                  # Function to install Java on Amazon Linux, RHEL, or CentOS
+                  install_java_rpm() {
+                      echo "Installing Java..."
+                      # For Amazon Linux 2023 and newer, use Corretto
+                      if [[ $(cat /etc/os-release | grep VERSION_ID) =~ "2023" ]]; then
+                          yum install -y java-21-amazon-corretto-headless
+                      # For Amazon Linux 2
+                      elif [[ $(cat /etc/os-release | grep VERSION_ID) =~ "2" ]]; then
+                          amazon-linux-extras install -y java-openjdk17
+                      # For RHEL/CentOS
+                      else
+                          yum install -y java-17-openjdk-headless
+                      fi
+                      
+                      if command -v java &> /dev/null; then
+                          echo "Java installed successfully: $(java -version 2>&1 | head -n 1)"
+                          return 0
+                      else
+                          echo "Failed to install Java"
+                          return 1
+                      fi
                   }
+
+                  # Function to install Java on Ubuntu or Debian
+                  install_java_deb() {
+                      echo "Installing Java..."
+                      apt-get update
+                      apt-get install -y openjdk-21-jre-headless
+                      
+                      if command -v java &> /dev/null; then
+                          echo "Java installed successfully: $(java -version 2>&1 | head -n 1)"
+                          return 0
+                      else
+                          echo "Failed to install Java"
+                          return 1
+                      fi
+                  }
+
+                  # Main Java installation function
+                  install_java() {
+                      # Check if Java is already installed
+                      if command -v java &> /dev/null; then
+                          echo "Java is already installed: $(java -version 2>&1 | head -n 1)"
+                          return 0
+                      fi
+
+                      local distro=$(detect_distro)
+                      case $distro in
+                          amzn*|rhel*|centos*)
+                              install_java_rpm
+                              ;;
+                          ubuntu*|debian*)
+                              install_java_deb
+                              ;;
+                          *)
+                              echo "Unsupported distribution: $distro"
+                              return 1
+                              ;;
+                      esac
+                  }
+
                   # Function to install CloudWatch agent on Amazon Linux, RHEL, or CentOS
                   install_cloudwatch_rpm() {
                       # Check if CloudWatch agent is already installed
@@ -285,11 +300,10 @@ Resources:
                   }
 
                   install_required_packages() {
-                      local packages=("jq" "zip" "unzip" "net-tools")
                       local packages_to_install=()
 
                       # Check each package
-                      for package in "${packages[@]}"; do
+                      for package in "${REQUIRED_PACKAGES[@]}"; do
                           if ! dpkg -l | grep -q "^ii.*$package "; then
                               echo "$package is not installed"
                               packages_to_install+=("$package")
@@ -329,13 +343,14 @@ Resources:
                           echo "AWS CLI is already installed"
                       fi 
                   }
+
                   # Main installation function
                   install_packages() {
                       local distro=$(detect_distro)
                       case $distro in
                           amzn*|rhel*|centos*)
                               install_cloudwatch_rpm
-                              yum -y install jq zip unzip
+                              yum -y install "${REQUIRED_PACKAGES[@]}"
                               ;;
                           ubuntu*|debian*)
                               install_cloudwatch_deb
@@ -347,11 +362,13 @@ Resources:
                               ;;
                       esac
                   }
-                  
+
+                  # Calling the install packages                  
                   install_packages
                   install_awscli
+                  install_java
 
-                  echo "Packages installed successfully" 
+                  echo "All packages installed successfully" 
           - action: aws:runShellScript
             name: CloudWatchStart
             inputs:
@@ -369,80 +386,166 @@ Resources:
                   
                   # Check status
                   sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -m ec2 -a status      
+
           - action: aws:runShellScript
-            name: Cron
+            name: PortCount
             inputs:
               runCommand:
-                - '#!/bin/bash'
-                - !Sub |
+                - |
                   if [ ! -f /usr/local/port_count.sh ]; then
                     # Get instance metadata
                     INSTANCE_ID=$(ec2metadata --instance-id)
-                    REGION=${AWS::Region}
-                    # Count established connections on port 25565
-                    PORT_COUNT=$(netstat -an | grep ESTABLISHED | grep ':25565' | wc -l)
-                    # Create the script file
-                    echo "#!/bin/bash" > /usr/local/port_count.sh
-                    echo "INSTANCE_ID=\"$INSTANCE_ID\"" >> /usr/local/port_count.sh
-                    echo "PORT_COUNT=\$(netstat -an | grep ESTABLISHED | grep ':25565' | wc -l)" >> /usr/local/port_count.sh
-                    echo "REGION=\"$REGION\"" >> /usr/local/port_count.sh
-                    echo "aws cloudwatch put-metric-data --metric-name UserCount --dimensions InstanceId=\$INSTANCE_ID --namespace 'MinecraftDashboard' --value \$PORT_COUNT --region \$REGION" >> /usr/local/port_count.sh
-                    # Make the script executable
+                    REGION=$(ec2metadata --availability-zone | sed 's/[a-z]$//')
+                    
+                    # Create the script file using heredoc
+                    cat > /usr/local/port_count.sh <<EOF
+                  #!/bin/bash
+                  INSTANCE_ID="$INSTANCE_ID"
+                  REGION="$REGION"
+                  PORT_COUNT=\$(netstat -an | grep ESTABLISHED | grep ':25565' | wc -l)
+                  aws cloudwatch put-metric-data --metric-name UserCount --dimensions InstanceId=\$INSTANCE_ID --namespace 'MinecraftDashboard' --value \$PORT_COUNT --region \$REGION
+                  EOF
+                    
                     chmod +x /usr/local/port_count.sh
-                    # Schedule the script to run every minute
-                    (sudo crontab -l 2>/dev/null; echo "*/1 * * * * /usr/local/port_count.sh >/dev/null 2>&1") | crontab -         
-                  fi  
-                - sudo crontab -l
-
-          - action: aws:runShellScript
-            name: MinecraftS3Backup
-            inputs:
-              runCommand:
-                - '#!/bin/bash'
-                - !Sub |
-                  if [ ! -f /usr/local/minecraft_s3_backup.sh ]; then
-                    MINECRAFT_DIR="$HOME/.minecraft/saves"
-                    INSTANCE_ID=$(ec2metadata --instance-id)
-                    REGION=${AWS::Region}
-                    S3_BUCKET=${SupportBucket}
-                    # Creating the script
-                    echo "#!/bin/bash" > /usr/local/minecraft_s3_backup.sh
-                    echo "INSTANCE_ID=\"$INSTANCE_ID\"" >> /usr/local/minecraft_s3_backup.sh
-                    echo "REGION=\"$REGION\"" >> /usr/local/minecraft_s3_backup.sh
-                    echo "S3_BUCKET=\"$S3_BUCKET\"" >> /usr/local/minecraft_s3_backup.sh
-                    echo "MINECRAFT_DIR=\"$MINECRAFT_DIR\"" >> /usr/local/minecraft_s3_backup.sh
-                    echo "DATE=\$(date +%Y-%m-%d_%H-%M-%S)" >> /usr/local/minecraft_s3_backup.sh
-                    echo "BACKUP_NAME=\"minecraft_backup_\$DATE.tar.gz\"" >> /usr/local/minecraft_s3_backup.sh
-                    echo "tar -cpvzf /tmp/\$BACKUP_NAME \$MINECRAFT_DIR" >> /usr/local/minecraft_s3_backup.sh
-                    echo "aws s3 cp /tmp/\$BACKUP_NAME s3://\$S3_BUCKET/\$INSTANCE_ID/\$BACKUP_NAME" >> /usr/local/minecraft_s3_backup.sh
-                    echo "rm /tmp/\$BACKUP_NAME" >> /usr/local/minecraft_s3_backup.sh
-                    # Optionally, remove old backups (keep last 5)
-                    # echo "aws s3 ls s3://\$S3_BUCKET/\$INSTANCE_ID/ | sort | head -n -5 | awk '{print \$4}' | xargs -I {} aws s3 rm s3://\$S3_BUCKET/\$INSTANCE_ID/\$BACKUP_NAME" >> /usr/local/minecraft_s3_backup.sh
-                    # Make the script executable
-                    chmod +x /usr/local/minecraft_s3_backup.sh
-                    # Schedule the script to run every hour
-                    (sudo crontab -l 2>/dev/null; echo "0 * * * * /usr/local/minecraft_s3_backup.sh >/dev/null 2>&1") | crontab -
                   fi
-                - sudo crontab -l
 
           - action: aws:runShellScript
-            name: NICSSM
+            name: NetworkBandwidth
             inputs:
               runCommand:
-                - echo "Get NIC"
-                - NIC=$(ip route get 1.1.1.1 | awk '{print $5; exit}')
-                - INSTANCE_ID=$(ec2metadata --instance-id)                
-                - PARAM_NAME="{{ SSMParameterPrefix }}/$INSTANCE_ID/nic"
                 - |
-                  if aws ssm get-parameter --name "$PARAM_NAME" 2>/dev/null; then
-                    echo "Parameter already exists"
-                    return 0
-                  else
-                    echo "Parameter does not exist, creating $PARAM_NAME"
-                    # Adding to parameter Store in case need to be used in the future
-                    aws ssm put-parameter --name "$PARAM_NAME" --type 'String' --value "$NIC"
-                    return 0
+                  #!/bin/bash
+
+                  set -e                  
+                  echo "=== Installing Network Bandwidth Monitoring ==="
+                  
+                  # Configuration
+                  SCRIPT_PATH="/usr/local/bin/network_monitor.sh"
+                  INSTANCE_ID=$(ec2metadata --instance-id)
+                  REGION=$(ec2metadata --availability-zone | sed 's/[a-z]$//')
+                  
+                  # Create the monitoring script only if it doesn't exist
+                  if [ ! -f "$SCRIPT_PATH" ]; then
+                    cat > "$SCRIPT_PATH" << 'SCRIPT_EOF'
+                  #!/bin/bash
+                  
+                  # Network Bandwidth Monitoring to CloudWatch (Cron Version)
+                  
+                  # Configuration
+                  NAMESPACE="MinecraftDashboard"
+                  LOCK_FILE="/var/run/network_monitor.lock"
+                  STATE_FILE="/var/tmp/network_monitor_state"
+                  
+                  # Get instance metadata using IMDSv2
+                  INSTANCE_ID=$(ec2metadata --instance-id)
+                  REGION=$(ec2metadata --availability-zone | sed 's/[a-z]$//')
+                  
+                  # Exit if script is already running
+                  if [ -f "$LOCK_FILE" ]; then
+                      if ps -p $(cat "$LOCK_FILE") > /dev/null 2>&1; then
+                          exit 0
+                      else
+                          rm -f "$LOCK_FILE"
+                      fi
                   fi
+                  
+                  # Create lock file
+                  echo $$ > "$LOCK_FILE"
+                  trap "rm -f $LOCK_FILE; exit" INT TERM EXIT
+                  
+                  # Function to get default interface
+                  get_default_interface() {
+                      ip route show default | awk '/default/ {print $5}' | head -n1
+                  }
+                  
+                  # Function to get interface statistics
+                  get_interface_stats() {
+                      local interface=$1
+                      
+                      if [ ! -d "/sys/class/net/${interface}" ]; then
+                          echo "0,0"
+                          return 1
+                      fi
+                      
+                      local rx_bytes=$(cat /sys/class/net/$interface/statistics/rx_bytes 2>/dev/null || echo 0)
+                      local tx_bytes=$(cat /sys/class/net/$interface/statistics/tx_bytes 2>/dev/null || echo 0)
+                      
+                      echo "$rx_bytes,$tx_bytes"
+                  }
+                  
+                  # Function to send metrics to CloudWatch
+                  send_to_cloudwatch() {
+                      local metric_name=$1
+                      local value=$2
+                      local unit=$3
+                      
+                      aws cloudwatch put-metric-data \
+                          --namespace "$NAMESPACE" \
+                          --metric-name "$metric_name" \
+                          --value "$value" \
+                          --unit "$unit" \
+                          --dimensions InstanceId=$INSTANCE_ID \
+                          --region "$REGION" 2>/dev/null
+                      
+                      return $?
+                  }
+                  
+                  # Main execution
+                  INTERFACE=$(get_default_interface)
+                  [ -z "$INTERFACE" ] && exit 1
+                  
+                  current_time=$(date +%s)
+                  curr_stats=$(get_interface_stats "$INTERFACE")
+                  
+                  if [ -f "$STATE_FILE" ]; then
+                      source "$STATE_FILE"
+                      time_diff=$((current_time - PREV_TIME))
+                      
+                      if [ $time_diff -gt 0 ]; then
+                          IFS=',' read -r prev_rx_bytes prev_tx_bytes <<< "$PREV_STATS"
+                          IFS=',' read -r curr_rx_bytes curr_tx_bytes <<< "$curr_stats"
+                          
+                          rx_bandwidth=$(( (curr_rx_bytes - prev_rx_bytes) / time_diff ))
+                          tx_bandwidth=$(( (curr_tx_bytes - prev_tx_bytes) / time_diff ))
+                          
+                          [ $rx_bandwidth -lt 0 ] && rx_bandwidth=0
+                          [ $tx_bandwidth -lt 0 ] && tx_bandwidth=0
+                          
+                          send_to_cloudwatch "ReceiveBandwidth" "$rx_bandwidth" "Bytes/Second"
+                          send_to_cloudwatch "TransmitBandwidth" "$tx_bandwidth" "Bytes/Second"
+                      fi
+                  fi
+                  
+                  cat > "$STATE_FILE" <<EOF
+                  PREV_STATS="$curr_stats"
+                  PREV_TIME=$current_time
+                  EOF
+                  
+                  exit 0
+                  SCRIPT_EOF
+                  
+                    # Make script executable
+                    chmod +x "$SCRIPT_PATH"
+                    echo "Monitoring script created at $SCRIPT_PATH"
+                  else
+                    echo "Monitoring script already exists at $SCRIPT_PATH"
+                  fi
+                  
+                  # Create log directory
+                  mkdir -p /var/log/network_monitor
+                  
+                  # Check if cron entry already exists before adding it
+                  if ! crontab -l 2>/dev/null | grep -qF "$SCRIPT_PATH"; then
+                    (crontab -l 2>/dev/null; echo "*/1 * * * * $SCRIPT_PATH >/dev/null 2>&1") | crontab -
+                    echo "Network monitoring cron job added"
+                  else
+                    echo "Network monitoring cron job already exists, skipping"
+                  fi
+                  
+                  # Display current crontab
+                  echo ""
+                  echo "=== Current Crontab ==="
+                  crontab -l         
 
 Outputs:
   SupportBucket:
@@ -480,9 +583,3 @@ Outputs:
     Value: !Ref MinecraftRunnerSSMDoc
     Export:
       Name: !Sub "${ProjectName}-${EnvironmentName}-MinecraftRunnerSSMDoc"
-      
-  MinecraftStartupEventRule:
-    Description: EventBridge rule to start Minecraft on instance startup
-    Value: !Ref MinecraftStartupEventRule
-    Export:
-      Name: !Sub "${ProjectName}-${EnvironmentName}-MinecraftStartupEventRule"

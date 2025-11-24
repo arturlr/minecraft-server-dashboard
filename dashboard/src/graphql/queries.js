@@ -78,6 +78,13 @@ query GetServerConfig($id: String!) {
     startScheduleExpression
     alarmThreshold
     alarmEvaluationPeriod
+    timezone
+    isBootstrapped
+    minecraftVersion
+    latestPatchUpdate
+    createdAt
+    updatedAt
+    autoConfigured
   }
 }
 `;
@@ -101,6 +108,18 @@ export const getServerActionStatus = /* GraphQL */ `
       timestamp
       message
       userEmail
+    }
+  }
+`;
+
+export const getServerMetrics = /* GraphQL */ `
+  query GetServerMetrics($id: String!) {
+    getServerMetrics(id: $id) {
+      id
+      cpuStats
+      networkStats
+      memStats
+      activeUsers
     }
   }
 `;

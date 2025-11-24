@@ -55,6 +55,13 @@ type ServerConfig @aws_iam
 	alarmEvaluationPeriod: Int
 	runCommand: String
 	workDir: String
+	timezone: String
+	isBootstrapped: Boolean
+	minecraftVersion: String
+	latestPatchUpdate: String
+	createdAt: AWSDateTime
+	updatedAt: AWSDateTime
+	autoConfigured: Boolean
 }
 
 input ServerConfigInput {
@@ -66,6 +73,13 @@ input ServerConfigInput {
 	alarmEvaluationPeriod: Int
 	runCommand: String
 	workDir: String
+	timezone: String
+	isBootstrapped: Boolean
+	minecraftVersion: String
+	latestPatchUpdate: String
+	createdAt: AWSDateTime
+	updatedAt: AWSDateTime
+	autoConfigured: Boolean
 }
 
 type ServerUsers @aws_iam
@@ -202,6 +216,9 @@ type Query {
 		@aws_cognito_user_pools  
 	# New query for server action status
 	getServerActionStatus(id: String!): ServerActionStatus
+		@aws_cognito_user_pools
+	# Query for historical server metrics
+	getServerMetrics(id: String!): ServerMetric
 		@aws_cognito_user_pools
 }
 

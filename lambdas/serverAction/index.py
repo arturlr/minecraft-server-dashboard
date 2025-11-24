@@ -209,7 +209,6 @@ def validate_queue_message(action, instance_id, arguments=None, user_email=None)
     allowed_actions = [
         'start', 'stop', 'restart',
         'startServer', 'stopServer', 'restartServer',
-        'fixServerRole', 'fixserverrole',
         'putServerConfig', 'putserverconfig',
         'updateServerConfig', 'updateserverconfig'
     ]
@@ -391,17 +390,8 @@ def handler(event, context):
     # Extract input arguments if present
     input_data = None
     if input_args := event["arguments"].get("input"):
-        input_data = {
-            'id': instance_id,
-            'shutdownMethod': input_args.get('shutdownMethod', ''),
-            'stopScheduleExpression': input_args.get('stopScheduleExpression', ''),
-            'startScheduleExpression': input_args.get('startScheduleExpression', ''),
-            'alarmType': input_args.get('alarmType', ''),
-            'alarmThreshold': input_args.get('alarmThreshold', ''),
-            'alarmEvaluationPeriod': input_args.get('alarmEvaluationPeriod', ''),
-            'runCommand': input_args.get('runCommand', ''),
-            'workDir': input_args.get('workDir', '')
-        }
+        # Pass through all input fields, ensuring id is set
+        input_data = {**input_args, 'id': instance_id}
     
     logger.info("Received instanceId: %s", instance_id)
 
@@ -424,5 +414,20 @@ def handler(event, context):
     if field_name.lower() in ["getserverconfig", "getserverusers"]:
         return action_process_sync(field_name, instance_id, input_data)
     
-    # Queue all write operations
+    # Config mutations need to return the config data after queuing
+    if field_name.lower() in ["putserverconfig", "updateserverconfig"]:
+        # Queue the action for async processing
+        queue_response = send_to_queue(field_name, instance_id, input_data, user_attributes["email"])
+        
+        # If queuing succeeded, return the input data as the response
+        # (the actual processing happens async, but we return the expected config immediately)
+        if queue_response.get('statusCode') == 202:
+            logger.info(f"Config queued successfully, returning config data: instance={instance_id}")
+            return input_data
+        else:
+            # If queuing failed, return the error
+            logger.error(f"Config queuing failed: instance={instance_id}, response={queue_response}")
+            return queue_response
+    
+    # Queue all other write operations (start/stop/restart)
     return send_to_queue(field_name, instance_id, input_data, user_attributes["email"])

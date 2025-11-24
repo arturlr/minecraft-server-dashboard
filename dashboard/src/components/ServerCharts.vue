@@ -1,7 +1,8 @@
 <script setup>
-import { reactive, ref, onMounted } from "vue";
+import { reactive, ref, onMounted, onUnmounted, watch } from "vue";
 import { generateClient } from 'aws-amplify/api';
 import * as subscriptions from '../graphql/subscriptions';
+import * as queries from '../graphql/queries';
 import { Hub } from 'aws-amplify/utils';
 import { useServerStore } from "../stores/server";
 import VueApexCharts from "vue3-apexcharts";
@@ -161,6 +162,15 @@ const currentCPU = ref(0);
 const currentMemory = ref(0);
 const currentNet = ref(0);
 const currentUsers = ref(0);
+const metricAlert = ref(false);
+const metricMsg = ref(null);
+const metricsSubscription = ref(null);
+const lastUpdateTime = ref(null);
+
+// Expose lastUpdateTime to parent component
+defineExpose({
+  lastUpdateTime
+});
 
 // Optional: You can initialize them with empty data structure
 const initSeries = [{
@@ -199,7 +209,6 @@ function classColor(sState) {
 }
 
 function updateMetrics(name, data) {
-
   if (serverStore.serversDict[serverStore.selectedServerId] && data.alertMsg && data.alertMsg.length > 0) {
     metricAlert.value = true;
     metricMsg.value = serverStore.serversDict[serverStore.selectedServerId].alertMsg
@@ -213,103 +222,222 @@ function updateMetrics(name, data) {
     case "users":
       usersSeries.value = [{
         name: "users",
-        data: data
+        data: [...data]
       }];
       break;
 
     case "cpu":
       cpuSeries.value = [{
         name: "cpu",
-        data: data
+        data: [...data]
       }];
       break;
 
     case "mem":
       memSeries.value = [{
         name: "mem",
-        data: data
+        data: [...data]
       }];
       break
 
     case "net":
       netSeries.value = [{
         name: "net",
-        data: data
+        data: [...data]
       }]
       break;
   }
 }
 
-async function subscribePutServerMetric() {
+async function loadHistoricalMetrics() {
+  if (!serverStore.selectedServerId) {
+    console.warn('[ServerCharts] Cannot load metrics: no selectedServerId');
+    return;
+  }
 
-  await graphQlClient
+  console.log('[ServerCharts] Loading historical metrics for server:', serverStore.selectedServerId);
+
+  // Clear existing data first
+  cpuSeries.value = [{ name: 'cpu', data: [] }];
+  memSeries.value = [{ name: 'mem', data: [] }];
+  netSeries.value = [{ name: 'net', data: [] }];
+  usersSeries.value = [{ name: 'users', data: [] }];
+
+  try {
+    const response = await graphQlClient.graphql({
+      query: queries.getServerMetrics,
+      variables: { id: serverStore.selectedServerId }
+    });
+
+    const metrics = response.data.getServerMetrics;
+    if (metrics) {
+      console.log('[ServerCharts] Historical metrics loaded');
+      processMetricData(metrics);
+    } else {
+      console.warn('[ServerCharts] No metrics data returned from query');
+    }
+  } catch (error) {
+    console.error('[ServerCharts] Error loading historical metrics:', error);
+  }
+}
+
+function processMetricData(metricsData) {
+  // Parse the JSON strings - handle double-encoded JSON from AppSync
+  let cpuData = [];
+  let memData = [];
+  let netData = [];
+  let usersData = [];
+  
+  try {
+    if (typeof metricsData.cpuStats === 'string') {
+      cpuData = JSON.parse(metricsData.cpuStats);
+      // Check if it's still a string (double-encoded)
+      if (typeof cpuData === 'string') {
+        cpuData = JSON.parse(cpuData);
+      }
+    } else {
+      cpuData = metricsData.cpuStats || [];
+    }
+  } catch (e) {
+    console.error('[ServerCharts] Error parsing cpuStats:', e);
+    cpuData = [];
+  }
+  
+  try {
+    if (typeof metricsData.memStats === 'string') {
+      memData = JSON.parse(metricsData.memStats);
+      if (typeof memData === 'string') {
+        memData = JSON.parse(memData);
+      }
+    } else {
+      memData = metricsData.memStats || [];
+    }
+  } catch (e) {
+    console.error('[ServerCharts] Error parsing memStats:', e);
+    memData = [];
+  }
+  
+  try {
+    if (typeof metricsData.networkStats === 'string') {
+      netData = JSON.parse(metricsData.networkStats);
+      if (typeof netData === 'string') {
+        netData = JSON.parse(netData);
+      }
+    } else {
+      netData = metricsData.networkStats || [];
+    }
+  } catch (e) {
+    console.error('[ServerCharts] Error parsing networkStats:', e);
+    netData = [];
+  }
+  
+  try {
+    if (typeof metricsData.activeUsers === 'string') {
+      usersData = JSON.parse(metricsData.activeUsers);
+      if (typeof usersData === 'string') {
+        usersData = JSON.parse(usersData);
+      }
+    } else {
+      usersData = metricsData.activeUsers || [];
+    }
+  } catch (e) {
+    console.error('[ServerCharts] Error parsing activeUsers:', e);
+    usersData = [];
+  }
+
+  console.log('[ServerCharts] Loaded metrics:', {
+    cpu: cpuData?.length,
+    mem: memData?.length,
+    net: netData?.length,
+    users: usersData?.length
+  });
+
+  // Update last update timestamp
+  lastUpdateTime.value = new Date();
+
+  if (cpuData && cpuData.length > 0) {
+    const lastValue = cpuData[cpuData.length - 1];
+    if (lastValue && lastValue.y !== undefined) {
+      currentCPU.value = lastValue.y;
+      cpuOptions.value.title.text = `CPU - ${currentCPU.value.toFixed(1)}%`;
+      updateMetrics('cpu', cpuData);
+    }
+  }
+
+  if (netData && netData.length > 0) {
+    const lastValue = netData[netData.length - 1];
+    if (lastValue && lastValue.y !== undefined) {
+      currentNet.value = lastValue.y;
+      netOptions.value.title.text = `Network - ${currentNet.value.toFixed(0)} packages`;
+      updateMetrics('net', netData);
+    }
+  }
+
+  if (memData && memData.length > 0) {
+    const lastValue = memData[memData.length - 1];
+    if (lastValue && lastValue.y !== undefined) {
+      currentMemory.value = lastValue.y;
+      memOptions.value.title.text = `Memory - ${currentMemory.value.toFixed(1)}%`;
+      updateMetrics('mem', memData);
+    }
+  }
+
+  if (Array.isArray(usersData) && usersData.length > 0) {
+    const lastValue = usersData[usersData.length - 1];
+    if (lastValue && lastValue.y !== undefined) {
+      currentUsers.value = lastValue.y;
+      usersOptions.value.title.text = `Users - ${currentUsers.value.toFixed(0)}`;
+      updateMetrics('users', usersData);
+    }
+  }
+}
+
+async function subscribePutServerMetric() {
+  // Unsubscribe from any existing subscription
+  if (metricsSubscription.value) {
+    metricsSubscription.value.unsubscribe();
+    metricsSubscription.value = null;
+  }
+
+  if (!serverStore.selectedServerId) {
+    console.warn('[ServerCharts] Cannot subscribe: no selectedServerId');
+    return;
+  }
+
+  console.log('[ServerCharts] Subscribing to metrics for server:', serverStore.selectedServerId);
+
+  // Load historical data first
+  await loadHistoricalMetrics();
+
+  metricsSubscription.value = await graphQlClient
     .graphql({
       query: subscriptions.onPutServerMetric,
       variables: { id: serverStore.selectedServerId },
     }).subscribe({
       next: (response) => {
-        console.log("updating: " + response.data.onPutServerMetric.id)
-        const cpuData = JSON.parse(response.data.onPutServerMetric.cpuStats);
-        const memData = JSON.parse(response.data.onPutServerMetric.memStats);
-        const netData = JSON.parse(response.data.onPutServerMetric.networkStats);
-        let usersData = [];
-        try {
-          const parsedUsers = JSON.parse(response.data.onPutServerMetric.activeUsers);
-          usersData = Array.isArray(parsedUsers) ? parsedUsers : [];
-        } catch (error) {
-          console.warn('Failed to parse activeUsers data:', error);
-          usersData = [];
-        }
-
-        if (cpuData && cpuData.length > 0) {
-          // Get the last CPU value
-          currentCPU.value = cpuData[cpuData.length - 1]?.y ?? 0;
-          
-          // Update chart options
-          cpuOptions.value = {
-            title: {
-              text: `CPU - ${currentCPU.value.toFixed(1)}%`
-            }
-          };
-        }
-        //updateMetrics('cpu', cpuData);
-
-        if (netData.length > 0)
-          currentNet.value = netData[netData.length - 1].y;
-        netOptions.value = {
-          title: {
-            text: "Network - " + currentNet.value.toString() + " packages"
-          }
-        }
-        updateMetrics('net', netData);
-
-        if (memData.length > 0)
-          currentMemory.value = memData[memData.length - 1].y;
-        memOptions.value = {
-          title: {
-            text: "Memory - " + currentMemory.value.toString() + " %"
-          }
-        }
-        updateMetrics('mem', memData);
-
-        if (Array.isArray(usersData) && usersData.length > 0) {
-          currentUsers.value = usersData[usersData.length - 1].y;
-          usersOptions.value = {
-            title: {
-              text: "Users - " + currentUsers.value.toString()
-            }
-          }
-          updateMetrics('users', usersData);
-        }
-
+        console.log("[ServerCharts] Metric update received:", response.data.onPutServerMetric.id);
+        processMetricData(response.data.onPutServerMetric);
       },
-      error: (error) => console.warn(error)
+      error: (error) => console.warn('[ServerCharts] Subscription error:', error)
     });
 }
 
-onMounted(async () => {
-  await subscribePutServerMetric()
-})
+// Watch for selectedServerId changes
+watch(() => serverStore.selectedServerId, (newId) => {
+  console.log('[ServerCharts] selectedServerId changed to:', newId);
+  if (newId) {
+    subscribePutServerMetric();
+  }
+}, { immediate: true });
+
+// Cleanup on unmount
+onUnmounted(() => {
+  console.log('[ServerCharts] Component unmounting, cleaning up subscription');
+  if (metricsSubscription.value) {
+    metricsSubscription.value.unsubscribe();
+    metricsSubscription.value = null;
+  }
+});
 
 
 </script>

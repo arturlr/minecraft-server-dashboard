@@ -8,6 +8,7 @@ import requests
 from requests_aws4auth import AWS4Auth
 import ec2Helper
 import utilHelper
+import DynHelper
 import pytz
 
 logger = logging.getLogger()
@@ -31,6 +32,7 @@ config_server_lambda = os.getenv('CONFIG_SERVER_LAMBDA_NAME',None)
 
 utl = utilHelper.Utils()
 ec2_utils = ec2Helper.Ec2Utils()
+dyn = DynHelper.Dyn()
 utc = pytz.utc
 pst = pytz.timezone('US/Pacific')
 
@@ -197,6 +199,43 @@ def disable_scheduled_rule():
             eb_client.disable_rule(Name=scheduled_event_bridge_rule)
             logger.info("Disabled Evt Bridge Rule")
 
+def ensure_server_in_dynamodb(instance_id):
+    """
+    Ensure server exists in DynamoDB ServersTable with default configuration.
+    Creates entry with timestamps if it doesn't exist.
+    
+    Args:
+        instance_id (str): EC2 instance ID
+    """
+    logger.info(f"------- ensure_server_in_dynamodb: {instance_id}")
+    
+    try:
+        # Get current timestamp in ISO format
+        now = datetime.now(timezone.utc).isoformat()
+        
+        # Create default configuration with timestamps and metadata
+        default_config = {
+            'id': instance_id,
+            'shutdownMethod': 'CPUUtilization',
+            'alarmThreshold': 5.0,
+            'alarmEvaluationPeriod': 30,
+            'runCommand': 'java -Xmx1024M -Xms1024M -jar server.jar nogui',
+            'workDir': '/home/ec2-user/minecraft',
+            'timezone': 'UTC',
+            'isBootstrapped': False,
+            'minecraftVersion': '',
+            'latestPatchUpdate': '',
+            'createdAt': now,
+            'updatedAt': now,
+            'autoConfigured': True  # Flag to indicate this was auto-configured
+        }
+        
+        dyn.put_server_config(default_config)
+        logger.info(f"Default configuration created for server {instance_id} at {now}")
+
+    except Exception as e:
+        logger.error(f"Error ensuring server in DynamoDB: {str(e)}", exc_info=True)
+
 def state_change_response(instance_id):
     logger.info("------- state_change_response: " + instance_id)
 
@@ -238,17 +277,68 @@ def state_change_response(instance_id):
     return input
     
 def config_server(instance_id):
+    """
+    Configure server by checking bootstrap status and running SSM document if needed.
+    
+    Args:
+        instance_id (str): EC2 instance ID
+    """
     logger.info(f"------- config_server {instance_id}")
+    
+    try:
+        # Get server configuration from DynamoDB
+        config = dyn.get_server_config(instance_id)
+        
+        # Check if server needs bootstrapping
+        is_bootstrapped = config.get('isBootstrapped', False)
+        
+        if not is_bootstrapped:
+            logger.info(f"Server {instance_id} is not bootstrapped, running SSM bootstrap document")
+            
+            # Get SSM document name from environment or construct it
+            ssm_doc_name = os.getenv('BOOTSTRAP_SSM_DOC_NAME')
+            if not ssm_doc_name:
+                # Construct document name from app name and environment
+                ssm_doc_name = f"{appName}-{envName}-BootstrapSSMDoc"
+                logger.info(f"Using constructed SSM document name: {ssm_doc_name}")
+            
+            # Get SSM parameter prefix
+            ssm_param_prefix = f"/{appName}/{envName}"
+            
+            # Send SSM command to bootstrap the instance
+            try:
+                response = ssm.send_command(
+                    InstanceIds=[instance_id],
+                    DocumentName=ssm_doc_name,
+                    Parameters={
+                        'SSMParameterPrefix': [ssm_param_prefix]
+                    },
+                    Comment=f'Bootstrap server {instance_id}'
+                )
+                
+                command_id = response['Command']['CommandId']
+                logger.info(f"SSM bootstrap command sent successfully: CommandId={command_id}, Instance={instance_id}")
+                
+                # Update DynamoDB to mark as bootstrapped
+                # Note: This is optimistic - we're marking it as bootstrapped immediately
+                # In production, you might want to wait for SSM command completion
+                dyn.update_server_config({
+                    'id': instance_id,
+                    'isBootstrapped': True
+                })
+                logger.info(f"Server {instance_id} marked as bootstrapped in DynamoDB")
+                
+            except Exception as ssm_error:
+                logger.error(f"Failed to send SSM bootstrap command for {instance_id}: {str(ssm_error)}", exc_info=True)
+                # Don't raise - allow the function to continue even if bootstrap fails
+        else:
+            logger.info(f"Server {instance_id} is already bootstrapped, skipping SSM document execution")
+            
+    except Exception as e:
+        logger.error(f"Error in config_server for {instance_id}: {str(e)}", exc_info=True)
+        # Don't raise - allow the event handler to continue
 
-    payload = {
-        "instanceId": instance_id
-    }
 
-    lambda_client.invoke(
-        FunctionName=config_server_lambda,
-        InvocationType='Event',
-        Payload=json.dumps(payload)
-    )  
 
 def handler(event, context):     
     
@@ -259,15 +349,22 @@ def handler(event, context):
             logger.info("Found InstanceId: " + event['detail']['instance-id'] + ' at ' + event['detail']['state'] + ' state')            
             if not scheduled_event_bridge_rule:
                 logger.error("Scheduled Event Name not registered")
-                return "No Scheduled Event"         
+                return "No Scheduled Event"
             
-            if event['detail']['state'] == "running":
+            instance_id = event['detail']['instance-id']
+                                
+            if event['detail']['state'] == "running":                
                 enable_scheduled_rule()
-                config_server(event['detail']['instance-id'])
+                # Ensure server exists in DynamoDB
+                # Check if server config exists
+                config = dyn.get_server_config(instance_id)
+                if not config.get('shutdownMethod'):
+                    ensure_server_in_dynamodb(instance_id)
+                config_server(instance_id)
             elif event['detail']['state'] == "stopped":
                 disable_scheduled_rule()
 
-            input = state_change_response(event['detail']['instance-id'])
+            input = state_change_response(instance_id)
             payload={"query": changeServerState, 'variables': { "input": input }}
 
             send_to_appsync(payload)

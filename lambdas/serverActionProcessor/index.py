@@ -7,13 +7,16 @@ import ec2Helper
 import utilHelper
 import requests
 from requests_aws4auth import AWS4Auth
+from botocore.exceptions import ClientError
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 ec2_client = boto3.client('ec2')
+eventbridge_client = boto3.client('events')
 ec2_utils = ec2Helper.Ec2Utils()
 utl = utilHelper.Utils()
+boto3_session = boto3.Session()
 
 # Environment variables
 appValue = os.getenv('TAG_APP_VALUE')
@@ -23,8 +26,13 @@ ec2_instance_profile_name = os.getenv('EC2_INSTANCE_PROFILE_NAME')
 ec2_instance_profile_arn = os.getenv('EC2_INSTANCE_PROFILE_ARN')
 endpoint = os.getenv('APPSYNC_URL', None)
 
+# Get AWS account and region info
+sts_client = boto3.client('sts')
+account_id = sts_client.get_caller_identity()['Account']
+aws_region = boto3_session.region_name
+
 # Set up AWS4Auth for AppSync
-boto3_session = boto3.Session()
+
 credentials = boto3_session.get_credentials()
 credentials = credentials.get_frozen_credentials()
 
@@ -50,102 +58,293 @@ mutation PutServerActionStatus($input: ServerActionStatusInput!) {
 }
 """
 
-class IamProfile:
-    def __init__(self, instance_id):
-        self.ec2_client = boto3.client('ec2')
-        self.instance_id = instance_id
-        self.association_id = None
+# ============================================================================
+# Schedule Event Management Functions
+# ============================================================================
 
-    def manage_iam_profile(self):
-        try:
-            iam_profile = ec2_utils.describe_iam_profile(self.instance_id, "associated")
+def _strip_leading_zeros(field):
+    """Strip leading zeros from cron field values."""
+    if not field or field == '*' or field == '?':
+        return field
 
-            if iam_profile and iam_profile['Arn'] == ec2_instance_profile_arn:
-                logger.info("Instance IAM Profile is already valid: %s", iam_profile['Arn'])
-                return True
-            elif iam_profile:
-                logger.info("Instance IAM Profile is invalid: %s", iam_profile['Arn'])
-                self.association_id = iam_profile['AssociationId']
-                rsp = self.disassociate_iam_profile()
-                if not rsp:
-                    return False
-        except Exception as e:
-            # If we can't describe the profile, log it but continue with attachment
-            logger.warning("Error describing IAM profile: %s. Will attempt to attach profile anyway.", str(e))
-
-        logger.info("Attaching IAM role to the Minecraft Instance")
-        return self.attach_iam_profile()
-
-    def disassociate_iam_profile(self):
-        logger.info("Disassociating IAM profile: %s", self.association_id)
-        try:
-            # Call EC2 API to remove the profile association
-            self.ec2_client.disassociate_iam_instance_profile(AssociationId=self.association_id)
-        except Exception as e:
-            if "InvalidAssociationID.NotFound" in str(e):
-                # Handle the case where the association ID doesn't exist
-                logger.warning("Association ID not found: %s. This is not an error, continuing...", self.association_id)
-                # Return True to continue with attaching the profile
-                return True
-            else:
-                logger.error("Error disassociating IAM profile: %s", str(e))
-                return False
-
-        # Helper function that checks if profile is fully disassociated
-        def check_disassociated_status():
-            try:
-                return ec2_utils.describe_iam_profile(self.instance_id, "disassociated", self.association_id) is not None
-            except Exception as e:
-                # If we get an error checking the status, assume it's disassociated
-                logger.warning("Error checking disassociation status: %s. Assuming profile is disassociated.", str(e))
-                return True
-
-        # Retry checking disassociation status for up to 30 times with 5 second delays
-        if not utl.retry_operation(check_disassociated_status, max_retries=30, delay=5):
-            logger.warning("Profile timeout during disassociating")
-            # Even if we time out, we'll try to attach the new profile anyway
-            return True
-
-        # Profile was successfully disassociated
-        return True
+    if ',' in field:
+        values = field.split(',')
+        return ','.join(_strip_leading_zeros(v.strip()) for v in values)
     
-    def attach_iam_profile(self):
-        logger.info("Attaching IAM profile: %s", ec2_instance_profile_name)
-        
+    if '-' in field and '/' not in field:
         try:
-            # Call EC2 API to associate the IAM profile with the instance
-            response = self.ec2_client.associate_iam_instance_profile(
-                IamInstanceProfile={"Name": ec2_instance_profile_name},
-                InstanceId=self.instance_id
+            start, end = field.split('-', 1)
+            return f"{_strip_leading_zeros(start)}-{_strip_leading_zeros(end)}"
+        except ValueError:
+            return field
+    
+    if '/' in field:
+        try:
+            base, step = field.split('/', 1)
+            return f"{_strip_leading_zeros(base)}/{step.lstrip('0') or '0'}"
+        except ValueError:
+            return field
+    
+    if field.isdigit():
+        return field.lstrip('0') or '0'
+    
+    return field
+
+def _convert_day_of_week(day_of_week):
+    """Convert day-of-week from standard cron (0-6) to EventBridge (1-7)."""
+    if day_of_week == '*':
+        return '*'
+    
+    if ',' in day_of_week:
+        values = day_of_week.split(',')
+        converted_values = []
+        for val in values:
+            if val.strip() == '0':
+                converted_values.append('7')
+            elif val.strip().isdigit() and 1 <= int(val.strip()) <= 6:
+                converted_values.append(val.strip())
+        return ','.join(converted_values)
+    
+    if day_of_week == '0':
+        return '7'
+    elif day_of_week.isdigit() and 1 <= int(day_of_week) <= 6:
+        return day_of_week
+    
+    return None
+
+def _convert_timezone_to_utc(hour, minute, timezone):
+    """Convert local time to UTC based on timezone."""
+    from datetime import datetime
+    import pytz
+    
+    if not timezone or timezone == 'UTC':
+        return hour, minute
+    
+    try:
+        # Create a datetime in the specified timezone
+        tz = pytz.timezone(timezone)
+        # Use a fixed date to get consistent offset (mid-January to avoid most DST transitions)
+        local_time = tz.localize(datetime(2024, 1, 15, int(hour), int(minute)))
+        
+        # Convert to UTC
+        utc_time = local_time.astimezone(pytz.UTC)
+        
+        return str(utc_time.hour), str(utc_time.minute)
+    except Exception as e:
+        logger.error(f"Error converting timezone {timezone} to UTC: {e}")
+        # Return original values if conversion fails
+        return hour, minute
+
+def _format_schedule_expression(cron_expression, timezone='UTC'):
+    """Format cron expression for EventBridge, converting from local timezone to UTC."""
+    if not cron_expression:
+        return None
+    
+    cron_expression = cron_expression.strip()
+    
+    # If already in EventBridge format, extract and clean it
+    if cron_expression.startswith('cron(') and cron_expression.endswith(')'):
+        cron_content = cron_expression[5:-1]
+        fields = cron_content.split()
+        if len(fields) == 6:
+            minute, hour, day, month, day_of_week, year = fields
+            
+            # Convert timezone if not UTC
+            if timezone and timezone != 'UTC':
+                hour, minute = _convert_timezone_to_utc(hour, minute, timezone)
+            
+            minute = _strip_leading_zeros(minute)
+            hour = _strip_leading_zeros(hour)
+            day = _strip_leading_zeros(day)
+            month = _strip_leading_zeros(month)
+            return f"cron({minute} {hour} {day} {month} {day_of_week} {year})"
+        return cron_expression
+    
+    # Handle standard 5-field cron expression
+    fields = cron_expression.split()
+    if len(fields) == 5:
+        minute, hour, day, month, day_of_week = fields
+        
+        # Convert timezone to UTC if needed
+        if timezone and timezone != 'UTC':
+            hour, minute = _convert_timezone_to_utc(hour, minute, timezone)
+        
+        # Strip leading zeros
+        minute = _strip_leading_zeros(minute)
+        hour = _strip_leading_zeros(hour)
+        day = _strip_leading_zeros(day)
+        month = _strip_leading_zeros(month)
+        
+        # Convert day-of-week
+        converted_dow = _convert_day_of_week(day_of_week)
+        if not converted_dow:
+            return None
+        
+        # Optimize: if all days are specified, use '*'
+        if ',' in converted_dow:
+            dow_values = set(converted_dow.split(','))
+            if dow_values == {'1', '2', '3', '4', '5', '6', '7'}:
+                converted_dow = '*'
+        
+        # EventBridge rule: when day-of-week is specified, day-of-month must be '?'
+        if converted_dow != '?':
+            day = '?'
+        
+        return f"cron({minute} {hour} {day} {month} {converted_dow} *)"
+    
+    return None
+
+def configure_shutdown_event(instance_id, cron_expression, timezone='UTC'):
+    """Configure EventBridge rule to stop EC2 instance on schedule."""
+    logger.info(f"Original shutdown cron expression: {cron_expression}, timezone: {timezone}")
+    
+    # Validate and format the cron expression for EventBridge (converts to UTC)
+    formatted_schedule = _format_schedule_expression(cron_expression, timezone)
+    logger.info(f"Formatted schedule expression (UTC): {formatted_schedule}")
+    
+    if not formatted_schedule:
+        logger.error(f"Invalid cron expression: {cron_expression}")
+        raise ValueError(f"Invalid cron expression: {cron_expression}")
+    
+    rule_name = f"shutdown-{instance_id}"
+    
+    # Remove existing rule if it exists to avoid conflicts
+    try:
+        rules = eventbridge_client.list_rules(NamePrefix=rule_name)
+        if rules.get('Rules'):
+            logger.info(f"Removing existing rule {rule_name} before recreating")
+            eventbridge_client.remove_targets(
+                Rule=rule_name,
+                Ids=[f"shutdown-target-{instance_id}"]
             )
-        except Exception as e:
-            error_msg = str(e)
-            # Check if this is an unauthorized operation
-            if "UnauthorizedOperation" in error_msg:
-                logger.error("Unauthorized operation when attaching IAM profile: %s", error_msg)
-                return {"status": "error", "message": error_msg, "code": "UnauthorizedOperation"}
-            else:
-                logger.error("Error attaching IAM profile: %s", error_msg)
-                return False
+            eventbridge_client.delete_rule(Name=rule_name)
+    except ClientError as e:
+        logger.warning(f"Error removing existing rule: {e}")
+    
+    # Create the rule with cron expression
+    logger.info(f"Creating EventBridge rule {rule_name} with schedule: {formatted_schedule}")
+    
+    eventbridge_client.put_rule(
+        Name=rule_name,
+        ScheduleExpression=formatted_schedule,
+        State='ENABLED'
+    )
+    
+    # Create the target to invoke ServerAction Lambda
+    lambda_function_name = f"{appName}-{envName}-serverAction"
+    lambda_arn = f"arn:aws:lambda:{aws_region}:{account_id}:function:{lambda_function_name}"
+    
+    target = {
+        'Id': f"shutdown-target-{instance_id}",
+        'Arn': lambda_arn,
+        'Input': json.dumps({
+            "action": "stopServer",
+            "instanceId": instance_id,
+            "source": "scheduled-shutdown"
+        })
+    }
+    
+    eventbridge_client.put_targets(
+        Rule=rule_name,
+        Targets=[target]
+    )
+    logger.info(f"Shutdown event configured for {instance_id} with schedule: {formatted_schedule}")
 
-        # Define helper function to check if profile is properly attached
-        def check_associated_status():
-            try:
-                # Get current IAM profile info for the instance
-                iam_profile = ec2_utils.describe_iam_profile(self.instance_id, "associated")
-                # Verify profile ARN matches expected ARN
-                return iam_profile and iam_profile['Arn'] == ec2_instance_profile_arn
-            except Exception as e:
-                logger.warning("Error checking association status: %s", str(e))
-                return False
+def remove_shutdown_event(instance_id):
+    """Remove EventBridge rule for stopping EC2 instance."""
+    rule_name = f"shutdown-{instance_id}"
+    try:
+        # Check if rule exists
+        rules = eventbridge_client.list_rules(NamePrefix=rule_name)
+        if not rules.get('Rules'):
+            logger.info(f"No shutdown event rule found for {instance_id}")
+            return
+            
+        eventbridge_client.remove_targets(
+            Rule=rule_name,
+            Ids=[f"shutdown-target-{instance_id}"]
+        )
+        eventbridge_client.delete_rule(Name=rule_name)
+        logger.info(f"Shutdown event removed for {instance_id}")
 
-        # Retry checking profile association status for up to 30 times with 5 second delays
-        if not utl.retry_operation(check_associated_status, max_retries=30, delay=5):
-            logger.warning("Profile timeout during association")
-            return False
+    except ClientError as e:
+        logger.error(f"Error removing shutdown event: {e}")
 
-        # Profile was successfully attached
-        return True
+def configure_start_event(instance_id, cron_expression, timezone='UTC'):
+    """Configure EventBridge rule to start EC2 instance on schedule."""
+    logger.info(f"Original start cron expression: {cron_expression}, timezone: {timezone}")
+    
+    # Validate and format the cron expression for EventBridge (converts to UTC)
+    formatted_schedule = _format_schedule_expression(cron_expression, timezone)
+    logger.info(f"Formatted start schedule expression (UTC): {formatted_schedule}")
+    
+    if not formatted_schedule:
+        logger.error(f"Invalid cron expression: {cron_expression}")
+        raise ValueError(f"Invalid cron expression: {cron_expression}")
+    
+    rule_name = f"start-{instance_id}"
+    
+    # Remove existing rule if it exists to avoid conflicts
+    try:
+        rules = eventbridge_client.list_rules(NamePrefix=rule_name)
+        if rules.get('Rules'):
+            logger.info(f"Removing existing rule {rule_name} before recreating")
+            eventbridge_client.remove_targets(
+                Rule=rule_name,
+                Ids=[f"start-target-{instance_id}"]
+            )
+            eventbridge_client.delete_rule(Name=rule_name)
+    except ClientError as e:
+        logger.warning(f"Error removing existing rule: {e}")
+    
+    # Create the rule with cron expression for starting
+    logger.info(f"Creating EventBridge start rule {rule_name} with schedule: {formatted_schedule}")
+    
+    eventbridge_client.put_rule(
+        Name=rule_name,
+        ScheduleExpression=formatted_schedule,
+        State='ENABLED'
+    )
+    
+    # Create the target to invoke ServerAction Lambda
+    lambda_function_name = f"{appName}-{envName}-serverAction"
+    lambda_arn = f"arn:aws:lambda:{aws_region}:{account_id}:function:{lambda_function_name}"
+    
+    target = {
+        'Id': f"start-target-{instance_id}",
+        'Arn': lambda_arn,
+        'Input': json.dumps({
+            "action": "startServer",
+            "instanceId": instance_id,
+            "source": "scheduled-start"
+        })
+    }
+    
+    eventbridge_client.put_targets(
+        Rule=rule_name,
+        Targets=[target]
+    )
+    logger.info(f"Start event configured for {instance_id} with schedule: {formatted_schedule}")
+
+def remove_start_event(instance_id):
+    """Remove EventBridge rule for starting EC2 instance."""
+    rule_name = f"start-{instance_id}"
+    try:
+        # Check if rule exists
+        rules = eventbridge_client.list_rules(NamePrefix=rule_name)
+        if not rules.get('Rules'):
+            logger.info(f"No start event rule found for {instance_id}")
+            return
+            
+        eventbridge_client.remove_targets(
+            Rule=rule_name,
+            Ids=[f"start-target-{instance_id}"]
+        )
+        eventbridge_client.delete_rule(Name=rule_name)
+        logger.info(f"Start event removed for {instance_id}")
+
+    except ClientError as e:
+        logger.error(f"Error removing start event: {e}")
 
 def send_to_appsync(action, instance_id, status, message=None, user_email=None):
     """Send action status to AppSync"""
@@ -248,10 +447,7 @@ def process_server_action(message_body):
                 logger.info(f"Routing to handle_server_action(restart): instance={instance_id}")
                 result = handle_server_action('restart', instance_id)
                 error_message = "Failed to restart server" if not result else None
-            elif action in ['fixserverrole', 'fixrole']:
-                logger.info(f"Routing to handle_fix_role: instance={instance_id}")
-                result = handle_fix_role(instance_id)
-                error_message = "Failed to fix IAM role" if not result else None
+
             elif action in ['putserverconfig', 'updateserverconfig']:
                 logger.info(f"Routing to handle_update_server_config: instance={instance_id}")
                 result = handle_update_server_config(instance_id, arguments)
@@ -378,38 +574,6 @@ def handle_server_action(action, instance_id):
         logger.error(f"Server action handler FAILED with exception: action={action}, instance={instance_id}, error={str(e)}", exc_info=True)
         return False
 
-def handle_fix_role(instance_id):
-    """Handle IAM role fix for instance"""
-    logger.info(f"IAM role fix handler started: instance={instance_id}")
-    
-    try:
-        logger.info(f"Creating IamProfile manager: instance={instance_id}")
-        iam_profile = IamProfile(instance_id)
-        
-        logger.info(f"Executing IAM profile management: instance={instance_id}")
-        resp = iam_profile.manage_iam_profile()
-        logger.info(f"IAM profile management response: instance={instance_id}, response={resp}")
-        
-        # Check if the response is a dictionary with error information
-        if isinstance(resp, dict) and resp.get("status") == "error":
-            if resp.get("code") == "UnauthorizedOperation":
-                logger.error(f"IAM role fix FAILED: Unauthorized operation - instance={instance_id}, message={resp.get('message', '')}")
-                return False
-            else:
-                logger.error(f"IAM role fix FAILED: Error response - instance={instance_id}, message={resp.get('message', 'Unknown error')}")
-                return False
-        
-        if resp is True:
-            logger.info(f"IAM role fix SUCCESS: Role attached successfully - instance={instance_id}")
-            return True
-        
-        logger.error(f"IAM role fix FAILED: Unexpected response - instance={instance_id}, response={resp}")
-        return False
-        
-    except Exception as e:
-        logger.error(f"IAM role fix handler FAILED with exception: instance={instance_id}, error={str(e)}", exc_info=True)
-        return False
-
 def handle_update_server_config(instance_id, arguments):
     """Handle server configuration updates"""
     logger.info(f"Config update handler started: instance={instance_id}, has_arguments={arguments is not None}")
@@ -436,6 +600,8 @@ def handle_update_server_config(instance_id, arguments):
         # Handle Schedule-based shutdown
         if shutdown_method == 'Schedule':
             stop_schedule = response.get('stopScheduleExpression')
+            timezone = response.get('timezone', 'UTC')
+            
             if not stop_schedule:
                 logger.error(f"Config update FAILED: Missing stop schedule expression - instance={instance_id}")
                 return False
@@ -447,26 +613,31 @@ def handle_update_server_config(instance_id, arguments):
                 logger.info(f"Alarm removed successfully: instance={instance_id}")
                 
                 # Configure event for scheduled shutdown
-                logger.info(f"Config update: Configuring shutdown schedule - instance={instance_id}, schedule={stop_schedule}")
-                ec2_utils.configure_shutdown_event(instance_id, stop_schedule)
+                logger.info(f"Config update: Configuring shutdown schedule - instance={instance_id}, schedule={stop_schedule}, timezone={timezone}")
+                configure_shutdown_event(instance_id, stop_schedule, timezone)
                 logger.info(f"Shutdown schedule configured successfully: instance={instance_id}")
                 
                 # Configure start schedule if provided
                 start_schedule = response.get('startScheduleExpression')
                 if start_schedule:
-                    logger.info(f"Config update: Configuring start schedule - instance={instance_id}, schedule={start_schedule}")
-                    ec2_utils.configure_start_event(instance_id, start_schedule)
+                    logger.info(f"Config update: Configuring start schedule - instance={instance_id}, schedule={start_schedule}, timezone={timezone}")
+                    configure_start_event(instance_id, start_schedule, timezone)
                     logger.info(f"Start schedule configured successfully: instance={instance_id}")
                 else:
                     logger.info(f"Config update: Removing start schedule - instance={instance_id}")
-                    ec2_utils.remove_start_event(instance_id)
+                    remove_start_event(instance_id)
                     logger.info(f"Start schedule removed successfully: instance={instance_id}")
                     
             except ValueError as ve:
                 logger.error(f"Config update FAILED: Invalid schedule expression - instance={instance_id}, error={str(ve)}", exc_info=True)
                 return False
             except Exception as e:
-                logger.error(f"Config update FAILED: Error configuring schedule - instance={instance_id}, error={str(e)}", exc_info=True)
+                error_msg = str(e)
+                # Check for AWS ValidationException
+                if "ValidationException" in error_msg or "Parameter ScheduleExpression is not valid" in error_msg:
+                    logger.error(f"Config update FAILED: Invalid schedule expression format - instance={instance_id}, error={error_msg}", exc_info=True)
+                else:
+                    logger.error(f"Config update FAILED: Error configuring schedule - instance={instance_id}, error={error_msg}", exc_info=True)
                 return False
                 
         # Handle CPU/Connections-based shutdown
@@ -481,8 +652,8 @@ def handle_update_server_config(instance_id, arguments):
             try:
                 # Remove schedule events (switching to alarm)
                 logger.info(f"Config update: Removing schedule events (switching to alarm) - instance={instance_id}")
-                ec2_utils.remove_shutdown_event(instance_id)
-                ec2_utils.remove_start_event(instance_id)
+                remove_shutdown_event(instance_id)
+                remove_start_event(instance_id)
                 logger.info(f"Schedule events removed successfully: instance={instance_id}")
                 
                 # Create alarm

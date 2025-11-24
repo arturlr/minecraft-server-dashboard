@@ -8,7 +8,10 @@ Globals:
     MemorySize: 256
     Runtime: python3.13
     Timeout: 120
-    Tracing: Active   
+    Tracing: Active
+    Environment:
+      Variables:
+        SERVERS_TABLE_NAME: !Ref ServersTable   
 
 Parameters:
   ProjectName:
@@ -106,8 +109,12 @@ Resources:
             FunctionArn: !GetAtt ListServers.Arn
           ServerActionDataSource:
             FunctionArn: !GetAtt ServerAction.Arn
+          FixServerRoleDataSource:
+            FunctionArn: !GetAtt FixServerRole.Arn
           GetMonthlyCostDataSource:
             FunctionArn: !GetAtt GetMonthlyCost.Arn
+          GetServerMetricsDataSource:
+            FunctionArn: !GetAtt GetServerMetrics.Arn
       Functions:
         serverListFunction:
           Runtime:
@@ -120,12 +127,24 @@ Resources:
             Name: APPSYNC_JS
             Version: "1.0.0"
           DataSource: ServerActionDataSource
-          CodeUri: ../../appsync/resolvers/lambdaInvoker.js     
+          CodeUri: ../../appsync/resolvers/lambdaInvoker.js
+        fixServerRoleFunction:
+          Runtime:
+            Name: APPSYNC_JS
+            Version: "1.0.0"
+          DataSource: FixServerRoleDataSource
+          CodeUri: ../../appsync/resolvers/lambdaInvoker.js
         getMonthlyCostFunction:
           Runtime:
             Name: APPSYNC_JS
             Version: "1.0.0"
           DataSource: GetMonthlyCostDataSource
+          CodeUri: ../../appsync/resolvers/lambdaInvoker.js
+        getServerMetricsFunction:
+          Runtime:
+            Name: APPSYNC_JS
+            Version: "1.0.0"
+          DataSource: GetServerMetricsDataSource
           CodeUri: ../../appsync/resolvers/lambdaInvoker.js
         putLogAuditFunction:
           Runtime:
@@ -188,7 +207,7 @@ Resources:
               Name: APPSYNC_JS
               Version: "1.0.0"
             Pipeline:
-              - serverActionFunction
+              - fixServerRoleFunction
           addUserToServer:
             Runtime:
               Name: APPSYNC_JS
@@ -250,6 +269,13 @@ Resources:
               Version: "1.0.0"
             Pipeline:
               - getServerRecordFunction
+              - getServerRecordFunction
+          getServerMetrics:
+            Runtime:
+              Name: APPSYNC_JS
+              Version: "1.0.0"
+            Pipeline:
+              - getServerMetricsFunction
 
   ScheduledRule: 
     Type: AWS::Events::Rule
@@ -331,14 +357,8 @@ Resources:
       Layers:
         - !Ref AuthLayer
         - !Ref UtilLayer
-        - !Ref Ec2Layer 
-        # - !FindInMap 
-        #   - ParametersAndSecretsExtensionArn
-        #   - !Ref AWS::Region
-        #   - !If 
-        #     - IsARM64Architecture
-        #     - arm64
-        #     - x86
+        - !Ref Ec2Layer
+        - !Ref DynLayer 
       Events:
         EC2StateTrigger:
           Type: CloudWatchEvent 
@@ -382,6 +402,24 @@ Resources:
                 - events:DisableRule
                 - events:EnableRule
               Resource: "*"
+        - Version: '2012-10-17' # Policy Document for SSM
+          Statement:
+            - Effect: Allow
+              Action:
+                - ssm:SendCommand
+                - ssm:GetCommandInvocation
+                - ssm:ListCommandInvocations
+              Resource:
+                - !Sub 'arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:instance/*'
+                - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:document/${ProjectName}-${EnvironmentName}-BootstrapSSMDoc'
+        - Version: '2012-10-17' # Policy Document for DynamoDB
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+                - dynamodb:UpdateItem
+              Resource: !GetAtt ServersTable.Arn
       Environment:
         Variables:
           APP_NAME: !Ref ProjectName
@@ -391,9 +429,9 @@ Resources:
           APPSYNC_URL: !GetAtt GraphQLAPI.GraphQLUrl
           COGNITO_USER_POOL_ID: 
             Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-UserPoolId"
-          #INSTANCES_TABLE_NAME: !Ref InstancesTable
-          # CONFIG_SERVER_LAMBDA_NAME removed as ConfigServer Lambda is no longer needed
-          PARAMETERS_SECRETS_EXTENSION_HTTP_PORT: 2773
+          SERVERS_TABLE_NAME: !Ref ServersTable
+          BOOTSTRAP_SSM_DOC_NAME:
+            Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-SSMDoc"          
 
   GetMonthlyCost:
     Type: AWS::Serverless::Function 
@@ -421,6 +459,22 @@ Resources:
           TAG_APP_VALUE: !Ref AppValue
           #INSTANCES_TABLE_NAME: !Ref InstancesTable
 
+  GetServerMetrics:
+    Type: AWS::Serverless::Function 
+    Properties:
+      FunctionName: !Sub "${ProjectName}-${EnvironmentName}-getServerMetrics"
+      CodeUri: ../../lambdas/getServerMetrics/
+      Layers:
+        - !Ref AuthLayer
+        - !Ref UtilLayer
+      Policies:
+        - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
+        - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess
+        - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
+      Environment:
+        Variables:
+          APP_NAME: !Ref ProjectName
+
   ListServers:
     Type: AWS::Serverless::Function
     Properties:
@@ -430,6 +484,7 @@ Resources:
         - !Ref AuthLayer
         - !Ref UtilLayer
         - !Ref Ec2Layer
+        - !Ref DynLayer
       Policies:
         - CostExplorerReadOnlyPolicy: {}
         - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
@@ -439,16 +494,8 @@ Resources:
         - arn:aws:iam::aws:policy/AmazonCognitoReadOnly
         - SSMParameterReadPolicy:
             ParameterName: !Sub "${ProjectName}*"
-        - Version: "2012-10-17" # Policy Document
-          Statement:
-            - Effect: Allow
-              Action:
-                - ec2:DeleteTags
-                - ec2:CreateTags
-              Resource: 'arn:aws:ec2:*:*:instance/*'
-              Condition:
-                StringEquals:
-                  'ec2:ResourceTag/App': !Ref AppValue
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ServersTable
         - Version: "2012-10-17" # Policy Document
           Statement:
             - Effect: Allow
@@ -478,6 +525,7 @@ Resources:
       Layers:
         - !Ref UtilLayer
         - !Ref Ec2Layer
+        - !Ref DynLayer
       Events:
         SQSEvent:
           Type: SQS
@@ -488,6 +536,8 @@ Resources:
         - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
         - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess
         - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ServersTable
         - Version: "2012-10-17"
           Statement:
             - Effect: Allow
@@ -495,10 +545,6 @@ Resources:
                 - ec2:StartInstances
                 - ec2:StopInstances
                 - ec2:RebootInstances
-                - ec2:AssociateIamInstanceProfile
-                - ec2:DisassociateIamInstanceProfile
-                - ec2:DeleteTags
-                - ec2:CreateTags
               Resource: 'arn:aws:ec2:*:*:instance/*'
               Condition:
                 StringEquals:
@@ -538,10 +584,6 @@ Resources:
           ENVIRONMENT_NAME: !Ref EnvironmentName
           TAG_APP_VALUE: !Ref AppValue
           AWS_REGION_NAME: !Sub "${AWS::Region}"
-          EC2_INSTANCE_PROFILE_NAME:  
-            Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-IAMEC2InstanceProfile"
-          EC2_INSTANCE_PROFILE_ARN:  
-            Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-IAMEC2InstanceProfileArn"
           APPSYNC_URL: !GetAtt GraphQLAPI.GraphQLUrl
 
   ServerAction:
@@ -604,6 +646,61 @@ Resources:
           COGNITO_USER_POOL_ID:  
             Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-UserPoolId"
 
+  PermissionForScheduledEventsToInvokeServerAction:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref ServerAction
+      Action: "lambda:InvokeFunction"
+      Principal: "events.amazonaws.com"
+      SourceArn: !Sub "arn:aws:events:${AWS::Region}:${AWS::AccountId}:rule/*"
+
+  FixServerRole:
+    Type: AWS::Serverless::Function
+    Properties:
+      Timeout: 120
+      FunctionName: !Sub "${ProjectName}-${EnvironmentName}-fixServerRole"
+      CodeUri: ../../lambdas/fixServerRole/
+      Layers:
+        - !Ref AuthLayer
+        - !Ref UtilLayer
+        - !Ref Ec2Layer
+      Policies:
+        - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
+        - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess
+        - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
+        - arn:aws:iam::aws:policy/AmazonCognitoReadOnly
+        - SSMParameterReadPolicy:
+            ParameterName: !Sub "${ProjectName}*"
+        - Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Action:
+                - ec2:AssociateIamInstanceProfile
+                - ec2:DisassociateIamInstanceProfile
+              Resource: 'arn:aws:ec2:*:*:instance/*'
+              Condition:
+                StringEquals:
+                  'ec2:ResourceTag/App': !Ref AppValue
+        - Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Action:
+                - iam:PassRole
+              Resource: 
+                Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-IAMEC2RoleArn"
+      Environment:
+        Variables:
+          APP_NAME: !Ref ProjectName
+          ENVIRONMENT_NAME: !Ref EnvironmentName
+          TAG_APP_VALUE: !Ref AppValue
+          AWS_REGION_NAME: !Sub "${AWS::Region}"
+          EC2_INSTANCE_PROFILE_NAME:  
+            Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-IAMEC2InstanceProfile"
+          EC2_INSTANCE_PROFILE_ARN:  
+            Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-IAMEC2InstanceProfileArn"
+          COGNITO_USER_POOL_ID:  
+            Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-UserPoolId"
+
   # ConfigServer Lambda removed as its functionality is handled by SSM Document
 
 Outputs:
@@ -634,6 +731,11 @@ Outputs:
     Export:
       Name: !Sub "${ProjectName}-${EnvironmentName}-GetMonthlyCost"
 
+  GetServerMetrics:
+    Value: !GetAtt GetServerMetrics.Arn
+    Export:
+      Name: !Sub "${ProjectName}-${EnvironmentName}-GetServerMetrics"
+
   ListServers:
     Value: !GetAtt ListServers.Arn
     Export:
@@ -643,6 +745,11 @@ Outputs:
     Value: !GetAtt ServerAction.Arn
     Export:
       Name: !Sub "${ProjectName}-${EnvironmentName}-ServerAction"
+
+  FixServerRole:
+    Value: !GetAtt FixServerRole.Arn
+    Export:
+      Name: !Sub "${ProjectName}-${EnvironmentName}-FixServerRole"
 
   EventResponse:
     Value: !GetAtt EventResponse.Arn
