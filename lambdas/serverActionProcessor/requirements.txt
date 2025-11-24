@@ -1,0 +1,5 @@
+requests
+requests_aws4auth
+urllib3==1.26.16
+boto3
+pytz

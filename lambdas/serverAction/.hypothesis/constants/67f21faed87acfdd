@@ -1,0 +1,4 @@
+# file: /Users/artrodri/dev/minecraft-server-dashboard/lambdas/serverAction/index.py
+# hypothesis_version: 6.148.2
+
+[200, 202, 400, 401, 500, 'APPSYNC_URL', 'AWS_REGION', 'COGNITO_USER_POOL_ID', 'Content-Type', 'Invalid Token', 'Invalid token', 'PROCESSING', 'Queue not configured', 'TAG_APP_VALUE', 'User not authorized', 'action', 'admin_group', 'alarmThreshold', 'alarmType', 'application/json', 'appsync', 'arguments', 'authorization', 'ec2', 'email', 'err', 'error', 'fieldName', 'fixServerRole', 'fixserverrole', 'getserverconfig', 'getserverusers', 'groups', 'headers', 'id', 'identity', 'info', 'input', 'instanceId', 'instance_group', 'instance_owner', 'message', 'msg', 'putServerConfig', 'putserverconfig', 'query', 'request', 'restart', 'restartServer', 'runCommand', 'shutdownMethod', 'sqs', 'start', 'startServer', 'status', 'stop', 'stopServer', 'timestamp', 'updateServerConfig', 'updateserverconfig', 'us-east-1', 'userEmail', 'variables', 'workDir']

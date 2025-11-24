@@ -1,2 +1,0 @@
-jsonpath-ng
-boto3

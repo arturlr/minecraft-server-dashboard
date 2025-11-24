@@ -3,35 +3,41 @@ import logging
 import os
 import json
 from time import sleep
-from uuid import uuid4
-from base64 import b64encode
 from datetime import date, datetime, timezone, timedelta
 import requests
 from requests_aws4auth import AWS4Auth
-import helpers
+import ec2Helper
+import utilHelper
+import DynHelper
 import pytz
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-utl = helpers.Utils()
-utc = pytz.utc
-pst = pytz.timezone('US/Pacific')
-
 ssm = boto3.client('ssm')
 appsync = boto3.client('appsync')
-ec2_client = boto3.client('ec2')
 cw_logs = boto3.client('logs')
 cw_client = boto3.client('cloudwatch')
-
 eb_client = boto3.client('events')
-cognito_idp = boto3.client('cognito-idp')
+lambda_client = boto3.client('lambda')
+
 ENCODING = 'utf-8'
 
 appValue = os.getenv('TAG_APP_VALUE')
 appName = os.getenv('APP_NAME') 
-endpoint = os.environ.get('APPSYNC_URL', None)
-userPoolId = os.environ.get('USERPOOL_ID', None)
+envName = os.getenv('ENVIRONMENT_NAME')
+endpoint = os.getenv('APPSYNC_URL', None) 
+cognito_pool_id = os.getenv('COGNITO_USER_POOL_ID', None)
+config_server_lambda = os.getenv('CONFIG_SERVER_LAMBDA_NAME',None)
+
+utl = utilHelper.Utils()
+ec2_utils = ec2Helper.Ec2Utils()
+dyn = DynHelper.Dyn()
+utc = pytz.utc
+pst = pytz.timezone('US/Pacific')
+
+scheduled_event_bridge_rule = utl.get_ssm_param(f"/{appName}/{envName}/scheduledrule")
+logger.info(f"Scheduled EventBridge Rule: {scheduled_event_bridge_rule}")
 
 boto3_session = boto3.Session()
 credentials = boto3_session.get_credentials()
@@ -45,18 +51,10 @@ auth = AWS4Auth(
     session_token=credentials.token,
 )
 
-headers={"Content-Type": "application/json"}
-
 session = requests.Session()
 session.auth = auth
+session.close()
 
-queryString="""
-fields @message  
-| parse @message ": * joined the game" as @userjoin
-| parse @message ": * left the game" as @userleft
-| parse @message "logged in with entity id *" as @userlogged
-| stats count(@userjoin) as userjoin, count(@userleft) as userleft, count(@userlogged) as userlogged by bin(5m) as t
-"""
 
 putServerMetric = """
 mutation PutServerMetric($input: ServerMetricInput!) {
@@ -86,260 +84,299 @@ changeServerState = """
       initStatus
       iamStatus
       runningMinutes
-      groupMembers
     }
 }
 """
 
-def _group_exists(instanceId, poolId):
-    try:
-        grpRsp = cognito_idp.get_group(
-                GroupName=instanceId,
-                UserPoolId=poolId
-            )
-            
-        return True
-        
-    except cognito_idp.exceptions.ResourceNotFoundException:
-        logger.warning("Group does not exist.")
-        return False
-
-def getAlert(instanceId):
-    try:
-        alarm = cw_client.describe_alarms_for_metric(
-            MetricName='cpu_usage_active',
-            Namespace='CWAgent',
-            Period=60,
-            Dimensions=[
-                {'Name': 'InstanceId','Value': instanceId},
-                {'Name': 'cpu','Value': "cpu-total"}
-            ]
-        )
-        if len(alarm["MetricAlarms"]) == 0:
-            logger.warning('No Datapoint for cpu_usage_active alarm:' + instanceId)
-            return ''
-
-        # logger.info(alarm["MetricAlarms"][0]["StateValue"])
-        # logger.info(alarm["MetricAlarms"][0]["StateReason"])
-        # logger.info(alarm["MetricAlarms"][0]["DatapointsToAlarm"])
-        return str(alarm["MetricAlarms"][0]["StateValue"])
-    except Exception as e:
-        logger.error(str(e))
-        return ''
+def send_to_appsync(payload):
+    logger.info("------- send_to_appsync")
+    headers={"Content-Type": "application/json"}
+    # sending response to AppSync
+    response = requests.post(
+        endpoint,
+        auth=auth,
+        headers=headers,
+        json=payload
+    )
+    logger.info(response.json())
     
-def getConnectUsers(instanceId,startTime):
-    try:
-        queryRsp = cw_logs.start_query(
-            logGroupName='/minecraft/serverlog/' + instanceId,
-            startTime=int(round(startTime.timestamp())),
-            endTime=int(round(datetime.now().timestamp())),
-            queryString=queryString
-        )
+def schedule_event_response():
+    logger.info("------- schedule_event_response")
+    # Check for instances running to update their stats. It can only be a Schedule Event
+    instances_running = ec2_utils.list_servers_by_state("running")    
 
-        if 'queryId' in queryRsp:
-            timeCount = 0
-            while timeCount < 4:
-                data = cw_logs.get_query_results(
-                    queryId=queryRsp['queryId']
-                )
-                dtY = 0
-                dtX = ""
-                cdata = []
-                if data['status'] == 'Complete':
-                    if len(data['results']) > 0:
-                        for rec in data['results']:
-                            for dt in rec:
-                                if dt['field'] == 'bin(5m)':
-                                    dtX = dt['value']
-                                    continue
-                                elif dt['field'] == 't':
-                                    dtY = dt['value']
-                            cdata.append({'y':dtY, 'x':dtX})
-                        data_points = sorted(cdata, key=lambda k : k['x'])
-                        print(data_points)                    
-                        return data_points
-                    else:
-                        return "[]"
-                elif data['status'] == 'Scheduled' or data['status'] == 'Running':
-                    sleep(5)
-                    timeCount = timeCount + 1
-                    continue
-                elif data['status'] == 'Failed':
-                    raise Exception("Query status: Failed")                    
-                else:
-                    sleep(5)
-                    timeCount = timeCount + 1
+    logger.info(instances_running)
 
-            if timeCount >= 4:
-                raise Exception("Query status: Timeout")
-            else:
-                logger.error("start_query: No Data.")
-                return "[]"
+    if instances_running["TotalInstances"] == 0:  
+        logger.error("No Instances Found for updating")
+        return None
 
+    instances_payload = []
+    dt_4_four_hours_before = datetime.now(tz=timezone.utc) - timedelta(hours=4)
+    dt_now = datetime.now(tz=timezone.utc)
 
-    except Exception as e:
-        logger.error("start_query: " + str(e) + " occurred.")
-        return "[]"
+    for instance in instances_running["Instances"]:
+        instance_info = {
+            'id': instance["InstanceId"],
+            'memStats': get_metrics_data(instance["InstanceId"], 'CWAgent', 'mem_used_percent', 'Percent', 'Average', dt_4_four_hours_before, dt_now, 300),
+            'cpuStats': get_metrics_data(instance["InstanceId"], 'CWAgent', 'cpu_usage_active', 'Percent', 'Average', dt_4_four_hours_before, dt_now, 300),
+            'networkStats': get_metrics_data(instance["InstanceId"], 'CWAgent', 'net_bytes_sent', 'Bytes', 'Sum', dt_4_four_hours_before, dt_now, 300),
+            'activeUsers': get_metrics_data(instance["InstanceId"], 'MinecraftDashboard', 'UserCount', 'None', 'Maximum', dt_4_four_hours_before, dt_now, 300),
+            #'alertMsg': get_alert(instance["InstanceId"])
+        }
+        instances_payload.append(instance_info)
 
-def getMetricData(instanceId,nameSpace,metricName,unit,statType,startTime,endTime,period):
-    cdata = []
-    dimensions=[]
-    dimensions.append({'Name': 'InstanceId','Value': instanceId})
-    if metricName == "cpu_usage_active":
-        dimensions.append({'Name': 'cpu','Value': "cpu-total"})
-    elif metricName == "net_bytes_sent":
-        nic = utl.getSsmParam("/amplify/minecraftserverdashboard/" + instanceId + "/nic")
-        if nic != None:        
-            dimensions.append({'Name': 'interface','Value': nic})
+    return instances_payload
+
+def get_metrics_data(instance_id, namespace, metric_name, unit, stat_type, start_time, end_time, period):
+    logger.info(f"get_metrics_data: {metric_name} - {instance_id}")
+
+    dimensions = [
+        {'Name': 'InstanceId', 'Value': instance_id}
+    ]
+
+    if metric_name == "cpu_usage_active":
+        dimensions.append({'Name': 'cpu', 'Value': "cpu-total"})
+    elif metric_name == "net_bytes_sent":
+        nic_name = utl.retrieve_extension_value(f"/{appName}/{envName}/{instance_id}/nic")
+        if nic_name is not None:
+            dimensions.append({'Name': 'interface', 'Value': nic_name})
+        else:
+            logger.warning("No NIC parameter store found for instance: " + instance_id)
 
     try:
-        rsp = cw_client.get_metric_statistics(
-            Namespace=nameSpace,
-            MetricName=metricName,
+        response = cw_client.get_metric_statistics(
+            Namespace=namespace,
+            MetricName=metric_name,
             Dimensions=dimensions,
-            StartTime=startTime,
-            EndTime=endTime,
+            StartTime=start_time,
+            EndTime=end_time,
             Period=period,
-            Statistics=[statType],
+            Statistics=[stat_type],
             Unit=unit
         )
 
-        if len(rsp["Datapoints"]) == 0:
-            logger.warning('No Datapoint for namespace:' + nameSpace + ' - metricName: ' + metricName + ' - InstanceId: ' + instanceId)
-            logger.info("startTime: " + startTime.strftime("%Y/%m/%dT%H:%M:%S") + " endTime: " + endTime.strftime("%Y/%m/%dT%H:%M:%S") + " Period: " + str(period))
+        if not response["Datapoints"]:
+            logger.warning(f'No Datapoint for namespace: {metric_name} - InstanceId: {instance_id}')
             return "[]"
-        else:
-            for rec in rsp["Datapoints"]:
-                if metricName == "net_bytes_sent":
-                    # converting to Gbit per Second - Divide by 60 to convert from 1 minute to 1 second - Divide by 1024/1024*8 to convert Byte in Mbps.
-                    cdata.append({'y': round(rec[statType]/60/1024/1024*8, 2), 'x': rec["Timestamp"].strftime("%Y/%m/%dT%H:%M:%S")})
-                else:
-                    cdata.append({'y': round(rec[statType], 2), 'x': rec["Timestamp"].strftime("%Y/%m/%dT%H:%M:%S")})
 
-            data_points = sorted(cdata, key=lambda k : k['x'])            
-            return json.dumps(data_points)
+        data_points = []
+        for datapoint in response["Datapoints"]:
+            if metric_name == "net_bytes_sent":
+                # Converting to Gbit per Second - Divide by 60 to convert from 1 minute to 1 second - Divide by 1024/1024*8 to convert Byte in Mbps.
+                data_points.append({
+                    'y': round(datapoint[stat_type] / 60 / 1024 / 1024 * 8, 2),
+                    'x': datapoint["Timestamp"].strftime("%Y/%m/%dT%H:%M:%S")
+                })
+            else:
+                data_points.append({
+                    'y': round(datapoint[stat_type], 2),
+                    'x': datapoint["Timestamp"].strftime("%Y/%m/%dT%H:%M:%S")
+                })
+
+        return json.dumps(sorted(data_points, key=lambda x: x['x']))
 
     except Exception as e:
-        logger.error('Something went wrong: ' + str(e))
+        logger.error(f'Something went wrong: {str(e)}')
         return "[]"
 
+def enable_scheduled_rule():    
+    logger.info("------- enable_scheduled_rule")
+    evtRule = eb_client.describe_rule(Name=scheduled_event_bridge_rule)
+    if evtRule["State"] == "DISABLED":                    
+        eb_client.enable_rule(Name=scheduled_event_bridge_rule)
+        logger.info("Enabled Evt Bridge Rule")
+
+def disable_scheduled_rule():
+    logger.info("------- disable_scheduled_rule")
+    # Check for instances running
+    instances_running = ec2_utils.list_servers_by_state("running")
+    
+    if instances_running["TotalInstances"] == 0:  
+        logger.error("No Instances running. Disabling Scheduled Event")
+        evtRule = eb_client.describe_rule(Name=scheduled_event_bridge_rule)
+        if evtRule["State"] == "ENABLED":
+            eb_client.disable_rule(Name=scheduled_event_bridge_rule)
+            logger.info("Disabled Evt Bridge Rule")
+
+def ensure_server_in_dynamodb(instance_id):
+    """
+    Ensure server exists in DynamoDB ServersTable with default configuration.
+    Creates entry with timestamps if it doesn't exist.
+    
+    Args:
+        instance_id (str): EC2 instance ID
+    """
+    logger.info(f"------- ensure_server_in_dynamodb: {instance_id}")
+    
+    try:
+        # Get current timestamp in ISO format
+        now = datetime.now(timezone.utc).isoformat()
+        
+        # Create default configuration with timestamps and metadata
+        default_config = {
+            'id': instance_id,
+            'shutdownMethod': 'CPUUtilization',
+            'alarmThreshold': 5.0,
+            'alarmEvaluationPeriod': 30,
+            'runCommand': 'java -Xmx1024M -Xms1024M -jar server.jar nogui',
+            'workDir': '/home/ec2-user/minecraft',
+            'timezone': 'UTC',
+            'isBootstrapped': False,
+            'minecraftVersion': '',
+            'latestPatchUpdate': '',
+            'createdAt': now,
+            'updatedAt': now,
+            'autoConfigured': True  # Flag to indicate this was auto-configured
+        }
+        
+        dyn.put_server_config(default_config)
+        logger.info(f"Default configuration created for server {instance_id} at {now}")
+
+    except Exception as e:
+        logger.error(f"Error ensuring server in DynamoDB: {str(e)}", exc_info=True)
+
+def state_change_response(instance_id):
+    logger.info("------- state_change_response: " + instance_id)
+
+    server_info = ec2_utils.list_server_by_id(instance_id)
+    instance_info = server_info['Instances'][0]
+    ec2Status = ec2_utils.describe_instance_status(instance_id)
+    launchTime = instance_info["LaunchTime"]
+    if "Association" in instance_info["NetworkInterfaces"][0]:
+        publicIp = instance_info["NetworkInterfaces"][0]["Association"]["PublicIp"]
+    else:
+        publicIp = "none"
+
+    tags = {tag['Key']: tag['Value'] for tag in instance_info["Tags"]}
+    
+    userEmail = 'minecraft-dashboard@maildrop.cc'
+
+    userEmail = tags.get("Owner", userEmail)
+
+    instanceName = "Undefined"
+    instanceName = tags.get("Name", instanceName)
+
+    # Converting to PST as the logs are in PST        
+    pstLaunchTime = launchTime.astimezone(pst)
+
+    # building payload
+    input = {
+        "id": instance_id,
+        "userEmail": userEmail,
+        "name": instanceName,
+        "type": instance_info["InstanceType"],
+        "state": instance_info["State"]["Name"].lower(),
+        "initStatus": ec2Status["initStatus"].lower(),
+        "iamStatus": ec2Status["iamStatus"].lower(),
+        "launchTime": pstLaunchTime.strftime("%m/%d/%Y - %H:%M:%S"),
+        "publicIp": publicIp,
+        "runningMinutes": ec2_utils.get_total_hours_running_per_month(instance_id)
+    }
+
+    return input
+    
+def config_server(instance_id):
+    """
+    Configure server by checking bootstrap status and running SSM document if needed.
+    
+    Args:
+        instance_id (str): EC2 instance ID
+    """
+    logger.info(f"------- config_server {instance_id}")
+    
+    try:
+        # Get server configuration from DynamoDB
+        config = dyn.get_server_config(instance_id)
+        
+        # Check if server needs bootstrapping
+        is_bootstrapped = config.get('isBootstrapped', False)
+        
+        if not is_bootstrapped:
+            logger.info(f"Server {instance_id} is not bootstrapped, running SSM bootstrap document")
+            
+            # Get SSM document name from environment or construct it
+            ssm_doc_name = os.getenv('BOOTSTRAP_SSM_DOC_NAME')
+            if not ssm_doc_name:
+                # Construct document name from app name and environment
+                ssm_doc_name = f"{appName}-{envName}-BootstrapSSMDoc"
+                logger.info(f"Using constructed SSM document name: {ssm_doc_name}")
+            
+            # Get SSM parameter prefix
+            ssm_param_prefix = f"/{appName}/{envName}"
+            
+            # Send SSM command to bootstrap the instance
+            try:
+                response = ssm.send_command(
+                    InstanceIds=[instance_id],
+                    DocumentName=ssm_doc_name,
+                    Parameters={
+                        'SSMParameterPrefix': [ssm_param_prefix]
+                    },
+                    Comment=f'Bootstrap server {instance_id}'
+                )
+                
+                command_id = response['Command']['CommandId']
+                logger.info(f"SSM bootstrap command sent successfully: CommandId={command_id}, Instance={instance_id}")
+                
+                # Update DynamoDB to mark as bootstrapped
+                # Note: This is optimistic - we're marking it as bootstrapped immediately
+                # In production, you might want to wait for SSM command completion
+                dyn.update_server_config({
+                    'id': instance_id,
+                    'isBootstrapped': True
+                })
+                logger.info(f"Server {instance_id} marked as bootstrapped in DynamoDB")
+                
+            except Exception as ssm_error:
+                logger.error(f"Failed to send SSM bootstrap command for {instance_id}: {str(ssm_error)}", exc_info=True)
+                # Don't raise - allow the function to continue even if bootstrap fails
+        else:
+            logger.info(f"Server {instance_id} is already bootstrapped, skipping SSM document execution")
+            
+    except Exception as e:
+        logger.error(f"Error in config_server for {instance_id}: {str(e)}", exc_info=True)
+        # Don't raise - allow the event handler to continue
+
+
+
 def handler(event, context):     
-    dt_4_four_hours_before=datetime.utcnow() - timedelta(hours=4)
-    dt_now = datetime.utcnow()  
-    instancesInfo = []
+    
     # Event Brigde
     if 'detail-type' in event:
         logger.info(event['detail-type'])
         if event['detail-type'] == "EC2 Instance State-change Notification":   
-            logger.info("Found InstanceId: " + event['detail']['instance-id'] + ' at ' + event['detail']['state'] + ' state')
-            instancesInfo = utl.describeInstances("id",event['detail']['instance-id'])
-            scheduledEventBridgeRuleName = utl.getSsmParam("/amplify/minecraftserverdashboard/scheduledrule")
-            if scheduledEventBridgeRuleName == None:
+            logger.info("Found InstanceId: " + event['detail']['instance-id'] + ' at ' + event['detail']['state'] + ' state')            
+            if not scheduled_event_bridge_rule:
                 logger.error("Scheduled Event Name not registered")
-                return "No Scheduled Event"         
-
-            instancesRunning = utl.describeInstances("state","running")
-            if len(instancesRunning) == 0:
-                eb_client.disable_rule(Name=scheduledEventBridgeRuleName)
-                logger.info("Disabled Evt Bridge Rule")
-            else:
-                evtRule = eb_client.describe_rule(Name=scheduledEventBridgeRuleName)
-                if evtRule["State"] == "DISABLED":                    
-                    eb_client.enable_rule(Name=scheduledEventBridgeRuleName)
-                    logger.info("Enabled Evt Bridge Rule")
-
-        elif event['detail-type'] == "Scheduled Event":
-                # Check for instances running to update their stats. It can only be a Schedule Event
-                instancesInfo = utl.describeInstances("state","running")
-                if len(instancesInfo) == 0:  
-                    logger.error("No Instances Found for updating")
-                    return "No Instances Found for updating"
-
-
-    for instance in instancesInfo:
-        instanceId = instance["Instances"][0]["InstanceId"]
-
-        #
-        # Group Checking and Creation
-        #
-        groupMembers = []
-        cogGrp = _group_exists(instanceId,userPoolId)
-        if cogGrp:
-            response = cognito_idp.list_users_in_group(
-                UserPoolId=userPoolId,
-                GroupName=instanceId
-            )            
-            if len(response["Users"]) > 0:
-                for user in response["Users"]:            
-                    for att in user["Attributes"]:
-                        if att["Name"] == "email":
-                            email = att["Value"]
-                        elif att["Name"] == "sub":
-                            id = att["Value"]
-                        elif att["Name"] == "given_name":
-                            given_name = att["Value"]
-                        elif att["Name"] == "family_name":
-                            family_name = att["Value"]
-                    groupMembers.append({
-                        "id": id,
-                        "email": email,
-                        "fullname": given_name + ' ' + family_name                        
-                    }) 
+                return "No Scheduled Event"
             
-        ec2Status = utl.describeInstanceStatus(instanceId)
-        guid = str(uuid4())
-        launchTime = instance["Instances"][0]["LaunchTime"]
-        if "Association" in instance["Instances"][0]["NetworkInterfaces"][0]:
-            publicIp = instance["Instances"][0]["NetworkInterfaces"][0]["Association"]["PublicIp"]
-        else:
-            publicIp = "none"
+            instance_id = event['detail']['instance-id']
+                                
+            if event['detail']['state'] == "running":                
+                enable_scheduled_rule()
+                # Ensure server exists in DynamoDB
+                # Check if server config exists
+                config = dyn.get_server_config(instance_id)
+                if not config.get('shutdownMethod'):
+                    ensure_server_in_dynamodb(instance_id)
+                config_server(instance_id)
+            elif event['detail']['state'] == "stopped":
+                disable_scheduled_rule()
 
-        userEmail = 'minecraft-dashboard@maildrop.cc'
-        for tag in instance["Instances"][0]["Tags"]:
-            if tag["Key"] == "User":
-                userEmail = tag["Value"]
-
-        instanceName = "Undefined"
-        for tag in instance["Instances"][0]["Tags"]:
-            if tag["Key"] == "Name":
-               instanceName = tag["Value"]
-
-        input = { "id": instanceId }
-
-        # Converting to PST as the logs are in PST        
-        pstLaunchTime = launchTime.astimezone(pst)
-        #activeUsers = getConnectUsers(instanceId, datetime.utcfromtimestamp(pstLaunchTime.timestamp()))
-
-        if event['detail-type'] == "EC2 Instance State-change Notification":
-            input["userEmail"] = userEmail
-            input["name"] = instanceName
-            input["type"] = instance["Instances"][0]["InstanceType"]
-            input["state"] = instance["Instances"][0]["State"]["Name"].lower()
-            input["initStatus"] = ec2Status["initStatus"].lower()
-            input["iamStatus"] = ec2Status["iamStatus"].lower()
-            input["launchTime"] = pstLaunchTime.strftime("%m/%d/%Y - %H:%M:%S")
-            input["publicIp"] = publicIp
-            input["runningMinutes"] = ""
-            input["groupMembers"] = json.dumps(groupMembers)
+            input = state_change_response(instance_id)
             payload={"query": changeServerState, 'variables': { "input": input }}
 
-        if event['detail-type'] == "Scheduled Event":
-            input['activeUsers'] = getMetricData(instanceId,'MinecraftDashboard','UserCount','None','Maximum',dt_4_four_hours_before,dt_now,300)
-            # input["cpuStats"] = getMetricData(instanceId,'AWS/EC2','CPUUtilization','Percent','Average',dt_4_four_hours_before,dt_now,300)
-            # input["networkStats"] = getMetricData(instanceId,'AWS/EC2','NetworkOut','Bytes','Average',dt_4_four_hours_before,dt_now,300)
-            input["cpuStats"] = getMetricData(instanceId,'CWAgent','cpu_usage_active','Percent','Average',dt_4_four_hours_before,dt_now,300)
-            input["networkStats"] = getMetricData(instanceId,'CWAgent','net_bytes_sent','Bytes','Sum',dt_4_four_hours_before,dt_now,300)
-            input["memStats"] = getMetricData(instanceId,'CWAgent','mem_used_percent','Percent','Average',dt_4_four_hours_before,dt_now,300)
-            input["alertMsg"] = getAlert(instanceId)
-            payload={"query": putServerMetric, 'variables': { "input": input }}
-        
-        response = requests.post(
-            endpoint,
-            auth=auth,
-            headers=headers,
-            json=payload
-        )
-        logger.info(response.json())
+            send_to_appsync(payload)
 
-    return response.json()
+        elif event['detail-type'] == "Scheduled Event":
+            input = schedule_event_response()
+            
+            for metrics in input:
+                payload={"query": putServerMetric, 'variables': { "input": metrics }}
+                send_to_appsync(payload)        
+        else:
+            logger.error("No Event Found")
+            return "No Event Found"
 
+    return "Event Successful processed"

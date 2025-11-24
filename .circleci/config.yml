@@ -1,0 +1,190 @@
+version: 2.1
+
+orbs:
+  aws-cli: circleci/aws-cli@4.0
+  aws-sam: circleci/aws-sam-serverless@4.0
+
+workflows:
+  dev-pipeline:
+    jobs:
+      - build-and-deploy-sam:
+          context: dev-aws
+          name: deploy-sam-dev
+          stage: dev
+          filters:
+            branches:
+              only: dev
+      - build-and-deploy-frontend:
+          context: dev-aws
+          name: deploy-frontend-dev
+          stage: dev
+          requires:
+            - deploy-sam-dev
+          filters:
+            branches:
+              only: dev
+              
+  prod-pipeline:
+    jobs:
+      - build-and-deploy-sam:
+          context: prod-aws
+          name: deploy-sam-prod
+          stage: prod
+          filters:
+            branches:
+              only: main
+      - build-and-deploy-frontend:
+          context: prod-aws
+          name: deploy-frontend-prod
+          stage: prod
+          requires:
+            - deploy-sam-prod
+          filters:
+            branches:
+              only: main
+
+jobs:
+  build-and-deploy-sam:
+    docker:
+      - image: cimg/python:3.13
+    parameters:
+      stage:
+        type: string
+    environment:
+      AWS_DEFAULT_REGION: us-west-2
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - sam-cache-{{ .Branch }}-{{ checksum "cfn/template.yaml" }}
+            - sam-cache-{{ .Branch }}-
+            - sam-cache-
+      - aws-cli/setup
+      - aws-sam/install
+      - run:
+          name: Build Lambda layers
+          command: |
+            set -e
+            echo "Building Lambda layers..."
+            cd layers
+            for layer in authHelper dynHelper utilHelper ec2Helper; do
+              echo "Building layer: $layer"
+              if [ -f "$layer/Makefile" ]; then
+                cd "$layer"
+                make
+                cd ..
+              fi
+            done
+      - run:
+          name: Validate SAM template
+          command: |
+            cd cfn
+            sam validate --lint
+      - run:
+          name: Build SAM application
+          no_output_timeout: 20m
+          command: |
+            set -e
+            cd cfn
+            sam build --parallel --cached
+      - run:
+          name: Deploy SAM application
+          no_output_timeout: 30m
+          command: |
+            set -e
+            cd cfn
+            
+            STACK_NAME="msd-<< parameters.stage >>"
+            
+            # Deploy with monitoring
+            sam deploy \
+              --config-env << parameters.stage >> \
+              --no-confirm-changeset \
+              --no-fail-on-empty-changeset &
+            
+            DEPLOY_PID=$!
+            
+            # Monitor stack events while deployment runs
+            echo "Monitoring CloudFormation deployment progress..."
+            while kill -0 $DEPLOY_PID 2>/dev/null; do
+              aws cloudformation describe-stack-events \
+                --stack-name $STACK_NAME \
+                --query 'StackEvents[0:5].[Timestamp,LogicalResourceId,ResourceStatus,ResourceStatusReason]' \
+                --output table 2>/dev/null || true
+              sleep 60
+            done
+            
+            # Wait for deployment to complete and get exit code
+            wait $DEPLOY_PID
+      - run:
+          name: Get stack outputs
+          command: |
+            cd cfn
+            aws cloudformation describe-stacks \
+              --stack-name msd-<< parameters.stage >> \
+              --query 'Stacks[0].Outputs' \
+              --output table
+      - save_cache:
+          key: sam-cache-{{ .Branch }}-{{ checksum "cfn/template.yaml" }}
+          paths:
+            - ~/.aws-sam
+            - cfn/.aws-sam
+
+  build-and-deploy-frontend:
+    docker:
+      - image: cimg/node:20.18
+    parameters:
+      stage:
+        type: string
+    environment:
+      AWS_DEFAULT_REGION: us-west-2
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - npm-cache-{{ .Branch }}-{{ checksum "dashboard/package-lock.json" }}
+            - npm-cache-{{ .Branch }}-
+      - aws-cli/setup
+      - run:
+          name: Get stack configuration
+          command: |
+            set -e
+            # Run get-stack-config.sh to generate .env file
+            chmod +x get-stack-config.sh
+            ./get-stack-config.sh msd-<< parameters.stage >> us-west-2
+      - run:
+          name: Build frontend
+          command: |
+            set -e
+            cd dashboard
+            npm ci
+            npm run build
+      - run:
+          name: Deploy to S3 and invalidate CloudFront
+          command: |
+            set -e
+            
+            # Get bucket name from stack outputs
+            BUCKET_NAME=$(aws cloudformation describe-stacks \
+              --stack-name msd-<< parameters.stage >> \
+              --query 'Stacks[0].Outputs[?OutputKey==`WebAppBucket`].OutputValue' \
+              --output text)
+            
+            CLOUDFRONT_ID=$(aws cloudformation describe-stacks \
+              --stack-name msd-<< parameters.stage >> \
+              --query 'Stacks[0].Outputs[?OutputKey==`CloudFront`].OutputValue' \
+              --output text 2>/dev/null || echo "")
+            
+            echo "Deploying to S3 bucket: $BUCKET_NAME"
+            aws s3 sync dashboard/dist/ s3://$BUCKET_NAME --delete
+            
+            if [ -n "$CLOUDFRONT_ID" ]; then
+              echo "Invalidating CloudFront distribution: $CLOUDFRONT_ID"
+              aws cloudfront create-invalidation \
+                --distribution-id $CLOUDFRONT_ID \
+                --paths "/*"
+            fi
+      - save_cache:
+          key: npm-cache-{{ .Branch }}-{{ checksum "dashboard/package-lock.json" }}
+          paths:
+            - ~/.npm

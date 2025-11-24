@@ -2,62 +2,28 @@ import boto3
 import logging
 import os
 import json
-import urllib.request
 import time
-import helpers
-from jose import jwk, jwt
-from jose.utils import base64url_decode
+import authHelper
+import utilHelper
 from datetime import date, datetime, timezone, timedelta
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
-
-utl = helpers.Utils()
 
 ce_client = boto3.client('ce')
 cognito_idp = boto3.client('cognito-idp')
 ENCODING = 'utf-8'
 
 appValue = os.getenv('TAG_APP_VALUE')
+cognito_pool_id = os.getenv('COGNITO_USER_POOL_ID')
 
-def is_token_valid(token, keys):
-    # https://github.com/awslabs/aws-support-tools/tree/master/Cognito/decode-verify-jwt
-    headers = jwt.get_unverified_headers(token)
-    kid = headers['kid']
-    # search for the kid in the downloaded public keys
-    key_index = -1
-    for i in range(len(keys)):
-        if kid == keys[i]['kid']:
-            key_index = i
-            break
-    if key_index == -1:
-        logger.error('Public key not found in jwks.json')
-        return None
-    # construct the public key
-    public_key = jwk.construct(keys[key_index])
-    # get the last two sections of the token,
-    # message and signature (encoded in base64)
-    message, encoded_signature = str(token).rsplit('.', 1)
-    # decode the signature
-    decoded_signature = base64url_decode(encoded_signature.encode('utf-8'))
-    # verify the signature
-    if not public_key.verify(message.encode("utf8"), decoded_signature):
-        logger.error('Signature verification failed')
-        return None
-    logger.info('Signature successfully verified')
-    # since we passed the verification, we can now safely
-    # use the unverified claims
-    claims = jwt.get_unverified_claims(token)
-    
-    # additionally we can verify the token expiration
-    if time.time() > claims['exp']:
-        logger.error('Token is expired')
-        return None
-    # now we can use the claims
-    return claims
+auth = authHelper.Auth(cognito_pool_id)
+utl = utilHelper.Utils()
+
+# Token validation is now handled by authHelper
 
 
-def getUsageCost(granularity,startDate,endDate,tagValue):
+def getUsageCost(granularity, startDate, endDate, instanceId):
     try:
         usageQuantity = 0
         unblendedCost = 0
@@ -74,14 +40,12 @@ def getUsageCost(granularity,startDate,endDate,tagValue):
                                 "Values": [
                                     "EC2: Running Hours"
                                 ]
-                            },
-                            
+                            }
                         },
                         {
                             "Tags": {
-                                "Key": "App",
-                                "Values": [ tagValue
-                                ]
+                                "Key": "aws:cloudformation:stack-id",
+                                "Values": [instanceId]
                             }
                         }
                     ]
@@ -110,60 +74,76 @@ def getUsageCost(granularity,startDate,endDate,tagValue):
                     "usageQuantity": float(results['Total']['UsageQuantity']['Amount'])
                 })
             return usageDays
+
                 
     except Exception as e:
         logger.error(str(e))
         return { "unblendedCost": 0, "usageQuantity": 0 }
 
 def handler(event, context):
-    
-    end_date = datetime.utcnow()
-    last_day_of_prev_month = datetime.utcnow().replace(day=1,hour=23,minute=59,second=59) - timedelta(days=1)
-    dt_1st_day_of_month_ago = datetime.utcnow().replace(day=1,hour=0,minute=0,second=0)
+    try:
+        # Use current time in UTC for date calculations
+        end_date = datetime.now(timezone.utc)
+        last_day_of_prev_month = end_date.replace(day=1, hour=23, minute=59, second=59) - timedelta(days=1)
+        dt_1st_day_of_month_ago = end_date.replace(day=1, hour=0, minute=0, second=0)
 
-    if end_date.strftime("%Y-%m-%d") == dt_1st_day_of_month_ago.strftime("%Y-%m-%d"):
-        start_date = last_day_of_prev_month
-    else:
-        start_date = dt_1st_day_of_month_ago
+        if end_date.strftime("%Y-%m-%d") == dt_1st_day_of_month_ago.strftime("%Y-%m-%d"):
+            start_date = last_day_of_prev_month
+        else:
+            start_date = dt_1st_day_of_month_ago
 
+        # Validate request and token
+        if 'request' not in event or 'headers' not in event['request'] or 'authorization' not in event['request']['headers']:
+            logger.error("Missing authorization header")
+            return []
 
-    # validate query type
-    # validate jwt token
+        # Get the token from the request
+        token = event["request"]["headers"]["authorization"]
+        
+        # Use authHelper to validate token and get user attributes
+        user_attributes = auth.process_token(token)
+        
+        # Check if claims are valid
+        if user_attributes is None:
+            logger.error("Invalid Token")
+            return []
+        
+        # Get instance ID from arguments
+        if not event.get("arguments") or not event["arguments"].get("instanceId"):
+            logger.error("Missing instanceId argument")
+            return []
+            
+        instance_id = event["arguments"]["instanceId"]
+        
+        # Check authorization using utilHelper
+        cognito_groups = event["identity"].get("groups", [])
+        is_authorized, auth_reason = utl.check_user_authorization(
+            cognito_groups, 
+            instance_id, 
+            user_attributes["email"], 
+            None  # We don't have ec2_utils here, but we can check admin status
+        )
+        
+        # If not admin, check if user is authorized for this instance
+        if not is_authorized and not utl.is_admin_user(cognito_groups):
+            logger.error(f"User {user_attributes['email']} not authorized for instance {instance_id}")
+            return []
+        
+        # Get cost data for the specific instance
+        monthlyTotalUsage = getUsageCost(
+            "MONTHLY",
+            start_date.strftime("%Y-%m-%d"),
+            end_date.strftime("%Y-%m-%d"),
+            instance_id
+        )
 
-    if not 'identity' in event:
-        logger.error("No Identity found")
-        return "No Identity found"
-
-    iss = event["identity"]["claims"]["iss"] 
-    token = event["request"]["headers"]["authorization"] 
-    keys_url = iss + '/.well-known/jwks.json'
-    # download the key
-    with urllib.request.urlopen(keys_url) as f:
-        response = f.read()
-    keys = json.loads(response.decode('utf-8'))['keys']
-
-    token_claims = is_token_valid(token,keys)
-
-    if token_claims == None:
-        logger.error("Invalid Token")
-        return "Invalid Token"
-
-    if 'cognito:username' in token_claims:
-        userName=token_claims["cognito:username"]
-    else:
-        userName=token_claims["username"]
-
-    # Get User Email from Cognito
-    cog_user = cognito_idp.admin_get_user(
-        UserPoolId=iss.split("/")[3],
-        Username=userName
-    )
-    
-    monthlyTotalUsage = getUsageCost("MONTHLY",start_date.strftime("%Y-%m-%d"),end_date.strftime("%Y-%m-%d"),appValue)
-
-    return [{
-            "id": monthlyTotalUsage['date'],
+        return [{
+            "id": instance_id,
             "timePeriod": end_date.strftime("%b"),
             "UnblendedCost": monthlyTotalUsage['unblendedCost'],
             "UsageQuantity": monthlyTotalUsage['usageQuantity']
-            }]
+        }]
+        
+    except Exception as e:
+        logger.error(f"Error in handler: {str(e)}")
+        return []

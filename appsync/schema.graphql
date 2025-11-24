@@ -1,0 +1,241 @@
+input AddUserToServerInput {
+	instanceId: String!
+	userEmail: AWSEmail!
+}
+
+type LogAudit @aws_iam
+@aws_cognito_user_pools {
+	id: ID!
+	actionUser: AWSEmail!
+	action: String!
+	instanceId: String!
+	inviteeEmail: AWSEmail	
+	expirationEpoch: AWSTimestamp
+	createdAt: AWSDateTime
+}
+
+input LogAuditInput {
+	id: ID!
+	actionUser: AWSEmail!
+	action: String!
+	instanceId: String!
+	inviteeEmail: AWSEmail	
+	expirationEpoch: AWSTimestamp
+	createdAt: AWSDateTime
+}
+
+type MonthlyCost @aws_iam
+@aws_cognito_user_pools {
+	id: String!
+	timePeriod: String!
+	UnblendedCost: Float!
+	UsageQuantity: Float!
+}
+
+input MonthlyCostInput {
+	id: String!
+	timePeriod: String
+	UnblendedCost: Float
+	UsageQuantity: Float
+}
+
+input ServerActionInput {
+	action: String!
+	instanceId: String!
+	params: AWSJSON
+}
+
+type ServerConfig @aws_iam
+@aws_cognito_user_pools {
+	id: String!
+	shutdownMethod: String
+	stopScheduleExpression: String
+	startScheduleExpression: String
+	alarmThreshold: Float
+	alarmEvaluationPeriod: Int
+	runCommand: String
+	workDir: String
+	timezone: String
+	isBootstrapped: Boolean
+	minecraftVersion: String
+	latestPatchUpdate: String
+	createdAt: AWSDateTime
+	updatedAt: AWSDateTime
+	autoConfigured: Boolean
+}
+
+input ServerConfigInput {
+	id: String!
+	shutdownMethod: String
+	stopScheduleExpression: String
+	startScheduleExpression: String
+	alarmThreshold: Float
+	alarmEvaluationPeriod: Int
+	runCommand: String
+	workDir: String
+	timezone: String
+	isBootstrapped: Boolean
+	minecraftVersion: String
+	latestPatchUpdate: String
+	createdAt: AWSDateTime
+	updatedAt: AWSDateTime
+	autoConfigured: Boolean
+}
+
+type ServerUsers @aws_iam
+@aws_cognito_user_pools {
+	id: String!
+	email: AWSEmail!
+	fullName: String!
+}
+
+input ServerUsersInput {
+	id: String!
+	email: AWSEmail!
+	fullName: String!
+}
+
+type ServerInfo @aws_iam
+@aws_cognito_user_pools {
+	id: String!
+	name: String
+	type: String
+	userEmail: AWSEmail
+	state: String
+	vCpus: Int
+	memSize: Int
+	diskSize: Int
+	launchTime: String
+	publicIp: String
+	initStatus: String
+	iamStatus: String
+	runningMinutes: String
+	configStatus: String
+	configValid: Boolean
+	configWarnings: [String]
+	configErrors: [String]
+	autoConfigured: Boolean
+}
+
+input ServerInfoInput {
+	id: String!
+	name: String
+	type: String
+	userEmail: AWSEmail
+	state: String
+	vCpus: Int
+	memSize: Int
+	diskSize: Int
+	launchTime: String
+	publicIp: String
+	initStatus: String
+	iamStatus: String
+	runningMinutes: String
+	configStatus: String
+	configValid: Boolean
+	configWarnings: [String]
+	configErrors: [String]
+	autoConfigured: Boolean
+}
+
+type ServerMetric @aws_iam
+@aws_cognito_user_pools {
+	id: String!
+	cpuStats: AWSJSON
+	networkStats: AWSJSON
+	memStats: AWSJSON
+	activeUsers: AWSJSON
+}
+
+input ServerMetricInput {
+	id: String!
+	cpuStats: AWSJSON
+	networkStats: AWSJSON
+	memStats: AWSJSON
+	activeUsers: AWSJSON
+}
+
+# New type for server action status
+type ServerActionStatus @aws_iam
+@aws_cognito_user_pools {
+	id: String!
+	action: String!
+	status: String!
+	timestamp: AWSTimestamp!
+	message: String
+	userEmail: AWSEmail
+}
+
+input ServerActionStatusInput {
+	id: String!
+	action: String!
+	status: String!
+	timestamp: AWSTimestamp!
+	message: String
+	userEmail: AWSEmail
+}
+
+type Mutation {
+	putServerMetric(input: ServerMetricInput!): ServerMetric
+		@aws_iam @aws_cognito_user_pools
+	changeServerState(input: ServerInfoInput!): ServerInfo
+		@aws_iam
+	startServer(instanceId: String!): AWSJSON
+		@aws_cognito_user_pools
+	restartServer(instanceId: String!): AWSJSON
+		@aws_cognito_user_pools
+	stopServer(instanceId: String!): AWSJSON
+		@aws_cognito_user_pools
+	fixServerRole(instanceId: String!): AWSJSON
+		@aws_cognito_user_pools  
+	verifyUserEmail(id: String!): AWSJSON
+		@aws_cognito_user_pools
+	addUserToServer(userEmail: AWSEmail, instanceId: String!): AWSJSON
+		@aws_cognito_user_pools
+	putServerConfig(input: ServerConfigInput!): ServerConfig  
+		@aws_cognito_user_pools
+	updateServerConfig(input: ServerConfigInput!): ServerConfig
+		@aws_cognito_user_pools 
+	putLogAudit(input: LogAuditInput!): LogAudit
+		@aws_iam @aws_cognito_user_pools
+	# New mutation for server action status
+	putServerActionStatus(input: ServerActionStatusInput!): ServerActionStatus
+		@aws_iam @aws_cognito_user_pools
+}
+
+type Query {
+	listServers: [ServerInfo]  
+		@aws_cognito_user_pools
+	getMonthlyCost(instanceId: String!): MonthlyCost
+		@aws_cognito_user_pools
+	getServerConfig(id: String!): ServerConfig
+		@aws_cognito_user_pools
+	getServerUsers(instanceId: String!): [ServerUsers]
+		@aws_cognito_user_pools
+	getLogAudit(id: String!): [LogAudit]
+		@aws_cognito_user_pools  
+	# New query for server action status
+	getServerActionStatus(id: String!): ServerActionStatus
+		@aws_cognito_user_pools
+	# Query for historical server metrics
+	getServerMetrics(id: String!): ServerMetric
+		@aws_cognito_user_pools
+}
+
+type Subscription {
+	onPutServerMetric(id: String!): ServerMetric  
+		@aws_subscribe(mutations: ["putServerMetric"])
+@aws_cognito_user_pools
+@aws_iam
+
+	onChangeState: ServerInfo
+		@aws_subscribe(mutations: ["changeServerState"])  
+@aws_cognito_user_pools
+@aws_iam
+
+	# New subscription for server action status
+	onPutServerActionStatus(id: String!): ServerActionStatus
+		@aws_subscribe(mutations: ["putServerActionStatus"])
+@aws_cognito_user_pools
+@aws_iam
+}

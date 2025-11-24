@@ -1,0 +1,54 @@
+### Committing Changes
+
+Follow the git best practice of committing early and often. Run `git commit` often, but DO NOT ever run `git push`
+
+BEFORE committing a change, ALWAYS do the following steps:
+
+1. Run `npm build` and fix any problems. Prefer running it against just the crate you're modifying for shorter runtimes
+2. Run `npm test` and fix any problems. Prefer running it against just the crate you're modifying for shorter runtimes
+3. Commit the changes
+
+### Commit Messages
+
+All commit messages should follow the [Conventional Commits](https://www.conventionalcommits.org/) specification and include best practices:
+
+```
+<type>[optional scope]: <description>
+
+[optional body]
+
+[optional footer(s)]
+
+🤖 Assisted by [Q Dev]
+```
+
+Types:
+- feat: A new feature
+- fix: A bug fix
+- docs: Documentation only changes
+- style: Changes that do not affect the meaning of the code
+- refactor: A code change that neither fixes a bug nor adds a feature
+- perf: A code change that improves performance
+- test: Adding missing tests or correcting existing tests
+- chore: Changes to the build process or auxiliary tools
+- ci: Changes to CI configuration files and scripts
+
+Best practices:
+- Use the imperative mood ("add" not "added" or "adds")
+- Don't end the subject line with a period
+- Limit the subject line to 50 characters
+- Capitalize the subject line
+- Separate subject from body with a blank line
+- Use the body to explain what and why vs. how
+- Wrap the body at 72 characters
+
+Example:
+```
+feat(lambda): Add Go implementation of DDB stream forwarder
+
+Replace Node.js Lambda function with Go implementation to reduce cold
+start times. The new implementation supports forwarding to multiple SQS
+queues and maintains the same functionality as the original.
+
+🤖 Assisted by [Q Dev]
+```

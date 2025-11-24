@@ -1,0 +1,174 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+
+Parameters:
+  ProjectName:
+    Type: String
+  EnvironmentName:
+    Type: String
+  AppValue:
+    Type: String
+    Description: Value of the application
+
+Resources:
+  CognitoUserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: !Sub ${ProjectName}-${EnvironmentName}-userpool
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+      UsernameAttributes:
+        - email
+      AutoVerifiedAttributes:
+        - email
+      Schema:
+        - AttributeDataType: String
+          Name: email
+          Required: true
+        - AttributeDataType: String
+          Name: family_name
+          Required: true
+        - AttributeDataType: String
+          Name: given_name
+          Required: true
+
+  CognitoUserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    DependsOn: GoogleIdentityProvider
+    Properties:
+      UserPoolId: !Ref CognitoUserPool
+      ClientName: !Sub ${ProjectName}-${EnvironmentName}-client
+      GenerateSecret: false
+      CallbackURLs:
+        - http://localhost:5173/
+      LogoutURLs:
+        - http://localhost:5173/
+      AllowedOAuthFlowsUserPoolClient: true
+      ExplicitAuthFlows:
+        - ALLOW_CUSTOM_AUTH
+        - ALLOW_USER_SRP_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+      AllowedOAuthFlows:
+        - code
+      SupportedIdentityProviders:
+        - COGNITO
+        - !Ref GoogleIdentityProvider
+      AllowedOAuthScopes:
+        - aws.cognito.signin.user.admin
+        - email
+        - openid
+        - phone
+        - profile
+
+  UserPoolDomain:
+    Type: AWS::Cognito::UserPoolDomain
+    Properties:
+      Domain:
+        !Join [
+          "-",
+          [
+            "minecraft",
+            !Select [1, !Split ["-", !Select [2, !Split ["/", !Ref AWS::StackId]]]],
+          ],
+        ]
+      UserPoolId: !Ref CognitoUserPool
+
+  CognitoIdentityPool:
+    Type: AWS::Cognito::IdentityPool
+    Properties:
+      IdentityPoolName: !Sub ${ProjectName}-${EnvironmentName}-identity
+      AllowUnauthenticatedIdentities: true
+      CognitoIdentityProviders:
+        - ClientId: !Ref CognitoUserPoolClient
+          ProviderName: !GetAtt CognitoUserPool.ProviderName
+
+  # Create a role for unauthorized acces to AWS resources. Very limited access. Only allows users in the previously created Identity Pool
+  CognitoUnAuthorizedRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Federated: "cognito-identity.amazonaws.com"
+            Action:
+              - "sts:AssumeRoleWithWebIdentity"
+            Condition:
+              StringEquals:
+                "cognito-identity.amazonaws.com:aud":
+                  Ref: CognitoIdentityPool
+              "ForAnyValue:StringLike":
+                "cognito-identity.amazonaws.com:amr": unauthenticated
+
+  # Create a role for authorized acces to AWS resources. Control what your user can access. This example only allows Lambda invokation
+  # Only allows users in the previously created Identity Pool
+  CognitoAuthorizedRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Federated: "cognito-identity.amazonaws.com"
+            Action:
+              - "sts:AssumeRoleWithWebIdentity"
+            Condition:
+              StringEquals:
+                "cognito-identity.amazonaws.com:aud":
+                  Ref: CognitoIdentityPool
+              "ForAnyValue:StringLike":
+                "cognito-identity.amazonaws.com:amr": authenticated
+
+  # Assigns the roles to the Identity Pool
+  IdentityPoolRoleMapping:
+    Type: AWS::Cognito::IdentityPoolRoleAttachment
+    Properties:
+      IdentityPoolId: !Ref CognitoIdentityPool
+      Roles:
+        authenticated: !GetAtt CognitoAuthorizedRole.Arn
+        unauthenticated: !GetAtt CognitoUnAuthorizedRole.Arn
+
+  GoogleIdentityProvider:
+    Type: AWS::Cognito::UserPoolIdentityProvider
+    Properties:
+      ProviderName: Google
+      UserPoolId: !Ref CognitoUserPool
+      ProviderType: Google
+      AttributeMapping:
+        email: email
+        given_name: given_name
+        family_name: family_name
+      ProviderDetails:
+        client_id: '{{resolve:ssm:/minecraft/GOOGLE_CLIENT_ID}}'
+        client_secret: '{{resolve:ssm:/minecraft/GOOGLE_SECRET}}'
+        # client_id: !Sub '{{resolve:ssm:/${ProjectName}/${EnvironmentName}/GOOGLE_CLIENT_ID}}'
+        # client_secret: !Sub '{{resolve:ssm:/${ProjectName}/${EnvironmentName}/GOOGLE_SECRET}}'
+        authorize_scopes: email profile openid
+
+Outputs:
+  CognitoIdentityPool:
+    Description: Cognito IdentityPool Id
+    Value: !Ref CognitoIdentityPool
+    Export:
+      Name: !Sub "${ProjectName}-${EnvironmentName}-CognitoIdentityPool"
+  
+  CognitoUserPoolClientId:
+    Description: Cognito UserPool ClientId
+    Value: !Ref CognitoUserPoolClient
+    Export:
+      Name: !Sub "${ProjectName}-${EnvironmentName}-UserPoolClientId"
+
+  CognitoUserPoolId:
+    Description: Cognito UserPool Id
+    Value: !Ref CognitoUserPool
+    Export:
+      Name: !Sub "${ProjectName}-${EnvironmentName}-UserPoolId"
+
+  CognitoDomainName:
+    Description: Cognito DomainName
+    Value: !Ref UserPoolDomain
+    Export:
+      Name: !Sub "${ProjectName}-${EnvironmentName}-CognitoDomainName"

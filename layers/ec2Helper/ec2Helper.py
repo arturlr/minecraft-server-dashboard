@@ -1,0 +1,469 @@
+import sys
+import boto3
+import logging
+import os
+import json
+from datetime import datetime, timezone
+from botocore.exceptions import ClientError
+from boto3.dynamodb.conditions import Key, Attr
+
+sys.path.insert(0, '/opt/utilHelper')
+import utilHelper
+
+utl = utilHelper.Utils()
+
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+
+session = boto3.session.Session()
+aws_region = session.region_name
+               
+class Ec2Utils:
+    def __init__(self):
+        logger.info("------- Ec2Utils Class Initialization")
+        self.ec2_client = boto3.client('ec2')
+        self.ssm = boto3.client('ssm')        
+        self.ct_client = boto3.client('cloudtrail')        
+        self.cw_client = boto3.client('cloudwatch')
+        self.sts_client = boto3.client('sts')
+        self.account_id = self.sts_client.get_caller_identity()['Account']
+        self.appValue = os.getenv('TAG_APP_VALUE')
+        self.ec2InstanceProfileArn = os.getenv('EC2_INSTANCE_PROFILE_ARN')
+
+    def get_latest_ubuntu_ami(self):
+        """
+        Get the latest Ubuntu 22.04 AMI ID from SSM Parameter Store
+        """
+        # Parameter path for Ubuntu 22.04 (Jammy) Server HVM with EBS storage
+        parameter_name = '/aws/service/canonical/ubuntu/server/22.04/stable/current/amd64/hvm/ebs-gp2/ami-id'
+        
+        try:
+            response = self.ssm.get_parameter(Name=parameter_name)
+            ami_id = response['Parameter']['Value']
+            print(f"Latest Ubuntu 22.04 AMI ID: {ami_id}")
+            return ami_id
+        except Exception as e:
+            print(f"Error retrieving AMI from Parameter Store: {e}")
+            return None
+
+    def create_ec2_instance(self, instance_name, instance_type='t3.micro', 
+                       subnet_id=None,
+                       security_group_id=None):
+        # None for subnet_id and security_group_id means the default one
+        try:
+            # Get the latest Ubuntu 22.04 AMI
+            ami_id = self.get_latest_ubuntu_ami()
+            print(f"Using Ubuntu 22.04 AMI: {ami_id}")
+            
+            # Define block device mappings for two EBS volumes
+            block_device_mappings = [
+                {
+                    # Root volume (OS) - size depends on AMI default
+                    'DeviceName': '/dev/sda1',
+                    'Ebs': {
+                        'VolumeSize': 16,  # 8 GB for OS
+                        'VolumeType': 'gp3',
+                        'DeleteOnTermination': True,
+                        'Encrypted': False
+                    }
+                },
+                {
+                    # Second volume for game data and logs
+                    'DeviceName': '/dev/sdf',
+                    'Ebs': {
+                        'VolumeSize': 50,  # 50 GB for game and logs
+                        'VolumeType': 'gp3',
+                        'DeleteOnTermination': True,
+                        'Encrypted': False
+                    }
+                }
+            ]
+                        
+            response = self.ec2_client.run_instances(
+                ImageId=ami_id,
+                InstanceType=instance_type,
+                MinCount=1,
+                MaxCount=1,
+                #KeyName=KEY_NAME,
+                SubnetId=subnet_id,
+                SecurityGroupIds=security_group_id,
+                IamInstanceProfile={'Arn': self.ec2InstanceProfileArn},
+                BlockDeviceMappings=block_device_mappings,
+                TagSpecifications=[
+                    {
+                        'ResourceType': 'instance',
+                        'Tags': [{'Key': 'Name', 'Value': instance_name}]
+                    },
+                    {
+                        'ResourceType': 'volume',
+                        'Tags': [
+                            {'Key': 'Name', 'Value': f"{instance_name}-volume"},
+                            {'Key': 'App', 'Value': self.appValue}
+                        ]
+                    }
+                ]
+            )
+            
+            instance_id = response['Instances'][0]['InstanceId']
+            print(f"EC2 instance created: {instance_id}")
+            print(f"Root volume (OS) on /dev/sda1")
+            print(f"Data volume (game/logs) on /dev/sdf")
+            
+            return instance_id
+        
+        except ClientError as e:
+            print(f"✗ Error: {e}")
+            return None
+
+
+    def update_alarm(self, instance_id, alarm_metric, alarm_threshold, alarm_evaluation_period):
+        logger.info("------- update_alarm : " + instance_id)
+
+        dimensions=[]
+        statistic="Average" 
+        namespace="CWAgent"
+        dimensions.append({'Name': 'InstanceId','Value': instance_id})
+        if alarm_metric == "CPUUtilization":
+            alarmMetricName = "cpu_usage_active"        
+            dimensions.append({'Name': 'cpu','Value': "cpu-total"})
+        elif alarm_metric == "Connections":
+            alarmMetricName = "UserCount"
+            statistic="Maximum"
+            namespace="MinecraftDashboard"
+
+        self.cw_client.put_metric_alarm(
+            AlarmName=instance_id + "-" + "minecraft-server",
+            ActionsEnabled=True,
+            AlarmActions=["arn:aws:automate:" + aws_region + ":ec2:stop"],
+            InsufficientDataActions=[],
+            MetricName=alarmMetricName,
+            Namespace=namespace,
+            Statistic=statistic,
+            Dimensions=dimensions,
+            Period=60,
+            EvaluationPeriods=int(alarm_evaluation_period),
+            DatapointsToAlarm=int(alarm_evaluation_period),
+            Threshold=float(alarm_threshold),  # Use float to support decimal thresholds
+            TreatMissingData="missing",
+            ComparisonOperator="LessThanOrEqualToThreshold"   
+        )
+
+        logger.info(f"Alarm configured to {alarm_metric} with threshold {alarm_threshold} and evaluation period {alarm_evaluation_period}")
+    
+    def remove_alarm(self, instance_id):
+        logger.info("------- remove_alarm : " + instance_id)
+
+        alarm_name = instance_id + "-" + "minecraft-server"
+        
+        # Check if alarm exists before deleting
+        try:
+            alarms = self.cw_client.describe_alarms(AlarmNames=[alarm_name])
+            if alarms['MetricAlarms']:
+                self.cw_client.delete_alarms(
+                    AlarmNames=[
+                        alarm_name
+                    ]
+                )
+                logger.info(f"Alarm {alarm_name} deleted successfully")
+            else:
+                logger.info(f"Alarm {alarm_name} does not exist")
+        except ClientError as e:
+            logger.error(f"Error checking/deleting alarm: {e}")
+
+    def check_alarm_exists(self, instance_id):
+        """Check if CloudWatch alarm exists for the instance."""
+        alarm_name = f"{instance_id}-minecraft-server"
+        try:
+            alarms = self.cw_client.describe_alarms(AlarmNames=[alarm_name])
+            return len(alarms['MetricAlarms']) > 0
+        except Exception as e:
+            logger.error(f"Error checking alarm {alarm_name}: {e}")
+            return False
+    
+    def check_eventbridge_rules_exist(self, instance_id):
+        """Check if EventBridge rules exist for the instance.
+           This is a read-only check used by the listServers Lambda function
+        """
+        eventbridge = boto3.client('events')
+        shutdown_rule = f"shutdown-{instance_id}"
+        start_rule = f"start-{instance_id}"
+        
+        try:
+            rules = eventbridge.list_rules()
+            rule_names = [rule['Name'] for rule in rules['Rules']]
+            
+            return {
+                'shutdown_rule_exists': shutdown_rule in rule_names,
+                'start_rule_exists': start_rule in rule_names
+            }
+        except Exception as e:
+            logger.error(f"Error checking EventBridge rules for {instance_id}: {e}")
+            return {'shutdown_rule_exists': False, 'start_rule_exists': False}
+
+    def get_total_hours_running_per_month(self, instanceId):
+        logger.info(f"------- get_total_hours_running_per_month {instanceId}")
+
+        total_minutes = 0
+        event_data = []
+
+        paginator = self.ct_client.get_paginator('lookup_events')
+        start_time = datetime(datetime.now().year, datetime.now().month, 1, tzinfo=timezone.utc)
+        end_time = datetime.now(tz=timezone.utc)
+
+        for page in paginator.paginate(
+            LookupAttributes=[{'AttributeKey': 'ResourceName', 'AttributeValue': instanceId}],
+            StartTime=start_time,
+            EndTime=end_time
+        ):
+            for event in page['Events']:
+                event_name = event['EventName']
+                if event_name == "RunInstances":
+                    event_data.append({'s': 'StartInstances', 'x': json.loads(event['CloudTrailEvent'])['eventTime']})
+                elif event_name == "StartInstances":
+                    start_event = self.extract_state_event_time(event, "stopped", instanceId)
+                    if start_event:
+                        event_data.append({'s': 'StartInstances', 'x': start_event})
+                elif event_name == "StopInstances":
+                    stop_event = self.extract_state_event_time(event, "running", instanceId)
+                    if stop_event:
+                        event_data.append({'s': 'StopInstances', 'x': stop_event})
+
+        data_points = sorted(event_data, key=lambda k: k['x'])
+
+        start_event = None
+        stop_event = None
+        for point in data_points:
+            if point['s'] == "StartInstances":
+                start_event = datetime.fromisoformat(point['x'].replace("Z", "+00:00"))
+            elif point['s'] == "StopInstances":
+                if start_event:
+                    stop_event = datetime.fromisoformat(point['x'].replace("Z", "+00:00"))
+                else:
+                    start_event = start_time
+                    stop_event = datetime.fromisoformat(point['x'].replace("Z", "+00:00"))
+
+                if start_event and stop_event:
+                    delta = stop_event - start_event
+                    total_minutes += round(delta.total_seconds() / 60, 2)
+                    start_event = None
+                    stop_event = None
+
+        return total_minutes
+
+    def extract_state_event_time(self, evt, previous_state, instance_id):
+        logger.info(f"------- extract_state_event_time {instance_id}")
+
+        ct_event = evt.get('CloudTrailEvent')
+        if ct_event:
+            ct_event = json.loads(ct_event)
+            response_elements = ct_event.get('responseElements')
+            if response_elements:
+                instances_set = response_elements.get('instancesSet')
+                if instances_set:
+                    items = instances_set.get('items')
+                    if items:
+                        for item in items:
+                            if item.get('instanceId') == instance_id and item['previousState']['name'] == previous_state:
+                                return ct_event['eventTime']
+        return None
+    
+    def list_instances_by_user_group(self, user_groups):
+        user_instances = []
+        for group_name in user_groups:
+            # check if group_name starts with i- (instance_id)
+            if not group_name.startswith("i-"):
+                continue
+
+            logger.info(f"Processing group: {group_name}")
+            response = self.ec2_client.describe_instances(InstanceIds=[group_name])
+            logger.info(response)
+            if not response["Reservations"]:
+                continue
+            else:
+                reservations = response["Reservations"]
+                user_instances.extend([user_instances for reservation in reservations for user_instances in reservation["Instances"]])
+
+        # Get the total number of instances
+        total_instances = len(user_instances)
+
+        # Log the total number of instances
+        logger.info(f"Total instances: {total_instances}")
+
+        return {
+            "Instances": user_instances,
+            "TotalInstances": total_instances
+        }
+        
+    def list_instances_by_app_tag(self, app_tag_value):
+        """
+        Lists all instances with the specified app tag value.
+        
+        Args:
+            app_tag_value (str): The value of the App tag to filter by.
+            
+        Returns:
+            dict: A dictionary containing the instances and total count.
+        """
+        logger.info(f"Listing instances by app tag: {app_tag_value}")
+        
+        filters = [
+            {"Name": "tag:App", "Values": [app_tag_value]},
+            {"Name": "instance-state-name", "Values": ["pending", "running", "stopping", "stopped"]}
+        ]
+        
+        response = self.ec2_client.describe_instances(Filters=filters)
+        
+        instances = []
+        for reservation in response["Reservations"]:
+            instances.extend(reservation["Instances"])
+            
+        total_instances = len(instances)
+        logger.info(f"Found {total_instances} instances with App tag: {app_tag_value}")
+        
+        return {
+            "Instances": instances,
+            "TotalInstances": total_instances
+        }
+
+    def list_server_by_id(self, instance_id):
+        response = self.ec2_client.describe_instances(InstanceIds=[instance_id])
+
+        if not response["Reservations"]:
+            return []
+        else:
+            return {
+            "Instances": response["Reservations"][0]["Instances"],
+            "TotalInstances": 1
+        }
+
+    def list_servers_by_user(self, email, page=1, results_per_page=10):
+        filters = [
+            {"Name": "tag:App", "Values": [self.appValue]},
+            {"Name":"instance-state-name", "Values":["pending","running","stopping","stopped"]},
+            {"Name": "tag:User", "Values": [email]}
+        ]
+
+        return self.paginate_instances(filters, page, results_per_page)
+
+    def list_servers_by_state(self, state, page=1, results_per_page=10):
+        filters = [
+            {"Name": "tag:App", "Values": [self.appValue]},
+            {"Name": "instance-state-name", "Values": [state]}
+        ]
+
+        return self.paginate_instances(filters, page, results_per_page)
+
+    def list_servers_by_group(self, group, page=1, results_per_page=10):
+        filters = [
+            {"Name": "tag:App", "Values": [self.appValue]},
+            {"Name": "instance-state-name", "Values": ["pending", "running", "stopping", "stopped"]},
+            {"Name": "tag:Group", "Values": [group]}
+        ]
+
+        return self.paginate_instances(filters, page, results_per_page)
+
+    def list_all_servers(self, page=1, results_per_page=10):
+        filters = [
+            {"Name": "tag:App", "Values": [self.appValue]},
+            {"Name": "instance-state-name", "Values": ["pending", "running", "stopping", "stopped"]}
+        ]
+
+        return self.paginate_instances(filters, page, results_per_page)
+
+    def paginate_instances(self, filters, page=1, results_per_page=10):
+        instances = []
+        next_token = None
+        logger.info(f"paginate_instances filter: {filters}")
+
+        while True:
+            if next_token:
+                response = self.ec2_client.describe_instances(Filters=filters, NextToken=next_token)
+            else:
+                response = self.ec2_client.describe_instances(Filters=filters)
+
+            reservations = response["Reservations"]
+            instances.extend([instance for reservation in reservations for instance in reservation["Instances"]])
+            next_token = response.get("NextToken")
+            if not next_token:
+                break
+
+        if not instances:
+            logger.info("No instances found")
+            return {
+                "Instances": [],
+                "TotalInstances": 0
+            }
+
+        # Get the total number of instances
+        total_instances = len(instances)
+
+        start_index = (page - 1) * results_per_page
+        end_index = start_index + results_per_page
+
+        # Log the total number of instances
+        logger.info(f"Total instances: {total_instances}")
+
+        return {
+            "Instances": instances[start_index:end_index],
+            "TotalInstances": total_instances
+        }
+
+    def describe_iam_profile(self, instance_id, status, association_id=None):
+        logger.info(f"------- describe_iam_profile: {instance_id} - {status}")
+
+        if association_id:
+            response = self.ec2_client.describe_iam_instance_profile_associations(
+                AssociationIds=[association_id]
+                )
+        else:                            
+            response = self.ec2_client.describe_iam_instance_profile_associations(
+                Filters=[
+                    {
+                        'Name': 'instance-id',
+                        'Values': [instance_id]
+                    },
+                ]
+            )            
+
+        matching_association = next((
+            {
+                "AssociationId": rec['AssociationId'],
+                "Arn": rec['IamInstanceProfile']['Arn']
+            }
+            for rec in response['IamInstanceProfileAssociations']
+            if rec['InstanceId'] == instance_id and rec['State'].lower() == status.lower()
+        ), None)
+
+        return matching_association
+                 
+    def describe_instance_status(self, instance_id):
+        logger.info(f"------- describe_instance_status: {instance_id}") 
+        iamStatus = 'Fail'
+        initStatus = 'Fail'
+
+        statusRsp = self.ec2_client.describe_instance_status(InstanceIds=[instance_id])
+
+        if not statusRsp["InstanceStatuses"]:
+            instanceStatus =  "Fail" 
+            systemStatus = "Fail" 
+        else:
+            instanceStatus = statusRsp["InstanceStatuses"][0]["InstanceStatus"]["Status"]
+            systemStatus = statusRsp["InstanceStatuses"][0]["SystemStatus"]["Status"]
+
+        if instanceStatus == 'ok' and systemStatus == 'ok':
+            initStatus = 'ok'
+        
+        iamProfile = self.describe_iam_profile(instance_id,"associated")
+        if iamProfile is not None and iamProfile['Arn'] == self.ec2InstanceProfileArn:
+            iamStatus = 'ok'
+        
+        return { 'instanceId': instance_id, 'initStatus': initStatus, 'iamStatus': iamStatus }
+
+    def describe_instance_attributes(self, instance_id):
+        logger.info(f"------- describe_instance_attributes: {instance_id}")
+        response = self.ec2_client.describe_instance_attribute(
+            Attribute='userData',
+            instanceId=instance_id
+        )
+
+   
