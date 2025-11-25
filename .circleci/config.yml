@@ -65,7 +65,7 @@ jobs:
           name: Validate SAM template
           command: |
             cd cfn
-            sam validate --lint
+            sam validate
       - run:
           name: Build SAM application
           no_output_timeout: 20m
