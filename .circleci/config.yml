@@ -91,6 +91,16 @@ jobs:
             
             STACK_NAME="msd-<< parameters.stage >>"
             
+            # Check if stack exists and is in failed state
+            STACK_STATUS=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query 'Stacks[0].StackStatus' --output text 2>/dev/null || echo "DOES_NOT_EXIST")
+            
+            if [[ "$STACK_STATUS" == *"FAILED"* ]] || [[ "$STACK_STATUS" == "ROLLBACK_COMPLETE" ]]; then
+              echo "Stack is in failed state: $STACK_STATUS. Deleting..."
+              aws cloudformation delete-stack --stack-name $STACK_NAME
+              aws cloudformation wait stack-delete-complete --stack-name $STACK_NAME
+              echo "Stack deleted successfully"
+            fi
+            
             # Deploy with monitoring
             sam deploy \
               --stack-name $STACK_NAME \
