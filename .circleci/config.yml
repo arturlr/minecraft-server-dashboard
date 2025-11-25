@@ -65,6 +65,9 @@ jobs:
           name: Build Lambda layers
           command: |
             set -e
+            export PYENV_ROOT="$HOME/.pyenv"
+            export PATH="$PYENV_ROOT/bin:$PATH"
+            eval "$(pyenv init -)"
             echo "Building Lambda layers..."
             cd layers
             for layer in authHelper dynHelper utilHelper ec2Helper; do
