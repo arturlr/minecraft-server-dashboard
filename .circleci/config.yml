@@ -74,7 +74,7 @@ jobs:
               
               # Install dependencies if requirements.txt exists
               if [ -f "$layer/requirements.txt" ]; then
-                pip install -r "$layer/requirements.txt" -t "$layer/build/python/" --cache-dir ~/.cache/pip
+                python3 -m pip install -r "$layer/requirements.txt" -t "$layer/build/python/" --cache-dir ~/.cache/pip
               fi
               
               # Copy Python files
