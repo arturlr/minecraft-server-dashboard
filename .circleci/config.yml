@@ -62,24 +62,6 @@ jobs:
       - aws-cli/setup
       - aws-sam/install
       - run:
-          name: Build Lambda layers
-          command: |
-            echo "Building Lambda layers..."
-            cd layers
-            for layer in authHelper dynHelper utilHelper ec2Helper; do
-              echo "Building layer: $layer"
-              
-              mkdir -p "$layer/build/python"
-              
-              # Install dependencies if requirements.txt exists
-              if [ -f "$layer/requirements.txt" ]; then
-                python3.13 -m pip install -r "$layer/requirements.txt" -t "$layer/build/python/" --cache-dir ~/.cache/pip
-              fi
-              
-              # Copy Python files
-              cp "$layer"/*.py "$layer/build/python/" 2>/dev/null || true
-            done
-      - run:
           name: Validate SAM template
           command: |
             cd cfn
