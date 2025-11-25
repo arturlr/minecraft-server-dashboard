@@ -95,6 +95,7 @@ jobs:
             sam deploy \
               --stack-name $STACK_NAME \
               --config-env << parameters.stage >> \
+              --resolve-s3 \
               --no-confirm-changeset \
               --no-fail-on-empty-changeset &
             
