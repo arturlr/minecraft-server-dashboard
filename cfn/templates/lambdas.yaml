@@ -21,17 +21,6 @@ Parameters:
   AppValue:
     Type: String    
 
-# Conditions:
-#   IsARM64Architecture: !Equals [ !Ref Architecture, arm64 ]
-
-# ParametersAndSecretsExtensionArn:
-#   us-east-1:
-#     x86: "arn:aws:lambda:us-east-1:177933569100:layer:AWS-Parameters-and-Secrets-Lambda-Extension:12"
-#     arm64: "arn:aws:lambda:us-east-1:177933569100:layer:AWS-Parameters-and-Secrets-Lambda-Extension-Arm64:12"
-#   us-west-2:
-#     x86: "arn:aws:lambda:us-west-2:345057560386:layer:AWS-Parameters-and-Secrets-Lambda-Extension:12"
-#     arm64: "arn:aws:lambda:us-west-2:345057560386:layer:AWS-Parameters-and-Secrets-Lambda-Extension-Arm64:12"
-
 Resources:
 
   ServerActionQueue:
@@ -276,6 +265,63 @@ Resources:
               Version: "1.0.0"
             Pipeline:
               - getServerMetricsFunction
+
+  DataSourceNone:
+    Type: AWS::AppSync::DataSource
+    Properties:
+      ApiId: !GetAtt GraphQLAPI.ApiId
+      Name: dataSourceNameNone
+      Description: dataSourceNone
+      Type: "NONE"
+
+  PutMetricServerResolver:
+    Type: AWS::AppSync::Resolver
+    Properties:
+      ApiId: !GetAtt GraphQLAPI.ApiId
+      TypeName: Mutation
+      FieldName: putServerMetric
+      DataSourceName: !GetAtt DataSourceNone.Name
+      RequestMappingTemplate: |
+        {
+          "version" : "2017-02-28",
+          "payload": { 
+              "id": $util.toJson($context.arguments.input.id),
+              "cpuStats": $util.toJson($context.arguments.input.cpuStats),
+              "networkStats": $util.toJson($context.arguments.input.networkStats),
+              "memStats": $util.toJson($context.arguments.input.memStats),
+              "activeUsers": $util.toJson($context.arguments.input.activeUsers),
+          }
+        }
+      ResponseMappingTemplate: $util.toJson($ctx.result)
+
+  ChangeServerStateResolver:
+    Type: AWS::AppSync::Resolver
+    Properties:
+      ApiId: !GetAtt GraphQLAPI.ApiId
+      TypeName: Mutation
+      FieldName: changeServerState
+      DataSourceName: !GetAtt DataSourceNone.Name
+      RequestMappingTemplate: |
+        {
+          "version" : "2017-02-28",
+          "payload": { 
+              "id": $util.toJson($context.arguments.input.id),
+              "name": $util.toJson($context.arguments.input.name),
+              "type": $util.toJson($context.arguments.input.type),
+              "userEmail": $util.toJson($context.arguments.input.userEmail),
+              "state": $util.toJson($context.arguments.input.state),
+              "vCpus": $util.toJson($context.arguments.input.vCpus),
+              "memSize": $util.toJson($context.arguments.input.memSize),
+              "diskSize": $util.toJson($context.arguments.input.diskSize),
+              "launchTime": $util.toJson($context.arguments.input.launchTime),
+              "publicIp": $util.toJson($context.arguments.input.publicIp),
+              "initStatus": $util.toJson($context.arguments.input.initStatus),
+              "iamStatus": $util.toJson($context.arguments.input.iamStatus),
+              "runningMinutes": $util.toJson($context.arguments.input.runningMinutes),
+              "groupMembers": $util.toJson($context.arguments.input.groupMembers)
+          }
+        }
+      ResponseMappingTemplate: $util.toJson($ctx.result)
 
   ScheduledRule: 
     Type: AWS::Events::Rule
@@ -701,7 +747,7 @@ Resources:
           COGNITO_USER_POOL_ID:  
             Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-UserPoolId"
 
-  # ConfigServer Lambda removed as its functionality is handled by SSM Document
+ 
 
 Outputs:
   ServersTable:

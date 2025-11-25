@@ -44,17 +44,6 @@ Resources:
         EnvironmentName: !Ref EnvironmentName
         AppValue: !Ref AppValue
 
-  AppSyncStack:
-    Type: AWS::Serverless::Application
-    DependsOn: 
-      - LambdasStack
-    Properties:
-      Location: ./templates/appsync.yaml
-      Parameters:
-        ProjectName: !Ref ProjectName
-        EnvironmentName: !Ref EnvironmentName
-        AppValue: !Ref AppValue
-
   WebStack:
     Type: AWS::Serverless::Application
     DependsOn: 
@@ -70,7 +59,7 @@ Resources:
 Outputs:
   GraphQLAPIEndpoint:
     Description: AppSync GraphQL API Endpoint
-    Value: !GetAtt AppSyncStack.Outputs.GraphQLAPIEndpoint
+    Value: !GetAtt LambdasStack.Outputs.GraphQLAPIEndpoint
 
   CloudFrontDomain:
     Description: CloudFront Distribution Domain Name
