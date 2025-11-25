@@ -96,6 +96,7 @@ jobs:
               --stack-name $STACK_NAME \
               --config-env << parameters.stage >> \
               --resolve-s3 \
+              --parameter-overrides "ProjectName=msd EnvironmentName=<< parameters.stage >> AppValue=minecraft" \
               --no-confirm-changeset \
               --no-fail-on-empty-changeset &
             
