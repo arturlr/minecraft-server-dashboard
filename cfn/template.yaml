@@ -70,40 +70,32 @@ Resources:
 Outputs:
   GraphQLAPIEndpoint:
     Description: AppSync GraphQL API Endpoint
-    Value: 
-      Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-GraphQLAPIEndpoint"
+    Value: !GetAtt AppSyncStack.Outputs.GraphQLAPIEndpoint
 
   CloudFrontDomain:
     Description: CloudFront Distribution Domain Name
-    Value: 
-      Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CloudFrontDomain"
+    Value: !GetAtt WebStack.Outputs.CloudFrontDomain
 
   CognitoUserPoolClientId:
     Description: Cognito User Pool Client ID
-    Value: 
-      Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-UserPoolClientId"
+    Value: !GetAtt CognitoStack.Outputs.UserPoolClientId
 
   CognitoUserPoolId:
     Description: Cognito User Pool ID
-    Value: 
-      Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-UserPoolId"
+    Value: !GetAtt CognitoStack.Outputs.UserPoolId
 
   CognitoIdentityPool:
     Description: Cognito Identity Pool ID
-    Value: 
-      Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CognitoIdentityPool"
+    Value: !GetAtt CognitoStack.Outputs.CognitoIdentityPool
 
   CognitoDomainName:
     Description: Cognito Domain Name
-    Value: 
-      Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CognitoDomainName"
+    Value: !GetAtt CognitoStack.Outputs.CognitoDomainName
 
   WebAppBucket:
     Description: S3 Web Application Bucket Name
-    Value: 
-      Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-WebBucket"
+    Value: !GetAtt WebStack.Outputs.WebAppBucket
 
   SupportBucket:
     Description: S3 Support Bucket Name
-    Value: 
-      Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-SupportBucket"
+    Value: !GetAtt WebStack.Outputs.SupportBucket
