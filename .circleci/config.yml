@@ -65,9 +65,10 @@ jobs:
           name: Build Lambda layers
           command: |
             set -e
-            # Find actual Python binary
-            PYTHON_BIN=$(which python3 || which python)
-            echo "Using Python at: $PYTHON_BIN"
+            export PYENV_ROOT="$HOME/.pyenv"
+            export PATH="$PYENV_ROOT/bin:$PATH"
+            eval "$(pyenv init --path)"
+            eval "$(pyenv init -)"
             
             echo "Building Lambda layers..."
             cd layers
@@ -78,7 +79,7 @@ jobs:
               
               # Install dependencies if requirements.txt exists
               if [ -f "$layer/requirements.txt" ]; then
-                $PYTHON_BIN -m pip install -r "$layer/requirements.txt" -t "$layer/build/python/" --cache-dir ~/.cache/pip
+                pip install -r "$layer/requirements.txt" -t "$layer/build/python/" --cache-dir ~/.cache/pip
               fi
               
               # Copy Python files
