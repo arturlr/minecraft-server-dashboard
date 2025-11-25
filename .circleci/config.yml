@@ -64,12 +64,6 @@ jobs:
       - run:
           name: Build Lambda layers
           command: |
-            set -e
-            export PYENV_ROOT="$HOME/.pyenv"
-            export PATH="$PYENV_ROOT/bin:$PATH"
-            eval "$(pyenv init --path)"
-            eval "$(pyenv init -)"
-            
             echo "Building Lambda layers..."
             cd layers
             for layer in authHelper dynHelper utilHelper ec2Helper; do
@@ -79,7 +73,7 @@ jobs:
               
               # Install dependencies if requirements.txt exists
               if [ -f "$layer/requirements.txt" ]; then
-                pip install -r "$layer/requirements.txt" -t "$layer/build/python/" --cache-dir ~/.cache/pip
+                python3.13 -m pip install -r "$layer/requirements.txt" -t "$layer/build/python/" --cache-dir ~/.cache/pip
               fi
               
               # Copy Python files
