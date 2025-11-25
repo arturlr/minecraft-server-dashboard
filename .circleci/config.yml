@@ -71,7 +71,7 @@ jobs:
               echo "Building layer: $layer"
               if [ -f "$layer/Makefile" ]; then
                 cd "$layer"
-                make
+                ARTIFACTS_DIR="./build" make
                 cd ..
               fi
             done
