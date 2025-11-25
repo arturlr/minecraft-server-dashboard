@@ -93,6 +93,7 @@ jobs:
             
             # Deploy with monitoring
             sam deploy \
+              --stack-name $STACK_NAME \
               --config-env << parameters.stage >> \
               --no-confirm-changeset \
               --no-fail-on-empty-changeset &
