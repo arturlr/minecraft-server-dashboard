@@ -242,8 +242,9 @@ def handler(event, context):
     
     # Use the centralized admin check from utilHelper
     if utl.is_admin_user(cognitoGroups):
-        logger.info("Admin user - listing all instances by app tag")
-        user_instances = ec2_utils.list_instances_by_app_tag(appValue)        
+        logger.info(f"Admin user - listing all instances by app tag: {appValue}")
+        user_instances = ec2_utils.list_instances_by_app_tag(appValue)
+        logger.info(f"Found {user_instances['TotalInstances']} instances with App={appValue}")
     elif cognitoGroups:
         user_instances = ec2_utils.list_instances_by_user_group(cognitoGroups)
         logger.info(user_instances)
@@ -252,7 +253,7 @@ def handler(event, context):
         return []
 
     if user_instances["TotalInstances"] == 0:
-        logger.error("No Servers Found")
+        logger.error(f"No Servers Found with App={appValue}")
         return []  # Return empty array instead of string
 
     # Fetch instance types, status, and tag validation in parallel

@@ -358,7 +358,7 @@ def handler(event, context):
                 # Ensure server exists in DynamoDB
                 # Check if server config exists
                 config = dyn.get_server_config(instance_id)
-                if not config.get('shutdownMethod'):
+                if not config or not config.get('shutdownMethod'):
                     ensure_server_in_dynamodb(instance_id)
                 config_server(instance_id)
             elif event['detail']['state'] == "stopped":
