@@ -87,4 +87,4 @@ Outputs:
 
   SupportBucket:
     Description: S3 Support Bucket Name
-    Value: !GetAtt WebStack.Outputs.SupportBucket
+    Value: !GetAtt EC2Stack.Outputs.SupportBucket
