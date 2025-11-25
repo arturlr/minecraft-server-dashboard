@@ -5,6 +5,7 @@ orbs:
   aws-sam: circleci/aws-sam-serverless@4.0
 
 workflows:
+  # Development pipeline - runs on all branches except main
   dev-pipeline:
     jobs:
       - build-and-deploy-sam:
@@ -13,7 +14,7 @@ workflows:
           stage: dev
           filters:
             branches:
-              only: dev
+              ignore: main
       - build-and-deploy-frontend:
           context: dev-aws
           name: deploy-frontend-dev
@@ -22,8 +23,9 @@ workflows:
             - deploy-sam-dev
           filters:
             branches:
-              only: dev
+              ignore: main
               
+  # Production pipeline - runs only on main branch
   prod-pipeline:
     jobs:
       - build-and-deploy-sam:
