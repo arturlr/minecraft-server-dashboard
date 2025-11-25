@@ -67,11 +67,11 @@ Outputs:
 
   CognitoUserPoolClientId:
     Description: Cognito User Pool Client ID
-    Value: !GetAtt CognitoStack.Outputs.UserPoolClientId
+    Value: !GetAtt CognitoStack.Outputs.CognitoUserPoolClientId
 
   CognitoUserPoolId:
     Description: Cognito User Pool ID
-    Value: !GetAtt CognitoStack.Outputs.UserPoolId
+    Value: !GetAtt CognitoStack.Outputs.CognitoUserPoolId
 
   CognitoIdentityPool:
     Description: Cognito Identity Pool ID
