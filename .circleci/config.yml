@@ -133,6 +133,18 @@ jobs:
               --stack-name msd-<< parameters.stage >> \
               --query 'Stacks[0].Outputs' \
               --output table
+      - run:
+          name: Upload CloudWatch agent config
+          command: |
+            SUPPORT_BUCKET=$(aws cloudformation describe-stacks \
+              --stack-name msd-<< parameters.stage >> \
+              --query 'Stacks[0].Outputs[?OutputKey==`SupportBucket`].OutputValue' \
+              --output text)
+            
+            if [ -f "amazon-cloudwatch-agent.json" ]; then
+              echo "Uploading CloudWatch agent config to s3://$SUPPORT_BUCKET/"
+              aws s3 cp amazon-cloudwatch-agent.json "s3://$SUPPORT_BUCKET/amazon-cloudwatch-agent.json"
+            fi
       - save_cache:
           key: sam-cache-{{ .Branch }}-{{ checksum "cfn/template.yaml" }}
           paths:
