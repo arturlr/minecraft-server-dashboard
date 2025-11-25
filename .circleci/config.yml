@@ -62,6 +62,15 @@ jobs:
       - aws-cli/setup
       - aws-sam/install
       - run:
+          name: Setup Python for SAM build
+          command: |
+            # Find the actual Python binary and create a symlink
+            PYTHON_PATH=$(find ~/.pyenv/versions -name "python3.13" -type f 2>/dev/null | head -1)
+            if [ -n "$PYTHON_PATH" ]; then
+              sudo ln -sf "$PYTHON_PATH" /usr/local/bin/python3.13
+              echo "Created symlink: /usr/local/bin/python3.13 -> $PYTHON_PATH"
+            fi
+      - run:
           name: Validate SAM template
           command: |
             cd cfn
