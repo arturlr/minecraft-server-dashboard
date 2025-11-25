@@ -65,18 +65,20 @@ jobs:
           name: Build Lambda layers
           command: |
             set -e
-            export PYENV_ROOT="$HOME/.pyenv"
-            export PATH="$PYENV_ROOT/bin:$PATH"
-            eval "$(pyenv init -)"
             echo "Building Lambda layers..."
             cd layers
             for layer in authHelper dynHelper utilHelper ec2Helper; do
               echo "Building layer: $layer"
-              if [ -f "$layer/Makefile" ]; then
-                cd "$layer"
-                ARTIFACTS_DIR="./build" make
-                cd ..
+              
+              mkdir -p "$layer/build/python"
+              
+              # Install dependencies if requirements.txt exists
+              if [ -f "$layer/requirements.txt" ]; then
+                pip install -r "$layer/requirements.txt" -t "$layer/build/python/" --cache-dir ~/.cache/pip
               fi
+              
+              # Copy Python files
+              cp "$layer"/*.py "$layer/build/python/" 2>/dev/null || true
             done
       - run:
           name: Validate SAM template
