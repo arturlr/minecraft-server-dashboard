@@ -59,8 +59,6 @@ Resources:
       QueueName: !Sub "${ProjectName}-${EnvironmentName}-ssm-commands-dlq"
       MessageRetentionPeriod: 1209600  # 14 days
 
-
-
   GraphQLAPI:
     Type: AWS::Serverless::GraphQLApi
     Properties:
@@ -408,7 +406,7 @@ Resources:
     Metadata:
       BuildMethod: makefile
 
-  SSMLayer:
+  SsmLayer:
     Type: AWS::Serverless::LayerVersion
     Properties:
       Description: SSM Command Helper
@@ -429,7 +427,7 @@ Resources:
         - !Ref UtilLayer
         - !Ref Ec2Layer
         - !Ref DynLayer
-        - !Ref SSMLayer 
+        - !Ref SsmLayer 
       Events:
         EC2StateTrigger:
           Type: CloudWatchEvent 
