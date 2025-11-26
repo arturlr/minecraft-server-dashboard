@@ -480,8 +480,7 @@ Resources:
           APPSYNC_URL: !GetAtt GraphQLAPI.GraphQLUrl
           COGNITO_USER_POOL_ID: 
             Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-UserPoolId"
-          SERVERS_TABLE_NAME: !Ref ServersTable
-          BOOTSTRAP_SSM_DOC_NAME: !Ref BootstrapSSMDoc          
+          SERVERS_TABLE_NAME: !Ref ServersTable          
 
   GetMonthlyCost:
     Type: AWS::Serverless::Function 
