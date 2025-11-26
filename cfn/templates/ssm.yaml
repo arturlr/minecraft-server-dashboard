@@ -437,8 +437,8 @@ Resources:
                           [ $rx_bandwidth -lt 0 ] && rx_bandwidth=0
                           [ $tx_bandwidth -lt 0 ] && tx_bandwidth=0
                           
-                          send_to_cloudwatch "ReceiveBandwidth" "$rx_bandwidth" "Bytes/Second"
-                          send_to_cloudwatch "TransmitBandwidth" "$tx_bandwidth" "Bytes/Second"
+                          send_to_cloudwatch "receive_bandwidth" "$rx_bandwidth" "Bytes/Second"
+                          send_to_cloudwatch "transmit_bandwidth" "$tx_bandwidth" "Bytes/Second"
                       fi
                   fi
                   
