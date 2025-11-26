@@ -72,11 +72,6 @@ Resources:
       Content:
         schemaVersion: '2.2'
         description: Bootstrap instance
-        parameters:
-          SSMParameterPrefix:
-            type: String
-            description: 'SSM parameter prefix'
-            default: !Sub /${ProjectName}/${EnvironmentName}
         mainSteps:              
           - action: aws:runShellScript
             name: installPackages

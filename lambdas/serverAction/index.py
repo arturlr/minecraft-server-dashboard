@@ -64,30 +64,6 @@ def check_authorization(event, instance_id, user_attributes):
         logger.error(f"Authorization check FAILED with exception: user={user_email}, instance={instance_id}, error={str(e)}", exc_info=True)
         raise
 
-def check_and_create_group(instance_id, user_name):
-    """
-    Check if Cognito group exists and create it if not
-    Args:
-        instance_id: EC2 instance ID to use as group name
-    Returns:
-        bool: True if group exists/created successfully, False if creation failed
-    """
-    cogGrp = auth.group_exists(instance_id)
-    if not cogGrp:
-        # Create Group
-        logger.warning("Group %s does not exit. Creating one.", instance_id)
-        crtGrp = auth.create_group(instance_id)
-        if crtGrp:
-            # adding current user to the group
-            logger.info("Group created. Now adding user to it.")
-            resp = auth.add_user_to_group(instance_id,user_name)
-            return resp
-        else:
-            logger.error("Group creation failed")
-            return False
-        
-    return True
-
 def send_status_to_appsync(action, instance_id, status, message=None, user_email=None):
     """
     Send action status update to AppSync for real-time subscriptions
