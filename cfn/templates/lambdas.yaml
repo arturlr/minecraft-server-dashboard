@@ -43,6 +43,22 @@ Resources:
       QueueName: !Sub "${ProjectName}-${EnvironmentName}-server-actions-dlq"
       MessageRetentionPeriod: 1209600
 
+  SSMCommandQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "${ProjectName}-${EnvironmentName}-ssm-commands"
+      VisibilityTimeout: 900  # 15 minutes
+      MessageRetentionPeriod: 86400  # 24 hours
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt SSMCommandDLQ.Arn
+        maxReceiveCount: 3
+
+  SSMCommandDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "${ProjectName}-${EnvironmentName}-ssm-commands-dlq"
+      MessageRetentionPeriod: 1209600  # 14 days
+
 
 
   GraphQLAPI:
@@ -392,6 +408,17 @@ Resources:
     Metadata:
       BuildMethod: makefile
 
+  SSMLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      Description: SSM Command Helper
+      ContentUri: ../../layers/ssmHelper/
+      CompatibleRuntimes:
+        - python3.13
+      RetentionPolicy: Delete
+    Metadata:
+      BuildMethod: makefile
+
   EventResponse:
     Type: AWS::Serverless::Function 
     Properties:
@@ -401,7 +428,8 @@ Resources:
         - !Ref AuthLayer
         - !Ref UtilLayer
         - !Ref Ec2Layer
-        - !Ref DynLayer 
+        - !Ref DynLayer
+        - !Ref SSMLayer 
       Events:
         EC2StateTrigger:
           Type: CloudWatchEvent 
@@ -452,16 +480,12 @@ Resources:
                 - events:DisableRule
                 - events:EnableRule
               Resource: "*"
-        - Version: '2012-10-17' # Policy Document for SSM
+        - Version: "2012-10-17" # Policy Document for SQS
           Statement:
             - Effect: Allow
               Action:
-                - ssm:SendCommand
-                - ssm:GetCommandInvocation
-                - ssm:ListCommandInvocations
-              Resource:
-                - !Sub 'arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:instance/*'
-                - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:document/${BootstrapSSMDoc}'
+                - sqs:SendMessage
+              Resource: !GetAtt SSMCommandQueue.Arn
         - Version: '2012-10-17' # Policy Document for DynamoDB
           Statement:
             - Effect: Allow
@@ -482,7 +506,8 @@ Resources:
             Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-UserPoolId"
           SERVERS_TABLE_NAME:
             Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-ServersTableName"
-          BOOTSTRAP_SSM_DOC_NAME: !Ref BootstrapSSMDoc          
+          BOOTSTRAP_SSM_DOC_NAME: !Ref BootstrapSSMDoc
+          SSM_COMMAND_QUEUE_URL: !Ref SSMCommandQueue          
 
   GetMonthlyCost:
     Type: AWS::Serverless::Function 
@@ -777,6 +802,37 @@ Resources:
           TAG_APP_VALUE: !Ref AppValue
           AWS_REGION_NAME: !Sub "${AWS::Region}"
 
+  SSMCommandProcessor:
+    Type: AWS::Serverless::Function
+    Properties:
+      Timeout: 900  # 15 minutes for retries
+      FunctionName: !Sub "${ProjectName}-${EnvironmentName}-ssmCommandProcessor"
+      CodeUri: ../../lambdas/ssmCommandProcessor/
+      Events:
+        SQSEvent:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt SSMCommandQueue.Arn
+            BatchSize: 1
+      Policies:
+        - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
+        - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
+        - Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Action:
+                - ssm:SendCommand
+                - ssm:GetCommandInvocation
+                - ssm:ListCommandInvocations
+              Resource:
+                - !Sub 'arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:instance/*'
+                - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:document/*'
+      Environment:
+        Variables:
+          APP_NAME: !Ref ProjectName
+          ENVIRONMENT_NAME: !Ref EnvironmentName
+          AWS_REGION_NAME: !Sub "${AWS::Region}"
+
  
 
 Outputs:
@@ -826,3 +882,13 @@ Outputs:
     Value: !GetAtt CalculateMonthlyRuntime.Arn
     Export:
       Name: !Sub "${ProjectName}-${EnvironmentName}-CalculateMonthlyRuntime"
+
+  SSMCommandProcessor:
+    Value: !GetAtt SSMCommandProcessor.Arn
+    Export:
+      Name: !Sub "${ProjectName}-${EnvironmentName}-SSMCommandProcessor"
+
+  SSMCommandQueueUrl:
+    Value: !Ref SSMCommandQueue
+    Export:
+      Name: !Sub "${ProjectName}-${EnvironmentName}-SSMCommandQueueUrl"

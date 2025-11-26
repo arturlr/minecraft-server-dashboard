@@ -10,6 +10,7 @@ from httpx_aws_auth import AwsSigV4Auth, AwsCredentials
 import ec2Helper
 import utilHelper
 import DynHelper
+import ssmHelper
 import pytz
 
 logger = logging.getLogger()
@@ -33,6 +34,7 @@ cognito_pool_id = os.getenv('COGNITO_USER_POOL_ID', None)
 utl = utilHelper.Utils()
 ec2_utils = ec2Helper.Ec2Utils()
 dyn = DynHelper.Dyn()
+ssm_helper = ssmHelper.SSMHelper()
 utc = pytz.utc
 pst = pytz.timezone('US/Pacific')
 
@@ -224,7 +226,7 @@ def ensure_server_has_cognito_group(instance_id):
         logger.info(f"Cognito group does not exist for {instance_id}, creating it now")
         if auth.create_group(instance_id):
             logger.info(f"Cognito group created successfully for {instance_id}")
-            
+                        
             # Update DynamoDB to mark that group exists
             dyn.update_server_config({
                 'id': instance_id,
@@ -318,7 +320,8 @@ def state_change_response(instance_id):
     
 def bootstrap_server(instance_id):
     """
-    Configure server by checking bootstrap status and running SSM document if needed.
+    Queue bootstrap SSM command for asynchronous execution.
+    The SSMCommandProcessor Lambda will handle retries and execution.
     
     Args:
         instance_id (str): EC2 instance ID
@@ -333,38 +336,17 @@ def bootstrap_server(instance_id):
         is_bootstrap_complete = config.get('isBootstrapComplete', False)
         
         if not is_bootstrap_complete:
-            logger.info(f"Server {instance_id} is not bootstrapped, running SSM bootstrap document")
+            logger.info(f"Server {instance_id} is not bootstrapped, queueing bootstrap command")
             
-            # Get SSM document name from environment or construct it
-            ssm_doc_name = os.getenv('BOOTSTRAP_SSM_DOC_NAME')
-            if not ssm_doc_name:
-                # Construct document name from app name and environment
-                ssm_doc_name = f"{appName}-{envName}-BootstrapSSMDoc"
-                logger.info(f"Using constructed SSM document name: {ssm_doc_name}")
+            # Queue the bootstrap command for asynchronous execution
+            result = ssm_helper.queue_bootstrap_command(instance_id)
             
-            # Get SSM parameter prefix
-            ssm_param_prefix = f"/{appName}/{envName}"
-            
-            # Send SSM command to bootstrap the instance
-            try:
-                response = ssm.send_command(
-                    InstanceIds=[instance_id],
-                    DocumentName=ssm_doc_name,
-                    Parameters={
-                        'SSMParameterPrefix': [ssm_param_prefix]
-                    },
-                    Comment=f'Bootstrap server {instance_id}'
-                )
-                
-                command_id = response['Command']['CommandId']
-                logger.info(f"SSM bootstrap command sent successfully: CommandId={command_id}, Instance={instance_id}")
-                logger.info(f"Bootstrap status will be updated by SSM document after completion")
-                
-            except Exception as ssm_error:
-                logger.error(f"Failed to send SSM bootstrap command for {instance_id}: {str(ssm_error)}", exc_info=True)
-                # Don't raise - allow the function to continue even if bootstrap fails
+            if result['success']:
+                logger.info(f"Bootstrap command queued for {instance_id}: MessageId={result['messageId']}")
+            else:
+                logger.error(f"Failed to queue bootstrap command for {instance_id}: {result['message']}")
         else:
-            logger.info(f"Server {instance_id} is already bootstrapped, skipping SSM document execution")
+            logger.info(f"Server {instance_id} is already bootstrapped, skipping")
             
     except Exception as e:
         logger.error(f"Error in bootstrap_server for {instance_id}: {str(e)}", exc_info=True)
@@ -412,7 +394,8 @@ def handler(event, context):
             
             for metrics in input:
                 payload={"query": putServerMetric, 'variables': { "input": metrics }}
-                send_to_appsync(payload)        
+                send_to_appsync(payload)
+                   
         else:
             logger.error("No Event Found")
             return "No Event Found"
