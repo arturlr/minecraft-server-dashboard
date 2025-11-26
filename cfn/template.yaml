@@ -43,6 +43,7 @@ Resources:
         ProjectName: !Ref ProjectName
         EnvironmentName: !Ref EnvironmentName
         AppValue: !Ref AppValue
+        BootstrapSSMDoc: !GetAtt EC2Stack.Outputs.BootstrapSSMDoc
 
   WebStack:
     Type: AWS::Serverless::Application

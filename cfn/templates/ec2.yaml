@@ -653,11 +653,7 @@ Outputs:
   BootstrapSSMDoc:
     Description: Document for SSM
     Value: !Ref BootstrapSSMDoc
-    Export:
-      Name: !Sub "${ProjectName}-${EnvironmentName}-SSMDoc"
       
   MinecraftRunnerSSMDoc:
     Description: Document for running Minecraft server
     Value: !Ref MinecraftRunnerSSMDoc
-    Export:
-      Name: !Sub "${ProjectName}-${EnvironmentName}-MinecraftRunnerSSMDoc"

@@ -19,7 +19,10 @@ Parameters:
   EnvironmentName:
     Type: String
   AppValue:
-    Type: String    
+    Type: String
+  BootstrapSSMDoc:
+    Type: String
+    Description: Bootstrap SSM Document Name
 
 Resources:
 
@@ -478,8 +481,7 @@ Resources:
           COGNITO_USER_POOL_ID: 
             Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-UserPoolId"
           SERVERS_TABLE_NAME: !Ref ServersTable
-          BOOTSTRAP_SSM_DOC_NAME:
-            Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-SSMDoc"          
+          BOOTSTRAP_SSM_DOC_NAME: !Ref BootstrapSSMDoc          
 
   GetMonthlyCost:
     Type: AWS::Serverless::Function 
