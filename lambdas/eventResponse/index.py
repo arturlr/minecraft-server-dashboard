@@ -5,7 +5,7 @@ import json
 from time import sleep
 from datetime import date, datetime, timezone, timedelta
 import httpx
-from httpx_aws_auth import HTTPXAWSAuth
+from httpx_aws_auth import AWSSigV4Auth, AwsCredentials
 import ec2Helper
 import utilHelper
 import DynHelper
@@ -39,15 +39,19 @@ scheduled_event_bridge_rule = utl.get_ssm_param(f"/{appName}/{envName}/scheduled
 logger.info(f"Scheduled EventBridge Rule: {scheduled_event_bridge_rule}")
 
 boto3_session = boto3.Session()
-credentials = boto3_session.get_credentials()
-credentials = credentials.get_frozen_credentials()
+boto3_credentials = boto3_session.get_credentials()
+boto3_credentials = boto3_credentials.get_frozen_credentials()
 
-auth = HTTPXAWSAuth(
-    credentials.access_key,
-    credentials.secret_key,
-    boto3_session.region_name,
-    'appsync',
-    session_token=credentials.token,
+credentials = AwsCredentials(
+    access_key=boto3_credentials.access_key,
+    secret_key=boto3_credentials.secret_key,
+    session_token=boto3_credentials.token,
+)
+
+auth = AWSSigV4Auth(
+    credentials=credentials,
+    region=boto3_session.region_name,
+    service='appsync',
 )
 
 session = httpx.Client(auth=auth)
