@@ -56,7 +56,8 @@ type ServerConfig @aws_iam
 	runCommand: String
 	workDir: String
 	timezone: String
-	isBootstrapped: Boolean
+	isBootstrapComplete: Boolean
+	hasCognitoGroup: Boolean
 	minecraftVersion: String
 	latestPatchUpdate: String
 	createdAt: AWSDateTime
@@ -74,7 +75,8 @@ input ServerConfigInput {
 	runCommand: String
 	workDir: String
 	timezone: String
-	isBootstrapped: Boolean
+	isBootstrapComplete: Boolean
+	hasCognitoGroup: Boolean
 	minecraftVersion: String
 	latestPatchUpdate: String
 	createdAt: AWSDateTime
