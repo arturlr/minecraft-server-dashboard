@@ -11,7 +11,8 @@ Globals:
     Tracing: Active
     Environment:
       Variables:
-        SERVERS_TABLE_NAME: !Ref ServersTable   
+        SERVERS_TABLE_NAME:
+          Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-ServersTableName"   
 
 Parameters:
   ProjectName:
@@ -442,7 +443,8 @@ Resources:
                 - dynamodb:GetItem
                 - dynamodb:PutItem
                 - dynamodb:UpdateItem
-              Resource: !GetAtt ServersTable.Arn
+              Resource:
+                Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-ServersTable"
       Environment:
         Variables:
           APP_NAME: !Ref ProjectName
@@ -452,7 +454,8 @@ Resources:
           APPSYNC_URL: !GetAtt GraphQLAPI.GraphQLUrl
           COGNITO_USER_POOL_ID: 
             Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-UserPoolId"
-          SERVERS_TABLE_NAME: !Ref ServersTable          
+          SERVERS_TABLE_NAME:
+            Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-ServersTableName"          
 
   GetMonthlyCost:
     Type: AWS::Serverless::Function 
@@ -516,7 +519,8 @@ Resources:
         - SSMParameterReadPolicy:
             ParameterName: !Sub "${ProjectName}*"
         - DynamoDBCrudPolicy:
-            TableName: !Ref ServersTable
+            TableName:
+              Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-ServersTableName"
         - Version: "2012-10-17" # Policy Document
           Statement:
             - Effect: Allow
@@ -558,7 +562,8 @@ Resources:
         - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess
         - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
         - DynamoDBCrudPolicy:
-            TableName: !Ref ServersTable
+            TableName:
+              Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-ServersTableName"
         - Version: "2012-10-17"
           Statement:
             - Effect: Allow
@@ -725,13 +730,9 @@ Resources:
  
 
 Outputs:
-  ServersTable:
-    Value: !GetAtt ServersTable.Arn
-    Export:
-      Name: !Sub "${ProjectName}-${EnvironmentName}-ServersTable"
-
   LogAuditTable:
-    Value: !GetAtt LogAuditTable.Arn
+    Value:
+      Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-LogAuditTable"
     Export:
       Name: !Sub "${ProjectName}-${EnvironmentName}-LogAuditTable"
 
