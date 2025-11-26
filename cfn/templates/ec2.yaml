@@ -95,35 +95,6 @@ Resources:
       Roles:
         - !Ref Ec2MinecraftDashboardInstanceRole
 
-  # CloudWatch agent config is now stored in S3 and referenced from there
-  # The amazon-cloudwatch-agent.json file is uploaded to S3 by deployment scripts
-                    exit 1
-                  fi
-                  echo "✓ Port count cron job is configured"
-                  
-                  if ! crontab -l | grep -q "network_monitor.sh"; then
-                    echo "ERROR: Network monitor cron job not configured"
-                    exit 1
-                  fi
-                  echo "✓ Network monitor cron job is configured"
-                  
-                  # Update DynamoDB to mark as bootstrapped
-                  echo "Updating DynamoDB table: $TABLE_NAME"
-                  aws dynamodb update-item \
-                    --table-name "$TABLE_NAME" \
-                    --key "{\"id\": {\"S\": \"$INSTANCE_ID\"}}" \
-                    --update-expression "SET isBootstrapComplete = :bootstrapped, updatedAt = :timestamp" \
-                    --expression-attribute-values "{\":bootstrapped\": {\"BOOL\": true}, \":timestamp\": {\"S\": \"$TIMESTAMP\"}}" \
-                    --region "$REGION"
-                  
-                  if [ $? -eq 0 ]; then
-                    echo "✓ Successfully marked instance as bootstrapped in DynamoDB"
-                    echo "Bootstrap process completed successfully!"
-                  else
-                    echo "ERROR: Failed to update DynamoDB"
-                    exit 1
-                  fi
-
 Outputs:
   SupportBucket:
     Description: SupportBucket
