@@ -1,0 +1,66 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+
+Parameters:
+  ProjectName:
+    Type: String
+  EnvironmentName:
+    Type: String
+  AppValue:
+    Type: String
+
+Resources:
+  ServersTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "${ProjectName}-${EnvironmentName}-ServersTable"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      Tags:
+        - Key: app
+          Value: !Ref AppValue
+
+  LogAuditTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "${ProjectName}-${EnvironmentName}-LogAudit"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+        - AttributeName: timestamp
+          AttributeType: N
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+        - AttributeName: timestamp
+          KeyType: RANGE
+      Tags:
+        - Key: app
+          Value: !Ref AppValue
+
+Outputs:
+  ServersTable:
+    Value: !GetAtt ServersTable.Arn
+    Export:
+      Name: !Sub "${ProjectName}-${EnvironmentName}-ServersTable"
+
+  ServersTableName:
+    Value: !Ref ServersTable
+    Export:
+      Name: !Sub "${ProjectName}-${EnvironmentName}-ServersTableName"
+
+  LogAuditTable:
+    Value: !GetAtt LogAuditTable.Arn
+    Export:
+      Name: !Sub "${ProjectName}-${EnvironmentName}-LogAuditTable"
+
+  LogAuditTableName:
+    Value: !Ref LogAuditTable
+    Export:
+      Name: !Sub "${ProjectName}-${EnvironmentName}-LogAuditTableName"

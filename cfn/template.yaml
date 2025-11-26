@@ -14,6 +14,15 @@ Parameters:
 
 Resources:
 
+  DynamoDBStack:
+    Type: AWS::Serverless::Application
+    Properties:
+      Location: ./templates/dynamodb.yaml
+      Parameters:
+        ProjectName: !Ref ProjectName
+        EnvironmentName: !Ref EnvironmentName
+        AppValue: !Ref AppValue
+
   CognitoStack:
     Type: AWS::Serverless::Application
     Properties:
@@ -25,6 +34,7 @@ Resources:
 
   EC2Stack:
     Type: AWS::Serverless::Application
+    DependsOn: DynamoDBStack
     Properties:
       Location: ./templates/ec2.yaml
       Parameters:
@@ -32,18 +42,29 @@ Resources:
         EnvironmentName: !Ref EnvironmentName
         AppValue: !Ref AppValue
 
+  SSMStack:
+    Type: AWS::Serverless::Application
+    DependsOn: DynamoDBStack
+    Properties:
+      Location: ./templates/ssm.yaml
+      Parameters:
+        ProjectName: !Ref ProjectName
+        EnvironmentName: !Ref EnvironmentName
+        AppValue: !Ref AppValue
+        SupportBucket: !GetAtt EC2Stack.Outputs.SupportBucket
+
   LambdasStack:
     Type: AWS::Serverless::Application
     DependsOn: 
-      - EC2Stack
       - CognitoStack
+      - DynamoDBStack
     Properties:
       Location: ./templates/lambdas.yaml
       Parameters:
         ProjectName: !Ref ProjectName
         EnvironmentName: !Ref EnvironmentName
         AppValue: !Ref AppValue
-        BootstrapSSMDoc: !GetAtt EC2Stack.Outputs.BootstrapSSMDoc
+        BootstrapSSMDoc: !GetAtt SSMStack.Outputs.BootstrapSSMDoc
 
   WebStack:
     Type: AWS::Serverless::Application
