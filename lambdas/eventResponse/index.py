@@ -5,7 +5,11 @@ import json
 from time import sleep
 from datetime import date, datetime, timezone, timedelta
 import httpx
-from httpx_aws_auth import HTTPXAWSAuth
+try:
+    from httpx_aws_auth import HTTPXAWSAuth
+except ImportError:
+    # Newer versions use Sigv4Auth instead of HTTPXAWSAuth
+    from httpx_aws_auth import Sigv4Auth as HTTPXAWSAuth
 import ec2Helper
 import utilHelper
 import DynHelper
