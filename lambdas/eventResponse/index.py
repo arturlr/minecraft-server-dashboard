@@ -5,7 +5,7 @@ import json
 from time import sleep
 from datetime import date, datetime, timezone, timedelta
 import httpx
-from httpx_aws_auth import AWS4Auth
+from httpx_aws_auth import HTTPXAWSAuth
 import ec2Helper
 import utilHelper
 import DynHelper
@@ -42,7 +42,7 @@ boto3_session = boto3.Session()
 credentials = boto3_session.get_credentials()
 credentials = credentials.get_frozen_credentials()
 
-auth = AWS4Auth(
+auth = HTTPXAWSAuth(
     credentials.access_key,
     credentials.secret_key,
     boto3_session.region_name,

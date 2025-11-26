@@ -6,7 +6,7 @@ import time
 import ec2Helper
 import utilHelper
 import httpx
-from httpx_aws_auth import AWS4Auth
+from httpx_aws_auth import HTTPXAWSAuth
 from botocore.exceptions import ClientError
 
 logger = logging.getLogger()
@@ -36,7 +36,7 @@ aws_region = boto3_session.region_name
 credentials = boto3_session.get_credentials()
 credentials = credentials.get_frozen_credentials()
 
-auth = AWS4Auth(
+auth = HTTPXAWSAuth(
     credentials.access_key,
     credentials.secret_key,
     boto3_session.region_name,

@@ -13,6 +13,7 @@ Parameters:
     Description: S3 bucket for support files
 
 Resources:
+
   MinecraftRunnerSSMDoc:
     Type: AWS::SSM::Document
     Properties:
