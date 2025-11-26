@@ -1,0 +1,554 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+
+Parameters:
+  ProjectName:
+    Type: String
+  EnvironmentName:
+    Type: String
+  AppValue:
+    Type: String
+  SupportBucket:
+    Type: String
+    Description: S3 bucket for support files
+
+Resources:
+  MinecraftRunnerSSMDoc:
+    Type: AWS::SSM::Document
+    Properties:
+      DocumentType: Command
+      TargetType: /AWS::EC2::Instance
+      Content:
+        schemaVersion: '2.2'
+        description: Run Minecraft server using instance tags
+        mainSteps:
+          - action: aws:runShellScript
+            name: RunMinecraftServer
+            inputs:
+              runCommand:
+                - '#!/bin/bash'
+                - |
+                  # Get instance ID
+                  INSTANCE_ID=$(ec2metadata --instance-id)
+                  REGION=$(curl -s http://169.254.169.254/latest/meta-data/placement/region)
+                  
+                  # Get instance tags
+                  TAGS=$(aws ec2 describe-tags --filters "Name=resource-id,Values=$INSTANCE_ID" --region $REGION --output json)
+                  
+                  # Extract runCommand and workDir from tags
+                  RUN_COMMAND=$(echo $TAGS | jq -r '.Tags[] | select(.Key=="RunCommand") | .Value')
+                  WORK_DIR=$(echo $TAGS | jq -r '.Tags[] | select(.Key=="WorkDir") | .Value')
+                  
+                  # Log the values
+                  echo "Instance ID: $INSTANCE_ID"
+                  echo "Run Command: $RUN_COMMAND"
+                  echo "Work Directory: $WORK_DIR"
+                  
+                  # Check if both values are present
+                  if [ -z "$RUN_COMMAND" ] || [ -z "$WORK_DIR" ]; then
+                    echo "ERROR: RunCommand or WorkDir tag is missing"
+                    exit 1
+                  fi
+                  
+                  # Check if work directory exists
+                  if [ ! -d "$WORK_DIR" ]; then
+                    echo "Creating work directory: $WORK_DIR"
+                    mkdir -p "$WORK_DIR"
+                  fi
+                  
+                  # Change to work directory and run the command
+                  cd "$WORK_DIR"
+                  echo "Executing: $RUN_COMMAND"
+                  # Run in background with nohup to keep running after SSM session ends
+                  nohup $RUN_COMMAND > minecraft.log 2>&1 &
+                  echo "Minecraft server started in background"
+
+  BootstrapSSMDoc:
+    Type: AWS::SSM::Document
+    Properties:
+      DocumentType: Command
+      TargetType: /AWS::EC2::Instance
+      Content:
+        schemaVersion: '2.2'
+        description: Bootstrap instance
+        parameters:
+          SSMParameterPrefix:
+            type: String
+            description: 'SSM parameter prefix'
+            default: !Sub /${ProjectName}/${EnvironmentName}
+        mainSteps:              
+          - action: aws:runShellScript
+            name: installPackages
+            inputs:
+              runCommand:
+                - '#!/bin/bash'
+                - |
+                  # Define required packages list (used by all distributions)
+                  REQUIRED_PACKAGES=("jq" "zip" "unzip" "net-tools" "wget" "screen")
+                  
+                  # Function to detect the Linux distribution
+                  detect_distro() {
+                      if [ -f /etc/os-release ]; then
+                          . /etc/os-release
+                          DISTRO=$ID
+                      elif [ -f /etc/lsb-release ]; then
+                          . /etc/lsb-release
+                          DISTRO=$DISTRIB_ID
+                      elif [ -f /etc/debian_version ]; then
+                          DISTRO="debian"
+                      elif [ -f /etc/redhat-release ]; then
+                          DISTRO="rhel"
+                      else
+                          DISTRO=$(uname -s)
+                      fi
+                      echo $DISTRO
+                  }        
+
+                  # Function to install Java on Amazon Linux, RHEL, or CentOS
+                  install_java_rpm() {
+                      echo "Installing Java..."
+                      # For Amazon Linux 2023 and newer, use Corretto
+                      if [[ $(cat /etc/os-release | grep VERSION_ID) =~ "2023" ]]; then
+                          yum install -y java-21-amazon-corretto-headless
+                      # For Amazon Linux 2
+                      elif [[ $(cat /etc/os-release | grep VERSION_ID) =~ "2" ]]; then
+                          amazon-linux-extras install -y java-openjdk17
+                      # For RHEL/CentOS
+                      else
+                          yum install -y java-17-openjdk-headless
+                      fi
+                      
+                      if command -v java &> /dev/null; then
+                          echo "Java installed successfully: $(java -version 2>&1 | head -n 1)"
+                          return 0
+                      else
+                          echo "Failed to install Java"
+                          return 1
+                      fi
+                  }
+
+                  # Function to install Java on Ubuntu or Debian
+                  install_java_deb() {
+                      echo "Installing Java..."
+                      apt-get update
+                      apt-get install -y openjdk-21-jre-headless
+                      
+                      if command -v java &> /dev/null; then
+                          echo "Java installed successfully: $(java -version 2>&1 | head -n 1)"
+                          return 0
+                      else
+                          echo "Failed to install Java"
+                          return 1
+                      fi
+                  }
+
+                  # Main Java installation function
+                  install_java() {
+                      # Check if Java is already installed
+                      if command -v java &> /dev/null; then
+                          echo "Java is already installed: $(java -version 2>&1 | head -n 1)"
+                          return 0
+                      fi
+
+                      local distro=$(detect_distro)
+                      case $distro in
+                          amzn*|rhel*|centos*)
+                              install_java_rpm
+                              ;;
+                          ubuntu*|debian*)
+                              install_java_deb
+                              ;;
+                          *)
+                              echo "Unsupported distribution: $distro"
+                              return 1
+                              ;;
+                      esac
+                  }
+
+                  # Function to install CloudWatch agent on Amazon Linux, RHEL, or CentOS
+                  install_cloudwatch_rpm() {
+                      # Check if CloudWatch agent is already installed
+                      if rpm -q amazon-cloudwatch-agent &> /dev/null; then
+                          echo "CloudWatch agent is already installed"
+                          return 0
+                      fi
+
+                      # Install CloudWatch agent
+                      if yum install -y amazon-cloudwatch-agent; then
+                          # Verify installation was successful
+                          if rpm -q amazon-cloudwatch-agent &> /dev/null; then
+                              echo "CloudWatch agent installed successfully"
+                              return 0
+                          else
+                              echo "CloudWatch agent installation failed verification"
+                              return 1
+                          fi
+                      else
+                          echo "Failed to install CloudWatch agent"
+                          return 1
+                      fi
+                  }
+
+                  # Function to install CloudWatch agent on Ubuntu or Debian
+                  install_cloudwatch_deb() {
+                      # Check if CloudWatch agent is already installed
+                      if dpkg -l | grep -q "amazon-cloudwatch-agent"; then
+                          echo "CloudWatch agent is already installed"
+                          return 0
+                      fi
+
+                      # Update package list
+                      apt-get update
+
+                      # Check if wget is already installed
+                      if ! command -v wget &> /dev/null; then
+                          echo "Installing wget..."
+                          apt-get install -y wget
+                      else
+                          echo "wget is already installed"
+                      fi
+
+                      # Download and install CloudWatch agent
+                      if wget https://amazoncloudwatch-agent.s3.amazonaws.com/debian/amd64/latest/amazon-cloudwatch-agent.deb; then
+                          if dpkg -i -E ./amazon-cloudwatch-agent.deb; then
+                              rm amazon-cloudwatch-agent.deb
+                              echo "CloudWatch agent installed successfully"
+                          else
+                              echo "Failed to install CloudWatch agent"
+                              rm amazon-cloudwatch-agent.deb
+                              return 1
+                          fi
+                      else
+                          echo "Failed to download CloudWatch agent"
+                          return 1
+                      fi
+                  }
+
+                  install_required_packages() {
+                      local packages_to_install=()
+
+                      # Check each package
+                      for package in "${REQUIRED_PACKAGES[@]}"; do
+                          if ! dpkg -l | grep -q "^ii.*$package "; then
+                              echo "$package is not installed"
+                              packages_to_install+=("$package")
+                          else
+                              echo "$package is already installed"
+                          fi
+                      done
+
+                      # Install missing packages if any
+                      if [ ${#packages_to_install[@]} -gt 0 ]; then
+                          echo "Installing missing packages: ${packages_to_install[*]}"
+                          apt-get update
+                          if apt-get install -y "${packages_to_install[@]}"; then
+                              echo "Successfully installed missing packages"
+                              return 0
+                          else
+                              echo "Failed to install some packages"
+                              return 1
+                          fi
+                      else
+                          echo "All required packages are already installed"
+                          return 0
+                      fi
+                  }
+
+                  install_awscli() {
+                      if [ ! -f /usr/share/collectd/types.db ]; then
+                        sudo mkdir -p /usr/share/collectd
+                        sudo touch /usr/share/collectd/types.db
+                      fi
+                      if ! command -v aws >/dev/null 2>&1; then
+                        curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+                        unzip awscliv2.zip
+                        sudo ./aws/install
+                      echo "AWS CLI installed successfully"
+                      else
+                          echo "AWS CLI is already installed"
+                      fi 
+                  }
+
+                  # Main installation function
+                  install_packages() {
+                      local distro=$(detect_distro)
+                      case $distro in
+                          amzn*|rhel*|centos*)
+                              install_cloudwatch_rpm
+                              yum -y install "${REQUIRED_PACKAGES[@]}"
+                              ;;
+                          ubuntu*|debian*)
+                              install_cloudwatch_deb
+                              install_required_packages
+                              ;;
+                          *)
+                              echo "Unsupported distribution: $distro"
+                              exit 1
+                              ;;
+                      esac
+                  }
+
+                  # Calling the install packages                  
+                  install_packages
+                  install_awscli
+                  install_java
+
+                  echo "All packages installed successfully" 
+          - action: aws:runShellScript
+            name: CloudWatchStart
+            inputs:
+              runCommand:
+                - !Sub |
+                  # Download CloudWatch agent config from S3
+                  aws s3 cp s3://${SupportBucket}/amazon-cloudwatch-agent.json /tmp/amazon-cloudwatch-agent.json
+                  
+                  # Start CloudWatch agent with the config file
+                  sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
+                    -a fetch-config \
+                    -m ec2 \
+                    -s \
+                    -c file:/tmp/amazon-cloudwatch-agent.json
+                  
+                  # Check status
+                  sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -m ec2 -a status      
+
+          - action: aws:runShellScript
+            name: PortCount
+            inputs:
+              runCommand:
+                - |
+                  if [ ! -f /usr/local/port_count.sh ]; then
+                    # Get instance metadata
+                    INSTANCE_ID=$(ec2metadata --instance-id)
+                    REGION=$(ec2metadata --availability-zone | sed 's/[a-z]$//')
+                    
+                    # Create the script file using heredoc
+                    cat > /usr/local/port_count.sh <<EOF
+                  #!/bin/bash
+                  INSTANCE_ID="$INSTANCE_ID"
+                  REGION="$REGION"
+                  PORT_COUNT=\$(netstat -an | grep ESTABLISHED | grep ':25565' | wc -l)
+                  aws cloudwatch put-metric-data --metric-name UserCount --dimensions InstanceId=\$INSTANCE_ID --namespace 'MinecraftDashboard' --region \$REGION
+                  EOF
+                    
+                    chmod +x /usr/local/port_count.sh
+                  fi
+
+          - action: aws:runShellScript
+            name: NetworkBandwidth
+            inputs:
+              runCommand:
+                - |
+                  #!/bin/bash
+
+                  set -e                  
+                  echo "=== Installing Network Bandwidth Monitoring ==="
+                  
+                  # Configuration
+                  SCRIPT_PATH="/usr/local/bin/network_monitor.sh"
+                  INSTANCE_ID=$(ec2metadata --instance-id)
+                  REGION=$(ec2metadata --availability-zone | sed 's/[a-z]$//')
+                  
+                  # Create the monitoring script only if it doesn't exist
+                  if [ ! -f "$SCRIPT_PATH" ]; then
+                    cat > "$SCRIPT_PATH" << 'SCRIPT_EOF'
+                  #!/bin/bash
+                  
+                  # Network Bandwidth Monitoring to CloudWatch (Cron Version)
+                  
+                  # Configuration
+                  NAMESPACE="MinecraftDashboard"
+                  LOCK_FILE="/var/run/network_monitor.lock"
+                  STATE_FILE="/var/tmp/network_monitor_state"
+                  
+                  # Get instance metadata using IMDSv2
+                  INSTANCE_ID=$(ec2metadata --instance-id)
+                  REGION=$(ec2metadata --availability-zone | sed 's/[a-z]$//')
+                  
+                  # Exit if script is already running
+                  if [ -f "$LOCK_FILE" ]; then
+                      if ps -p $(cat "$LOCK_FILE") > /dev/null 2>&1; then
+                          exit 0
+                      else
+                          rm -f "$LOCK_FILE"
+                      fi
+                  fi
+                  
+                  # Create lock file
+                  echo $ > "$LOCK_FILE"
+                  trap "rm -f $LOCK_FILE; exit" INT TERM EXIT
+                  
+                  # Function to get default interface
+                  get_default_interface() {
+                      ip route show default | awk '/default/ {print $5}' | head -n1
+                  }
+                  
+                  # Function to get interface statistics
+                  get_interface_stats() {
+                      local interface=$1
+                      
+                      if [ ! -d "/sys/class/net/${interface}" ]; then
+                          echo "0,0"
+                          return 1
+                      fi
+                      
+                      local rx_bytes=$(cat /sys/class/net/$interface/statistics/rx_bytes 2>/dev/null || echo 0)
+                      local tx_bytes=$(cat /sys/class/net/$interface/statistics/tx_bytes 2>/dev/null || echo 0)
+                      
+                      echo "$rx_bytes,$tx_bytes"
+                  }
+                  
+                  # Function to send metrics to CloudWatch
+                  send_to_cloudwatch() {
+                      local metric_name=$1
+                      local value=$2
+                      local unit=$3
+                      
+                      aws cloudwatch put-metric-data \
+                          --namespace "$NAMESPACE" \
+                          --metric-name "$metric_name" \
+                          --value "$value" \
+                          --unit "$unit" \
+                          --dimensions InstanceId=$INSTANCE_ID \
+                          --region "$REGION" 2>/dev/null
+                      
+                      return $?
+                  }
+                  
+                  # Main execution
+                  INTERFACE=$(get_default_interface)
+                  [ -z "$INTERFACE" ] && exit 1
+                  
+                  current_time=$(date +%s)
+                  curr_stats=$(get_interface_stats "$INTERFACE")
+                  
+                  if [ -f "$STATE_FILE" ]; then
+                      source "$STATE_FILE"
+                      time_diff=$((current_time - PREV_TIME))
+                      
+                      if [ $time_diff -gt 0 ]; then
+                          IFS=',' read -r prev_rx_bytes prev_tx_bytes <<< "$PREV_STATS"
+                          IFS=',' read -r curr_rx_bytes curr_tx_bytes <<< "$curr_stats"
+                          
+                          rx_bandwidth=$(( (curr_rx_bytes - prev_rx_bytes) / time_diff ))
+                          tx_bandwidth=$(( (curr_tx_bytes - prev_tx_bytes) / time_diff ))
+                          
+                          [ $rx_bandwidth -lt 0 ] && rx_bandwidth=0
+                          [ $tx_bandwidth -lt 0 ] && tx_bandwidth=0
+                          
+                          send_to_cloudwatch "ReceiveBandwidth" "$rx_bandwidth" "Bytes/Second"
+                          send_to_cloudwatch "TransmitBandwidth" "$tx_bandwidth" "Bytes/Second"
+                      fi
+                  fi
+                  
+                  cat > "$STATE_FILE" <<EOF
+                  PREV_STATS="$curr_stats"
+                  PREV_TIME=$current_time
+                  EOF
+                  
+                  exit 0
+                  SCRIPT_EOF
+                  
+                    # Make script executable
+                    chmod +x "$SCRIPT_PATH"
+                    echo "Monitoring script created at $SCRIPT_PATH"
+                  else
+                    echo "Monitoring script already exists at $SCRIPT_PATH"
+                  fi
+                  
+                  # Create log directory
+                  mkdir -p /var/log/network_monitor
+                  
+                  # Check if cron entry already exists before adding it
+                  if ! crontab -l 2>/dev/null | grep -qF "$SCRIPT_PATH"; then
+                    (crontab -l 2>/dev/null; echo "*/1 * * * * $SCRIPT_PATH >/dev/null 2>&1") | crontab -
+                    echo "Network monitoring cron job added"
+                  else
+                    echo "Network monitoring cron job already exists, skipping"
+                  fi
+                  
+                  # Display current crontab
+                  echo ""
+                  echo "=== Current Crontab ==="
+                  crontab -l
+          
+          - action: aws:runShellScript
+            name: UpdateBootstrapStatus
+            inputs:
+              runCommand:
+                - !Sub |
+                  #!/bin/bash
+                  set -e
+                  
+                  echo "=== Updating Bootstrap Status in DynamoDB ==="
+                  
+                  # Get instance ID and region
+                  INSTANCE_ID=$(ec2metadata --instance-id)
+                  REGION=$(ec2metadata --availability-zone | sed 's/[a-z]$//')
+                  TABLE_NAME="${ProjectName}-${EnvironmentName}-ServersTable"
+                  TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+                  
+                  # Verify CloudWatch agent is running
+                  CW_STATUS=$(/opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -m ec2 -a query | jq -r '.status')
+                  if [ "$CW_STATUS" != "running" ]; then
+                    echo "ERROR: CloudWatch agent is not running"
+                    exit 1
+                  fi
+                  echo "✓ CloudWatch agent is running"
+                  
+                  # Verify port count script exists and is executable
+                  if [ ! -x /usr/local/port_count.sh ]; then
+                    echo "ERROR: Port count script not found or not executable"
+                    exit 1
+                  fi
+                  echo "✓ Port count script is configured"
+                  
+                  # Verify network monitor script exists and is executable
+                  if [ ! -x /usr/local/bin/network_monitor.sh ]; then
+                    echo "ERROR: Network monitor script not found or not executable"
+                    exit 1
+                  fi
+                  echo "✓ Network monitor script is configured"
+                  
+                  # Verify cron jobs are configured
+                  if ! crontab -l | grep -q "port_count.sh"; then
+                    echo "ERROR: Port count cron job not configured"
+                    exit 1
+                  fi
+                  echo "✓ Port count cron job is configured"
+                  
+                  if ! crontab -l | grep -q "network_monitor.sh"; then
+                    echo "ERROR: Network monitor cron job not configured"
+                    exit 1
+                  fi
+                  echo "✓ Network monitor cron job is configured"
+                  
+                  # Update DynamoDB to mark as bootstrapped
+                  echo "Updating DynamoDB table: $TABLE_NAME"
+                  aws dynamodb update-item \
+                    --table-name "$TABLE_NAME" \
+                    --key "{\"id\": {\"S\": \"$INSTANCE_ID\"}}" \
+                    --update-expression "SET isBootstrapComplete = :bootstrapped, updatedAt = :timestamp" \
+                    --expression-attribute-values "{\":bootstrapped\": {\"BOOL\": true}, \":timestamp\": {\"S\": \"$TIMESTAMP\"}}" \
+                    --region "$REGION"
+                  
+                  if [ $? -eq 0 ]; then
+                    echo "✓ Successfully marked instance as bootstrapped in DynamoDB"
+                    echo "Bootstrap process completed successfully!"
+                  else
+                    echo "ERROR: Failed to update DynamoDB"
+                    exit 1
+                  fi
+
+Outputs:
+  BootstrapSSMDoc:
+    Description: Bootstrap SSM Document Name
+    Value: !Ref BootstrapSSMDoc
+    Export:
+      Name: !Sub "${ProjectName}-${EnvironmentName}-BootstrapSSMDoc"
+
+  MinecraftRunnerSSMDoc:
+    Description: Minecraft Runner SSM Document Name
+    Value: !Ref MinecraftRunnerSSMDoc
+    Export:
+      Name: !Sub "${ProjectName}-${EnvironmentName}-MinecraftRunnerSSMDoc"
