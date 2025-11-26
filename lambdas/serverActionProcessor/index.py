@@ -6,7 +6,11 @@ import time
 import ec2Helper
 import utilHelper
 import httpx
-from httpx_aws_auth import HTTPXAWSAuth
+try:
+    from httpx_aws_auth import HTTPXAWSAuth
+except ImportError:
+    # Newer versions use Sigv4Auth instead of HTTPXAWSAuth
+    from httpx_aws_auth import Sigv4Auth as HTTPXAWSAuth
 from botocore.exceptions import ClientError
 
 logger = logging.getLogger()
