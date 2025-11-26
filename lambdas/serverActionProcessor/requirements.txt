@@ -1,4 +1,4 @@
-httpx
-httpx_aws_auth
+httpx==0.24.1
+httpx-aws-auth==0.3.1
 boto3
 pytz
