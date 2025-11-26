@@ -1,7 +1,6 @@
-requests
-requests_aws4auth
+httpx
+httpx_aws_auth
 gql
 pytz
-urllib3==1.26.16
 boto3
 python-jose[cryptography]

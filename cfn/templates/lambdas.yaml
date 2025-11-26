@@ -730,12 +730,6 @@ Resources:
  
 
 Outputs:
-  LogAuditTable:
-    Value:
-      Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-LogAuditTable"
-    Export:
-      Name: !Sub "${ProjectName}-${EnvironmentName}-LogAuditTable"
-
   GraphQLAPIEndpoint:
     Value: !GetAtt GraphQLAPI.GraphQLUrl
     Export:
