@@ -461,7 +461,7 @@ Resources:
                 - ssm:ListCommandInvocations
               Resource:
                 - !Sub 'arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:instance/*'
-                - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:document/${ProjectName}-${EnvironmentName}-BootstrapSSMDoc'
+                - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:document/${BootstrapSSMDoc}'
         - Version: '2012-10-17' # Policy Document for DynamoDB
           Statement:
             - Effect: Allow
