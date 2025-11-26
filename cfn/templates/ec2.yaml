@@ -73,6 +73,16 @@ Resources:
                 Resource:
                   - !Sub "${SupportBucket.Arn}"
                   - !Sub "${SupportBucket.Arn}/*"
+        - PolicyName: dynamoDBServersTableAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "dynamodb:UpdateItem"
+                  - "dynamodb:GetItem"
+                Resource:
+                  Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-ServersTable"
 
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
@@ -545,7 +555,75 @@ Resources:
                   # Display current crontab
                   echo ""
                   echo "=== Current Crontab ==="
-                  crontab -l         
+                  crontab -l
+          
+          - action: aws:runShellScript
+            name: UpdateBootstrapStatus
+            inputs:
+              runCommand:
+                - !Sub |
+                  #!/bin/bash
+                  set -e
+                  
+                  echo "=== Updating Bootstrap Status in DynamoDB ==="
+                  
+                  # Get instance ID and region
+                  INSTANCE_ID=$(ec2metadata --instance-id)
+                  REGION=$(ec2metadata --availability-zone | sed 's/[a-z]$//')
+                  TABLE_NAME="${ProjectName}-${EnvironmentName}-ServersTable"
+                  TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+                  
+                  # Verify CloudWatch agent is running
+                  CW_STATUS=$(/opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -m ec2 -a query | jq -r '.status')
+                  if [ "$CW_STATUS" != "running" ]; then
+                    echo "ERROR: CloudWatch agent is not running"
+                    exit 1
+                  fi
+                  echo "✓ CloudWatch agent is running"
+                  
+                  # Verify port count script exists and is executable
+                  if [ ! -x /usr/local/port_count.sh ]; then
+                    echo "ERROR: Port count script not found or not executable"
+                    exit 1
+                  fi
+                  echo "✓ Port count script is configured"
+                  
+                  # Verify network monitor script exists and is executable
+                  if [ ! -x /usr/local/bin/network_monitor.sh ]; then
+                    echo "ERROR: Network monitor script not found or not executable"
+                    exit 1
+                  fi
+                  echo "✓ Network monitor script is configured"
+                  
+                  # Verify cron jobs are configured
+                  if ! crontab -l | grep -q "port_count.sh"; then
+                    echo "ERROR: Port count cron job not configured"
+                    exit 1
+                  fi
+                  echo "✓ Port count cron job is configured"
+                  
+                  if ! crontab -l | grep -q "network_monitor.sh"; then
+                    echo "ERROR: Network monitor cron job not configured"
+                    exit 1
+                  fi
+                  echo "✓ Network monitor cron job is configured"
+                  
+                  # Update DynamoDB to mark as bootstrapped
+                  echo "Updating DynamoDB table: $TABLE_NAME"
+                  aws dynamodb update-item \
+                    --table-name "$TABLE_NAME" \
+                    --key "{\"id\": {\"S\": \"$INSTANCE_ID\"}}" \
+                    --update-expression "SET isBootstrapComplete = :bootstrapped, updatedAt = :timestamp" \
+                    --expression-attribute-values "{\":bootstrapped\": {\"BOOL\": true}, \":timestamp\": {\"S\": \"$TIMESTAMP\"}}" \
+                    --region "$REGION"
+                  
+                  if [ $? -eq 0 ]; then
+                    echo "✓ Successfully marked instance as bootstrapped in DynamoDB"
+                    echo "Bootstrap process completed successfully!"
+                  else
+                    echo "ERROR: Failed to update DynamoDB"
+                    exit 1
+                  fi
 
 Outputs:
   SupportBucket:

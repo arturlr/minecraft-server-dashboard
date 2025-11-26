@@ -45,7 +45,8 @@ class Dyn:
                     'runCommand': item.get('runCommand', ''),
                     'workDir': item.get('workDir', ''),
                     'timezone': item.get('timezone', 'UTC'),
-                    'isBootstrapped': bool(item.get('isBootstrapped', False)),
+                    'isBootstrapComplete': bool(item.get('isBootstrapComplete', False)),
+                    'hasCognitoGroup': bool(item.get('hasCognitoGroup', False)),
                     'minecraftVersion': item.get('minecraftVersion', ''),
                     'latestPatchUpdate': item.get('latestPatchUpdate', '')
                 }
@@ -85,7 +86,7 @@ class Dyn:
                 'runCommand': config.get('runCommand', ''),
                 'workDir': config.get('workDir', ''),
                 'timezone': config.get('timezone', 'UTC'),
-                'isBootstrapped': config.get('isBootstrapped', False),
+                'isBootstrapComplete': config.get('isBootstrapComplete', False),
                 'minecraftVersion': config.get('minecraftVersion', ''),
                 'latestPatchUpdate': config.get('latestPatchUpdate', ''),
                 'updatedAt': datetime.now(timezone.utc).isoformat()
@@ -102,7 +103,7 @@ class Dyn:
                 item['autoConfigured'] = config['autoConfigured']
             
             # Remove empty strings to keep table clean (but keep timestamps and booleans)
-            item = {k: v for k, v in item.items() if v != '' or k in ['createdAt', 'updatedAt', 'isBootstrapped', 'autoConfigured']}
+            item = {k: v for k, v in item.items() if v != '' or k in ['createdAt', 'updatedAt', 'isBootstrapComplete', 'autoConfigured']}
             
             self.table.put_item(Item=item)
             logger.info(f"Server config saved for {instance_id}")
@@ -144,7 +145,8 @@ class Dyn:
                 'runCommand': 'runCommand',
                 'workDir': 'workDir',
                 'timezone': 'timezone',
-                'isBootstrapped': 'isBootstrapped',
+                'isBootstrapComplete': 'isBootstrapComplete',
+                'hasCognitoGroup': 'hasCognitoGroup',
                 'minecraftVersion': 'minecraftVersion',
                 'latestPatchUpdate': 'latestPatchUpdate',
                 'autoConfigured': 'autoConfigured'
