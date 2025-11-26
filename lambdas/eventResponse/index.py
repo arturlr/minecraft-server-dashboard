@@ -5,7 +5,7 @@ import json
 from time import sleep
 from datetime import date, datetime, timezone, timedelta
 import httpx
-from httpx_aws_auth import AWSSigV4Auth, AwsCredentials
+from httpx_aws_auth import AwsSigV4Auth, AwsCredentials 
 import ec2Helper
 import utilHelper
 import DynHelper
@@ -40,7 +40,6 @@ logger.info(f"Scheduled EventBridge Rule: {scheduled_event_bridge_rule}")
 
 boto3_session = boto3.Session()
 boto3_credentials = boto3_session.get_credentials()
-boto3_credentials = boto3_credentials.get_frozen_credentials()
 
 credentials = AwsCredentials(
     access_key=boto3_credentials.access_key,
@@ -48,14 +47,14 @@ credentials = AwsCredentials(
     session_token=boto3_credentials.token,
 )
 
-auth = AWSSigV4Auth(
-    credentials=credentials,
-    region=boto3_session.region_name,
-    service='appsync',
+# Create an authenticated client
+httpxClient = httpx.Client(
+    auth=AwsSigV4Auth(
+        credentials=credentials,
+        region=boto3_session.region_name,
+        service='appsync',
+    )
 )
-
-session = httpx.Client(auth=auth)
-session.close()
 
 
 putServerMetric = """
@@ -94,9 +93,8 @@ def send_to_appsync(payload):
     logger.info("------- send_to_appsync")
     headers={"Content-Type": "application/json"}
     # sending response to AppSync
-    response = httpx.post(
+    response = httpxClient.post(
         endpoint,
-        auth=auth,
         headers=headers,
         json=payload
     )
