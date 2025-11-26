@@ -4,6 +4,7 @@ import os
 import json
 from time import sleep
 from datetime import date, datetime, timezone, timedelta
+from decimal import Decimal
 import httpx
 from httpx_aws_auth import AwsSigV4Auth, AwsCredentials 
 import ec2Helper
@@ -263,7 +264,7 @@ def ensure_server_in_dynamodb(instance_id):
         default_config = {
             'id': instance_id,
             'shutdownMethod': 'CPUUtilization',
-            'alarmThreshold': 5.0,
+            'alarmThreshold': Decimal('5.0'),
             'alarmEvaluationPeriod': 30,
             'runCommand': 'java -Xmx1024M -Xms1024M -jar server.jar nogui',
             'workDir': '/home/ec2-user/minecraft',
@@ -399,8 +400,8 @@ def handler(event, context):
                     ensure_server_in_dynamodb(instance_id)
                     config = dyn.get_server_config(instance_id)
                 
-                # Ensure Cognito group exists for the server
-                if not config.get('hasCognitoGroup'):
+                # Ensure Cognito group exists for the server (only if config exists)
+                if config and not config.get('hasCognitoGroup'):
                     ensure_server_has_cognito_group(instance_id)
                 
                 # Bootstrap the server if needed
