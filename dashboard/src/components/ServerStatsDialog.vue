@@ -60,6 +60,32 @@ const runningTime = computed(() => {
   return `${hours} hours`;
 });
 
+// Format cache timestamp to relative time
+const cacheTimestamp = computed(() => {
+  const timestamp = server.value.runningMinutesCacheTimestamp;
+  if (!timestamp) return null;
+  
+  try {
+    const cacheTime = new Date(timestamp);
+    const now = new Date();
+    const diffMs = now - cacheTime;
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMins / 60);
+    
+    if (diffMins < 1) {
+      return 'Just now';
+    } else if (diffMins < 60) {
+      return `${diffMins} min ago`;
+    } else if (diffHours < 24) {
+      return `${diffHours} hr ago`;
+    } else {
+      return cacheTime.toLocaleDateString();
+    }
+  } catch (e) {
+    return null;
+  }
+});
+
 // Computed property for formatted last update time
 const lastUpdateFormatted = computed(() => {
   if (!serverChartsRef.value?.lastUpdateTime) {
@@ -266,7 +292,16 @@ const closeDialog = () => {
                 {{ diskSize }} GB
               </v-chip>
 
-              <v-chip variant="tonal">
+              <v-tooltip v-if="cacheTimestamp" location="top">
+                <template v-slot:activator="{ props }">
+                  <v-chip variant="tonal" v-bind="props">
+                    <v-icon class="mr-1">mdi-clock-outline</v-icon>
+                    {{ runningTime }}
+                  </v-chip>
+                </template>
+                <span>Calculated: {{ cacheTimestamp }}</span>
+              </v-tooltip>
+              <v-chip v-else variant="tonal">
                 <v-icon class="mr-1">mdi-clock-outline</v-icon>
                 {{ runningTime }}
               </v-chip>

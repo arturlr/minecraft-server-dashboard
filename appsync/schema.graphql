@@ -63,6 +63,8 @@ type ServerConfig @aws_iam
 	createdAt: AWSDateTime
 	updatedAt: AWSDateTime
 	autoConfigured: Boolean
+	runningMinutesCache: Float
+	runningMinutesCacheTimestamp: AWSDateTime
 }
 
 input ServerConfigInput {
@@ -82,6 +84,8 @@ input ServerConfigInput {
 	createdAt: AWSDateTime
 	updatedAt: AWSDateTime
 	autoConfigured: Boolean
+	runningMinutesCache: Float
+	runningMinutesCacheTimestamp: AWSDateTime
 }
 
 type ServerUsers @aws_iam
@@ -112,6 +116,7 @@ type ServerInfo @aws_iam
 	initStatus: String
 	iamStatus: String
 	runningMinutes: String
+	runningMinutesCacheTimestamp: String
 	configStatus: String
 	configValid: Boolean
 	configWarnings: [String]
@@ -133,6 +138,7 @@ input ServerInfoInput {
 	initStatus: String
 	iamStatus: String
 	runningMinutes: String
+	runningMinutesCacheTimestamp: String
 	configStatus: String
 	configValid: Boolean
 	configWarnings: [String]

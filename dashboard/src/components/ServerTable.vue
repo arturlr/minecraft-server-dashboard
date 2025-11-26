@@ -84,7 +84,16 @@
 
       <!-- Running Time Column Slot -->
       <template v-slot:item.runningMinutes="{ item }">
-        {{ formatRunningTime(item.runningMinutes) }}
+        <v-tooltip v-if="item.runningMinutesCacheTimestamp" location="top">
+          <template v-slot:activator="{ props }">
+            <span v-bind="props" class="d-flex align-center ga-1">
+              {{ formatRunningTime(item.runningMinutes) }}
+              <v-icon size="x-small" color="grey-lighten-1">mdi-clock-outline</v-icon>
+            </span>
+          </template>
+          <span>Last updated: {{ formatCacheTimestamp(item.runningMinutesCacheTimestamp) }}</span>
+        </v-tooltip>
+        <span v-else>{{ formatRunningTime(item.runningMinutes) }}</span>
       </template>
 
       <!-- Actions Column Slot -->
@@ -317,6 +326,32 @@ function formatRamSize(memSize) {
   ramCache.set(memSize, result)
   
   return result
+}
+
+// Format cache timestamp to relative time
+function formatCacheTimestamp(timestamp) {
+  if (!timestamp) return 'Unknown'
+  
+  try {
+    const cacheTime = new Date(timestamp)
+    const now = new Date()
+    const diffMs = now - cacheTime
+    const diffMins = Math.floor(diffMs / 60000)
+    const diffHours = Math.floor(diffMins / 60)
+    const diffDays = Math.floor(diffHours / 24)
+    
+    if (diffMins < 1) {
+      return 'Just now'
+    } else if (diffMins < 60) {
+      return `${diffMins} minute${diffMins !== 1 ? 's' : ''} ago`
+    } else if (diffHours < 24) {
+      return `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`
+    } else {
+      return `${diffDays} day${diffDays !== 1 ? 's' : ''} ago`
+    }
+  } catch (e) {
+    return 'Unknown'
+  }
 }
 </script>
 

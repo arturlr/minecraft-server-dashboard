@@ -48,7 +48,9 @@ class Dyn:
                     'isBootstrapComplete': bool(item.get('isBootstrapComplete', False)),
                     'hasCognitoGroup': bool(item.get('hasCognitoGroup', False)),
                     'minecraftVersion': item.get('minecraftVersion', ''),
-                    'latestPatchUpdate': item.get('latestPatchUpdate', '')
+                    'latestPatchUpdate': item.get('latestPatchUpdate', ''),
+                    'runningMinutesCache': float(item.get('runningMinutesCache', 0.0)) if item.get('runningMinutesCache') else None,
+                    'runningMinutesCacheTimestamp': item.get('runningMinutesCacheTimestamp', '')
                 }
             else:
                 logger.info(f"Server config not found for {instance_id}")
@@ -149,7 +151,9 @@ class Dyn:
                 'hasCognitoGroup': 'hasCognitoGroup',
                 'minecraftVersion': 'minecraftVersion',
                 'latestPatchUpdate': 'latestPatchUpdate',
-                'autoConfigured': 'autoConfigured'
+                'autoConfigured': 'autoConfigured',
+                'runningMinutesCache': 'runningMinutesCache',
+                'runningMinutesCacheTimestamp': 'runningMinutesCacheTimestamp'
             }
             
             for key, attr_name in field_mapping.items():
