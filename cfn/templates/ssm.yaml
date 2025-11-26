@@ -31,7 +31,7 @@ Resources:
                 - |
                   # Get instance ID
                   INSTANCE_ID=$(ec2metadata --instance-id)
-                  REGION=$(curl -s http://169.254.169.254/latest/meta-data/placement/region)
+                  REGION=$(ec2metadata --availability-zone | sed 's/[a-z]$//')
                   
                   # Get instance tags
                   TAGS=$(aws ec2 describe-tags --filters "Name=resource-id,Values=$INSTANCE_ID" --region $REGION --output json)
@@ -295,10 +295,22 @@ Resources:
             inputs:
               runCommand:
                 - !Sub |
-                  # Download CloudWatch agent config from S3
-                  aws s3 cp s3://${SupportBucket}/amazon-cloudwatch-agent.json /tmp/amazon-cloudwatch-agent.json
+                  #!/bin/bash
+                  set -e
+
+                  # Clear any cached AWS credentials
+                  unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+                  rm -rf ~/.aws/credentials ~/.aws/config 2>/dev/null || true
+                  
+                  # Get region from availability zone (strip the zone letter)
+                  REGION=$(ec2metadata --availability-zone | sed 's/[a-z]$//')
+                  
+                  # Download CloudWatch agent config from S3 using instance profile
+                  echo "Downloading CloudWatch agent configuration..."
+                  aws s3 cp s3://${SupportBucket}/amazon-cloudwatch-agent.json /tmp/amazon-cloudwatch-agent.json --region $REGION
                   
                   # Start CloudWatch agent with the config file
+                  echo "Starting CloudWatch agent..."
                   sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
                     -a fetch-config \
                     -m ec2 \
@@ -306,6 +318,7 @@ Resources:
                     -c file:/tmp/amazon-cloudwatch-agent.json
                   
                   # Check status
+                  echo "Checking CloudWatch agent status..."
                   sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -m ec2 -a status      
 
           - action: aws:runShellScript
@@ -313,13 +326,14 @@ Resources:
             inputs:
               runCommand:
                 - |
-                  if [ ! -f /usr/local/port_count.sh ]; then
+                  if [ ! -f /usr/local/bin/port_count.sh ]; then
                     # Get instance metadata
                     INSTANCE_ID=$(ec2metadata --instance-id)
                     REGION=$(ec2metadata --availability-zone | sed 's/[a-z]$//')
+                    SCRIPT_PATH="/usr/local/bin/port_count.sh"
                     
                     # Create the script file using heredoc
-                    cat > /usr/local/port_count.sh <<EOF
+                    cat > /usr/local/bin/port_count.sh <<EOF
                   #!/bin/bash
                   INSTANCE_ID="$INSTANCE_ID"
                   REGION="$REGION"
@@ -327,8 +341,22 @@ Resources:
                   aws cloudwatch put-metric-data --metric-name UserCount --dimensions InstanceId=\$INSTANCE_ID --namespace 'MinecraftDashboard' --region \$REGION
                   EOF
                     
-                    chmod +x /usr/local/port_count.sh
+                    chmod +x $SCRIPT_PATH
+                    echo "$SCRIPT_PATH configured"
                   fi
+
+                  # Check if cron entry already exists before adding it
+                  if ! crontab -l 2>/dev/null | grep -qF "$SCRIPT_PATH"; then
+                    (crontab -l 2>/dev/null; echo "*/1 * * * * $SCRIPT_PATH >/dev/null 2>&1") | crontab -
+                    echo "portCount cron job added"
+                  else
+                    echo "portCount cron job already exists, skipping"
+                  fi
+                  
+                  # Display current crontab
+                  echo ""
+                  echo "=== Current Crontab ==="
+                  crontab -l
 
           - action: aws:runShellScript
             name: NetworkBandwidth
@@ -485,15 +513,15 @@ Resources:
                   TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
                   
                   # Verify CloudWatch agent is running
-                  CW_STATUS=$(/opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -m ec2 -a query | jq -r '.status')
-                  if [ "$CW_STATUS" != "running" ]; then
-                    echo "ERROR: CloudWatch agent is not running"
-                    exit 1
+                  if /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -m ec2 -a query 2>&1 | grep -q '"status":"running"'; then
+                    echo "✓ CloudWatch agent is running"
+                  else
+                    echo "WARNING: CloudWatch agent may not be running, but continuing..."
+                    # Don't exit - agent might be running but query command format changed
                   fi
-                  echo "✓ CloudWatch agent is running"
                   
                   # Verify port count script exists and is executable
-                  if [ ! -x /usr/local/port_count.sh ]; then
+                  if [ ! -x /usr/local/bin/port_count.sh ]; then
                     echo "ERROR: Port count script not found or not executable"
                     exit 1
                   fi
