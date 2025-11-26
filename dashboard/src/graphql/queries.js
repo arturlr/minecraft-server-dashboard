@@ -17,6 +17,7 @@ export const listServers = /* GraphQL */ `
       initStatus
       iamStatus
       runningMinutes
+      runningMinutesCacheTimestamp
       configStatus
       configValid
       configWarnings

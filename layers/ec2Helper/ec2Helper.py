@@ -200,55 +200,146 @@ class Ec2Utils:
             logger.error(f"Error checking EventBridge rules for {instance_id}: {e}")
             return {'shutdown_rule_exists': False, 'start_rule_exists': False}
 
+    def get_cached_running_minutes(self, instance_id):
+        """
+        Get cached running minutes from DynamoDB.
+        Falls back to real-time calculation if cache is missing.
+        
+        Args:
+            instance_id (str): EC2 instance ID
+            
+        Returns:
+            dict: {
+                'minutes': float - Total running minutes for the current month,
+                'timestamp': str - ISO timestamp when value was calculated (or None if real-time)
+            }
+        """
+        logger.info(f"------- get_cached_running_minutes: {instance_id}")
+        
+        try:
+            # Import DynHelper here to avoid circular dependency
+            import DynHelper
+            dyn = DynHelper.Dyn()
+            
+            # Get server config with cache
+            config = dyn.get_server_config(instance_id)
+            
+            if config and config.get('runningMinutesCache') is not None:
+                cache_timestamp_str = config.get('runningMinutesCacheTimestamp')
+                
+                if cache_timestamp_str:
+                    logger.info(f"Using cached value for {instance_id}: {config['runningMinutesCache']} minutes")
+                    return {
+                        'minutes': config['runningMinutesCache'],
+                        'timestamp': cache_timestamp_str
+                    }
+                else:
+                    logger.info(f"Cache timestamp missing for {instance_id}, falling back to calculation")
+            else:
+                logger.info(f"No cache found for {instance_id}, falling back to calculation")
+        
+        except Exception as e:
+            logger.warning(f"Error reading cache for {instance_id}: {e}, falling back to calculation")
+        
+        # Fallback to real-time calculation
+        return self.get_total_hours_running_per_month(instance_id)
+
     def get_total_hours_running_per_month(self, instanceId):
+        """
+        Calculate total running minutes for the current month from CloudTrail events.
+        This is an expensive operation - prefer using get_cached_running_minutes() instead.
+        """
         logger.info(f"------- get_total_hours_running_per_month {instanceId}")
 
         total_minutes = 0
         event_data = []
 
+        # Get current instance state to handle running instances
+        try:
+            instance_response = self.ec2_client.describe_instances(InstanceIds=[instanceId])
+            current_state = instance_response['Reservations'][0]['Instances'][0]['State']['Name']
+        except Exception as e:
+            logger.error(f"Error getting instance state: {e}")
+            current_state = None
+
         paginator = self.ct_client.get_paginator('lookup_events')
         start_time = datetime(datetime.now().year, datetime.now().month, 1, tzinfo=timezone.utc)
         end_time = datetime.now(tz=timezone.utc)
 
-        for page in paginator.paginate(
-            LookupAttributes=[{'AttributeKey': 'ResourceName', 'AttributeValue': instanceId}],
-            StartTime=start_time,
-            EndTime=end_time
-        ):
-            for event in page['Events']:
-                event_name = event['EventName']
-                if event_name == "RunInstances":
-                    event_data.append({'s': 'StartInstances', 'x': json.loads(event['CloudTrailEvent'])['eventTime']})
-                elif event_name == "StartInstances":
-                    start_event = self.extract_state_event_time(event, "stopped", instanceId)
-                    if start_event:
-                        event_data.append({'s': 'StartInstances', 'x': start_event})
-                elif event_name == "StopInstances":
-                    stop_event = self.extract_state_event_time(event, "running", instanceId)
-                    if stop_event:
-                        event_data.append({'s': 'StopInstances', 'x': stop_event})
+        # Limit to relevant event names only
+        event_names = ['RunInstances', 'StartInstances', 'StopInstances']
+        
+        try:
+            for page in paginator.paginate(
+                LookupAttributes=[{'AttributeKey': 'ResourceName', 'AttributeValue': instanceId}],
+                StartTime=start_time,
+                EndTime=end_time,
+                PaginationConfig={'MaxItems': 1000}  # Limit total items to prevent excessive API calls
+            ):
+                for event in page['Events']:
+                    event_name = event['EventName']
+                    
+                    # Skip irrelevant events early
+                    if event_name not in event_names:
+                        continue
+                    
+                    # Parse CloudTrail event once
+                    ct_event = json.loads(event['CloudTrailEvent'])
+                    event_time = ct_event['eventTime']
+                    
+                    if event_name == "RunInstances":
+                        event_data.append({'s': 'StartInstances', 'x': event_time})
+                    elif event_name == "StartInstances":
+                        # Check if this was a transition from stopped state
+                        response_elements = ct_event.get('responseElements', {})
+                        instances_set = response_elements.get('instancesSet', {})
+                        items = instances_set.get('items', [])
+                        
+                        for item in items:
+                            if (item.get('instanceId') == instanceId and 
+                                item.get('previousState', {}).get('name') == 'stopped'):
+                                event_data.append({'s': 'StartInstances', 'x': event_time})
+                                break
+                                
+                    elif event_name == "StopInstances":
+                        # Check if this was a transition from running state
+                        response_elements = ct_event.get('responseElements', {})
+                        instances_set = response_elements.get('instancesSet', {})
+                        items = instances_set.get('items', [])
+                        
+                        for item in items:
+                            if (item.get('instanceId') == instanceId and 
+                                item.get('previousState', {}).get('name') == 'running'):
+                                event_data.append({'s': 'StopInstances', 'x': event_time})
+                                break
+        except Exception as e:
+            logger.error(f"Error fetching CloudTrail events: {e}")
+            return {'minutes': 0, 'timestamp': None}
 
+        # Sort events chronologically
         data_points = sorted(event_data, key=lambda k: k['x'])
 
+        # Calculate runtime from event pairs
         start_event = None
-        stop_event = None
         for point in data_points:
             if point['s'] == "StartInstances":
                 start_event = datetime.fromisoformat(point['x'].replace("Z", "+00:00"))
-            elif point['s'] == "StopInstances":
-                if start_event:
-                    stop_event = datetime.fromisoformat(point['x'].replace("Z", "+00:00"))
-                else:
-                    start_event = start_time
-                    stop_event = datetime.fromisoformat(point['x'].replace("Z", "+00:00"))
+            elif point['s'] == "StopInstances" and start_event:
+                stop_event = datetime.fromisoformat(point['x'].replace("Z", "+00:00"))
+                delta = stop_event - start_event
+                total_minutes += round(delta.total_seconds() / 60, 2)
+                start_event = None
 
-                if start_event and stop_event:
-                    delta = stop_event - start_event
-                    total_minutes += round(delta.total_seconds() / 60, 2)
-                    start_event = None
-                    stop_event = None
+        # Handle case where instance is currently running
+        if start_event and current_state == 'running':
+            delta = end_time - start_event
+            total_minutes += round(delta.total_seconds() / 60, 2)
 
-        return total_minutes
+        # Return dict with minutes and timestamp (None for real-time calculation)
+        return {
+            'minutes': total_minutes,
+            'timestamp': None
+        }
 
     def extract_state_event_time(self, evt, previous_state, instance_id):
         logger.info(f"------- extract_state_event_time {instance_id}")

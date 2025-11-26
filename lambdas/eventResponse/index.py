@@ -290,17 +290,15 @@ def state_change_response(instance_id):
         publicIp = "none"
 
     tags = {tag['Key']: tag['Value'] for tag in instance_info["Tags"]}
-    
-    userEmail = 'minecraft-dashboard@maildrop.cc'
-
-    userEmail = tags.get("Owner", userEmail)
-
-    instanceName = "Undefined"
-    instanceName = tags.get("Name", instanceName)
+    userEmail = tags.get("Owner", "minecraft-dashboard@maildrop.cc")
+    instanceName = tags.get("Name", "Undefined")
 
     # Converting to PST as the logs are in PST        
     pstLaunchTime = launchTime.astimezone(pst)
 
+    # Get cached running minutes with timestamp
+    runtime_data = ec2_utils.get_cached_running_minutes(instance_id)
+    
     # building payload
     input = {
         "id": instance_id,
@@ -312,7 +310,8 @@ def state_change_response(instance_id):
         "iamStatus": ec2Status["iamStatus"].lower(),
         "launchTime": pstLaunchTime.strftime("%m/%d/%Y - %H:%M:%S"),
         "publicIp": publicIp,
-        "runningMinutes": ec2_utils.get_total_hours_running_per_month(instance_id)
+        "runningMinutes": runtime_data['minutes'],
+        "runningMinutesCacheTimestamp": runtime_data.get('timestamp', '')
     }
 
     return input

@@ -296,6 +296,7 @@ Resources:
               "initStatus": $util.toJson($context.arguments.input.initStatus),
               "iamStatus": $util.toJson($context.arguments.input.iamStatus),
               "runningMinutes": $util.toJson($context.arguments.input.runningMinutes),
+              "runningMinutesCacheTimestamp": $util.toJson($context.arguments.input.runningMinutesCacheTimestamp),
               "groupMembers": $util.toJson($context.arguments.input.groupMembers)
           }
         }
@@ -328,6 +329,24 @@ Resources:
       Principal: "events.amazonaws.com"
       SourceArn: 
         !GetAtt ScheduledRule.Arn
+
+  MonthlyRuntimeCalculationRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: "Trigger monthly runtime calculation every hour"
+      ScheduleExpression: "rate(1 hour)"
+      State: "ENABLED"
+      Targets:
+        - Arn: !GetAtt CalculateMonthlyRuntime.Arn
+          Id: "CalculateMonthlyRuntimeV1"
+
+  PermissionForMonthlyRuntimeRule:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref CalculateMonthlyRuntime
+      Action: "lambda:InvokeFunction"
+      Principal: "events.amazonaws.com"
+      SourceArn: !GetAtt MonthlyRuntimeCalculationRule.Arn
 
   AuthLayer:
     Type: AWS::Serverless::LayerVersion
@@ -735,6 +754,29 @@ Resources:
           COGNITO_USER_POOL_ID:  
             Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-UserPoolId"
 
+  CalculateMonthlyRuntime:
+    Type: AWS::Serverless::Function
+    Properties:
+      Timeout: 300
+      FunctionName: !Sub "${ProjectName}-${EnvironmentName}-calculateMonthlyRuntime"
+      CodeUri: ../../lambdas/calculateMonthlyRuntime/
+      Layers:
+        - !Ref Ec2Layer
+        - !Ref DynLayer
+      Policies:
+        - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
+        - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
+        - arn:aws:iam::aws:policy/AWSCloudTrail_ReadOnlyAccess
+        - DynamoDBCrudPolicy:
+            TableName:
+              Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-ServersTableName"
+      Environment:
+        Variables:
+          APP_NAME: !Ref ProjectName
+          ENVIRONMENT_NAME: !Ref EnvironmentName
+          TAG_APP_VALUE: !Ref AppValue
+          AWS_REGION_NAME: !Sub "${AWS::Region}"
+
  
 
 Outputs:
@@ -779,3 +821,8 @@ Outputs:
     Value: !GetAtt EventResponse.Arn
     Export:
       Name: !Sub "${ProjectName}-${EnvironmentName}-EventResponse"
+
+  CalculateMonthlyRuntime:
+    Value: !GetAtt CalculateMonthlyRuntime.Arn
+    Export:
+      Name: !Sub "${ProjectName}-${EnvironmentName}-CalculateMonthlyRuntime"
