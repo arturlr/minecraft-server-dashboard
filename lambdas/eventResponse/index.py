@@ -121,8 +121,8 @@ def schedule_event_response():
             'id': instance["InstanceId"],
             'memStats': get_metrics_data(instance["InstanceId"], 'CWAgent', 'mem_used_percent', 'Percent', 'Average', dt_4_four_hours_before, dt_now, 300),
             'cpuStats': get_metrics_data(instance["InstanceId"], 'CWAgent', 'cpu_usage_active', 'Percent', 'Average', dt_4_four_hours_before, dt_now, 300),
-            'networkStats': get_metrics_data(instance["InstanceId"], 'CWAgent', 'net_bytes_sent', 'Bytes', 'Sum', dt_4_four_hours_before, dt_now, 300),
-            'activeUsers': get_metrics_data(instance["InstanceId"], 'MinecraftDashboard', 'UserCount', 'None', 'Maximum', dt_4_four_hours_before, dt_now, 300),
+            'networkStats': get_metrics_data(instance["InstanceId"], 'MinecraftDashboard', 'net_bytes_sent', 'Bytes', 'Sum', dt_4_four_hours_before, dt_now, 300),
+            'activeUsers': get_metrics_data(instance["InstanceId"], 'MinecraftDashboard', 'TransmitBandwidth', 'Bytes/Second', 'Maximum', dt_4_four_hours_before, dt_now, 300),
             #'alertMsg': get_alert(instance["InstanceId"])
         }
         instances_payload.append(instance_info)
@@ -138,12 +138,6 @@ def get_metrics_data(instance_id, namespace, metric_name, unit, stat_type, start
 
     if metric_name == "cpu_usage_active":
         dimensions.append({'Name': 'cpu', 'Value': "cpu-total"})
-    elif metric_name == "net_bytes_sent":
-        nic_name = utl.retrieve_extension_value(f"/{appName}/{envName}/{instance_id}/nic")
-        if nic_name is not None:
-            dimensions.append({'Name': 'interface', 'Value': nic_name})
-        else:
-            logger.warning("No NIC parameter store found for instance: " + instance_id)
 
     try:
         response = cw_client.get_metric_statistics(
