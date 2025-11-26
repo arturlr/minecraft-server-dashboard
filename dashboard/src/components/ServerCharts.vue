@@ -6,7 +6,7 @@ import * as queries from '../graphql/queries';
 import { Hub } from 'aws-amplify/utils';
 import { useServerStore } from "../stores/server";
 import VueApexCharts from "vue3-apexcharts";
-import moment from "moment";
+import dayjs from "dayjs";
 
 const serverStore = useServerStore();
 const graphQlClient = generateClient();
@@ -39,7 +39,7 @@ const cpuOptions = ref({
         type: "datetime",
         labels: {
             formatter: function (val, timestamp) {
-                return moment(new Date(timestamp)).format("HH:mm");
+                return dayjs(timestamp).format("HH:mm");
             },
         },
     },
@@ -74,7 +74,7 @@ const memOptions = ref({
         type: "datetime",
         labels: {
             formatter: function (val, timestamp) {
-                return moment(new Date(timestamp)).format("HH:mm");
+                return dayjs(timestamp).format("HH:mm");
             },
         },
     },
@@ -109,7 +109,7 @@ const netOptions = ref({
         type: "datetime",
         labels: {
             formatter: function (val, timestamp) {
-                return moment(new Date(timestamp)).format("HH:mm");
+                return dayjs(timestamp).format("HH:mm");
             },
         },
     },
@@ -144,7 +144,7 @@ const usersOptions = ref({
         type: "datetime",
         labels: {
             formatter: function (val, timestamp) {
-                return moment(new Date(timestamp)).format("HH:mm");
+                return dayjs(timestamp).format("HH:mm");
             },
         },
     },

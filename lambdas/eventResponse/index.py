@@ -4,8 +4,8 @@ import os
 import json
 from time import sleep
 from datetime import date, datetime, timezone, timedelta
-import requests
-from requests_aws4auth import AWS4Auth
+import httpx
+from httpx_aws_auth import AWS4Auth
 import ec2Helper
 import utilHelper
 import DynHelper
@@ -50,8 +50,7 @@ auth = AWS4Auth(
     session_token=credentials.token,
 )
 
-session = requests.Session()
-session.auth = auth
+session = httpx.Client(auth=auth)
 session.close()
 
 
@@ -91,7 +90,7 @@ def send_to_appsync(payload):
     logger.info("------- send_to_appsync")
     headers={"Content-Type": "application/json"}
     # sending response to AppSync
-    response = requests.post(
+    response = httpx.post(
         endpoint,
         auth=auth,
         headers=headers,

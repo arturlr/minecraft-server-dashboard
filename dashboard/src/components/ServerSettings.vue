@@ -3,6 +3,12 @@ import { ref, reactive, computed, onMounted, watch } from "vue";
 import { useServerStore } from "../stores/server";
 import { useUserStore } from "../stores/user";
 import { parseGraphQLError, retryOperation } from "../utils/errorHandler";
+import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc';
+import timezone from 'dayjs/plugin/timezone';
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
 
 const emit = defineEmits(['config-saved', 'close']);
 
@@ -257,13 +263,45 @@ const selectedMethodHint = computed(() => {
     return '';
 });
 
-// Helper to generate cron expression from time and weekdays (in local timezone)
+// Helper to convert local time to UTC based on timezone
+function convertToUTC(localTime, sourceTimezone) {
+    if (!localTime || !sourceTimezone) return localTime;
+    
+    const [hours, minutes] = localTime.split(':').map(Number);
+    
+    // Create a date in the source timezone and convert to UTC
+    const utcTime = dayjs.tz(`2000-01-01 ${localTime}`, sourceTimezone)
+        .utc()
+        .format('HH:mm');
+    
+    return utcTime;
+}
+
+// Helper to convert UTC time to local timezone
+function convertFromUTC(utcTime, targetTimezone) {
+    if (!utcTime || !targetTimezone) return utcTime;
+    
+    const [hours, minutes] = utcTime.split(':').map(Number);
+    
+    // Create a UTC date and convert to target timezone
+    const localTime = dayjs.utc()
+        .hour(hours)
+        .minute(minutes)
+        .tz(targetTimezone)
+        .format('HH:mm');
+    
+    return localTime;
+}
+
+// Helper to generate cron expression from time and weekdays (converts local time to UTC)
 function generateCronExpression(time, weekdays) {
     if (!time || !weekdays?.length || (weekdays.length === 1 && weekdays[0] === 'ALL')) {
         return null;
     }
     
-    const [hours, minutes] = time.split(':');
+    // Convert local time to UTC before creating cron expression
+    const utcTime = convertToUTC(time, serverConfigInput.timezone);
+    const [hours, minutes] = utcTime.split(':');
     
     const weekdayToCron = { 'SUN': 0, 'MON': 1, 'TUE': 2, 'WED': 3, 'THU': 4, 'FRI': 5, 'SAT': 6 };
     const cronWeekdays = weekdays
@@ -271,7 +309,7 @@ function generateCronExpression(time, weekdays) {
         .map(day => weekdayToCron[day])
         .join(',');
     
-    // Return standard 5-field cron expression in LOCAL timezone - backend will convert to UTC
+    // Return standard 5-field cron expression in UTC
     return `${minutes} ${hours} * * ${cronWeekdays}`;
 }
 
@@ -295,7 +333,7 @@ const WEEKDAY_MAP = {
     '4': 'THU', '5': 'FRI', '6': 'SAT'
 };
 
-// Parse standard cron expression to extract time and weekdays (stored in local timezone)
+// Parse standard cron expression to extract time and weekdays (converts UTC to local timezone)
 function parseCronExpression(cronExpression, isStartSchedule = false) {
     if (!cronExpression) return;
     
@@ -308,16 +346,19 @@ function parseCronExpression(cronExpression, isStartSchedule = false) {
     }
     
     const [minutes, hours, , , weekdaysPart] = parts;
-    const time = `${hours.padStart(2, '0')}:${minutes.padStart(2, '0')}`;
+    const utcTime = `${hours.padStart(2, '0')}:${minutes.padStart(2, '0')}`;
+    
+    // Convert UTC time to local timezone
+    const localTime = convertFromUTC(utcTime, serverConfigInput.timezone);
     
     // Set time based on schedule type
     if (isStartSchedule) {
-        selectedStartTime.value = time;
+        selectedStartTime.value = localTime;
         enableStartSchedule.value = true;
         return; // Start schedule doesn't need weekday parsing
     }
     
-    selectedTime.value = time;
+    selectedTime.value = localTime;
     
     // Parse weekdays if not wildcard
     if (weekdaysPart === '*') {

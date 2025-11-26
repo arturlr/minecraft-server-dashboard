@@ -1,5 +1,4 @@
-requests
-requests_aws4auth
-urllib3==1.26.16
+httpx
+httpx_aws_auth
 boto3
 pytz

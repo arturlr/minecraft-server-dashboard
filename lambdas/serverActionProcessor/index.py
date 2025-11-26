@@ -5,8 +5,8 @@ import os
 import time
 import ec2Helper
 import utilHelper
-import requests
-from requests_aws4auth import AWS4Auth
+import httpx
+from httpx_aws_auth import AWS4Auth
 from botocore.exceptions import ClientError
 
 logger = logging.getLogger()
@@ -374,7 +374,7 @@ def send_to_appsync(action, instance_id, status, message=None, user_email=None):
         logger.info(f"Sending status to AppSync endpoint: action={action}, instance={instance_id}, status={status}")
         
         headers = {"Content-Type": "application/json"}
-        response = requests.post(
+        response = httpx.post(
             endpoint,
             auth=auth,
             headers=headers,
