@@ -30,11 +30,13 @@ appName = os.getenv('APP_NAME')
 envName = os.getenv('ENVIRONMENT_NAME')
 endpoint = os.getenv('APPSYNC_URL', None) 
 cognito_pool_id = os.getenv('COGNITO_USER_POOL_ID', None)
+queue_url = os.getenv('SSM_COMMAND_QUEUE_URL')
+bootstrap_doc_name = os.getenv('BOOTSTRAP_SSM_DOC_NAME')
 
 utl = utilHelper.Utils()
 ec2_utils = ec2Helper.Ec2Utils()
 dyn = DynHelper.Dyn()
-ssm_helper = ssmHelper.SSMHelper()
+ssm_helper = ssmHelper.SSMHelper(queue_url,bootstrap_doc_name)
 utc = pytz.utc
 pst = pytz.timezone('US/Pacific')
 

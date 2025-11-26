@@ -9,12 +9,12 @@ logger.setLevel(logging.INFO)
 
 
 class SSMHelper:
-    def __init__(self):
+    def __init__(self,queue_url, bootstrap_doc_name):
         """Initialize SSM Helper with SQS client and configuration."""
         logger.info("------- SSMHelper Class Initialization")
         self.sqs = boto3.client('sqs')
-        self.queue_url = os.getenv('SSM_COMMAND_QUEUE_URL')
-        self.bootstrap_doc_name = os.getenv('BOOTSTRAP_SSM_DOC_NAME')
+        self.queue_url = queue_url
+        self.bootstrap_doc_name = bootstrap_doc_name
     
     def queue_ssm_command(self, instance_id, document_name, parameters, comment=None, timeout_seconds=3600, metadata=None):
         """
