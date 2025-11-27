@@ -54,6 +54,17 @@ Resources:
                   - "ssm:PutParameter"
                   - "ssm:GetParameter"
                 Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/minecraft*"
+        - PolicyName: DynamoDB
+          PolicyDocument:
+            - Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - dynamodb:GetItem
+                    - dynamodb:PutItem
+                    - dynamodb:UpdateItem
+                  Resource:
+                    Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-ServersTable"
         - PolicyName: ec2TagsAccess
           PolicyDocument:
             Version: "2012-10-17"
@@ -72,18 +83,7 @@ Resources:
                   - "s3:ListBucket"
                 Resource:
                   - !Sub "${SupportBucket.Arn}"
-                  - !Sub "${SupportBucket.Arn}/*"
-        - PolicyName: dynamoDBServersTableAccess
-          PolicyDocument:
-            Version: "2012-10-17"
-            Statement:
-              - Effect: Allow
-                Action:
-                  - "dynamodb:UpdateItem"
-                  - "dynamodb:GetItem"
-                Resource:
-                  Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-ServersTable"
-
+                  - !Sub "${SupportBucket.Arn}/*
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
         - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy
