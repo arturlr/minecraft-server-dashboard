@@ -54,17 +54,16 @@ Resources:
                   - "ssm:PutParameter"
                   - "ssm:GetParameter"
                 Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/minecraft*"
-        - PolicyName: DynamoDB
+        - PolicyName: dynamoDBServersTableAccess
           PolicyDocument:
-            - Version: '2012-10-17'
-              Statement:
-                - Effect: Allow
-                  Action:
-                    - dynamodb:GetItem
-                    - dynamodb:PutItem
-                    - dynamodb:UpdateItem
-                  Resource:
-                    Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-ServersTable"
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "dynamodb:UpdateItem"
+                  - "dynamodb:GetItem"
+                Resource:
+                  Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-ServersTable"
         - PolicyName: ec2TagsAccess
           PolicyDocument:
             Version: "2012-10-17"
