@@ -13,6 +13,10 @@ Globals:
       Variables:
         SERVERS_TABLE_NAME:
           Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-ServersTableName"   
+        TAG_APP_VALUE: !Ref AppValue
+        APP_NAME: !Ref ProjectName
+        ENVIRONMENT_NAME: !Ref EnvironmentName
+        AWS_REGION_NAME: !Sub "${AWS::Region}"
 
 Parameters:
   ProjectName:
@@ -495,10 +499,6 @@ Resources:
                 Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-ServersTable"
       Environment:
         Variables:
-          APP_NAME: !Ref ProjectName
-          ENVIRONMENT_NAME: !Ref EnvironmentName
-          AWS_REGION_NAME: !Sub "${AWS::Region}"
-          TAG_APP_VALUE: !Ref AppValue
           APPSYNC_URL: !GetAtt GraphQLAPI.GraphQLUrl
           COGNITO_USER_POOL_ID: 
             Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-UserPoolId"
@@ -525,13 +525,8 @@ Resources:
         - arn:aws:iam::aws:policy/AmazonCognitoReadOnly
         - SSMParameterReadPolicy:
             ParameterName: !Sub "${ProjectName}*"
-        # - DynamoDBCrudPolicy:
-        #     TableName: !Ref InstancesTable
-      Environment:
-        Variables:
-          APP_NAME: !Ref ProjectName
-          TAG_APP_VALUE: !Ref AppValue
-          #INSTANCES_TABLE_NAME: !Ref InstancesTable
+        - DynamoDBCrudPolicy:
+             TableName: !Ref InstancesTable
 
   GetServerMetrics:
     Type: AWS::Serverless::Function 
@@ -545,9 +540,7 @@ Resources:
         - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
         - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess
         - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
-      Environment:
-        Variables:
-          APP_NAME: !Ref ProjectName
+
 
   ListServers:
     Type: AWS::Serverless::Function
@@ -581,15 +574,10 @@ Resources:
               Resource: "*"
       Environment:
         Variables:
-          APP_NAME: !Ref ProjectName
-          TAG_APP_VALUE: !Ref AppValue
-          AWS_REGION_NAME: !Sub "${AWS::Region}"
           EC2_INSTANCE_PROFILE_ARN: 
             Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-IAMEC2InstanceProfileArn"
-          #INSTANCES_TABLE_NAME: !Ref InstancesTable
           COGNITO_USER_POOL_ID: 
             Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-UserPoolId"
-
 
   ServerActionProcessor:
     Type: AWS::Serverless::Function
@@ -656,10 +644,6 @@ Resources:
               Resource: "*"
       Environment:
         Variables:
-          APP_NAME: !Ref ProjectName
-          ENVIRONMENT_NAME: !Ref EnvironmentName
-          TAG_APP_VALUE: !Ref AppValue
-          AWS_REGION_NAME: !Sub "${AWS::Region}"
           APPSYNC_URL: !GetAtt GraphQLAPI.GraphQLUrl
 
   ServerAction:
@@ -679,7 +663,10 @@ Resources:
         - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
         - arn:aws:iam::aws:policy/AmazonCognitoReadOnly
         - SSMParameterReadPolicy:
-            ParameterName: !Sub "${ProjectName}*"
+            ParameterName: !Sub "${ProjectName}*"        
+        - DynamoDBCrudPolicy:
+            TableName:
+              Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-ServersTableName"
         - Version: "2012-10-17" # Policy Document
           Statement:
             - Effect: Allow
@@ -708,11 +695,6 @@ Resources:
               Resource: !Sub "${GraphQLAPI.Arn}/*"
       Environment:
         Variables:
-          # StepFunctionsArn: !Ref StateMachine
-          APP_NAME: !Ref ProjectName
-          ENVIRONMENT_NAME: !Ref EnvironmentName
-          TAG_APP_VALUE: !Ref AppValue
-          AWS_REGION_NAME: !Sub "${AWS::Region}"
           EC2_INSTANCE_PROFILE_NAME:  
             Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-IAMEC2InstanceProfile"
           EC2_INSTANCE_PROFILE_ARN:  
@@ -767,10 +749,6 @@ Resources:
                 Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-IAMEC2RoleArn"
       Environment:
         Variables:
-          APP_NAME: !Ref ProjectName
-          ENVIRONMENT_NAME: !Ref EnvironmentName
-          TAG_APP_VALUE: !Ref AppValue
-          AWS_REGION_NAME: !Sub "${AWS::Region}"
           EC2_INSTANCE_PROFILE_NAME:  
             Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-IAMEC2InstanceProfile"
           EC2_INSTANCE_PROFILE_ARN:  
@@ -794,12 +772,6 @@ Resources:
         - DynamoDBCrudPolicy:
             TableName:
               Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-ServersTableName"
-      Environment:
-        Variables:
-          APP_NAME: !Ref ProjectName
-          ENVIRONMENT_NAME: !Ref EnvironmentName
-          TAG_APP_VALUE: !Ref AppValue
-          AWS_REGION_NAME: !Sub "${AWS::Region}"
 
   SSMCommandProcessor:
     Type: AWS::Serverless::Function
@@ -826,13 +798,7 @@ Resources:
               Resource:
                 - !Sub 'arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:instance/*'
                 - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:document/*'
-      Environment:
-        Variables:
-          APP_NAME: !Ref ProjectName
-          ENVIRONMENT_NAME: !Ref EnvironmentName
-          AWS_REGION_NAME: !Sub "${AWS::Region}"
 
- 
 
 Outputs:
   GraphQLAPIEndpoint:
