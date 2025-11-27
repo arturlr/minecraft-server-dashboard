@@ -38,7 +38,7 @@ class Dyn:
     NUMERIC_FIELDS = {'alarmThreshold', 'runningMinutesCache'}
     
     def __init__(self):
-        logger.info("------- Dyn Class Initialization")
+        logger.info("------- DynamoDb Class Initialization")
         dynamodb = boto3.resource('dynamodb', region_name=aws_region)
         serversTable = os.getenv('SERVERS_TABLE_NAME')
         if not serversTable:
