@@ -16,9 +16,11 @@ Resources:
 
   MinecraftRunnerSSMDoc:
     Type: AWS::SSM::Document
+    UpdateReplacePolicy: Delete
     Properties:
       DocumentType: Command
       TargetType: /AWS::EC2::Instance
+      Name: !Sub "${ProjectName}-${EnvironmentName}-MinecraftRunnerSSMDoc"
       Content:
         schemaVersion: '2.2'
         description: Run Minecraft server using instance tags
@@ -66,9 +68,11 @@ Resources:
 
   BootstrapSSMDoc:
     Type: AWS::SSM::Document
+    UpdateReplacePolicy: Delete
     Properties:
       DocumentType: Command
       TargetType: /AWS::EC2::Instance
+      Name: !Sub "${ProjectName}-${EnvironmentName}-BootstrapSSMDoc"
       Content:
         schemaVersion: '2.2'
         description: Bootstrap instance
