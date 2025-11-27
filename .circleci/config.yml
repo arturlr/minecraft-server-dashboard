@@ -81,7 +81,7 @@ jobs:
           command: |
             set -e
             cd cfn
-            sam build --parallel --cached
+            sam build --parallel --no-cached
       - run:
           name: Deploy SAM application
           no_output_timeout: 30m
