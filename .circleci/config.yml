@@ -81,7 +81,9 @@ jobs:
           command: |
             set -e
             cd cfn
-            sam build --parallel --no-cached
+            # Force clean build by removing cache
+            rm -rf .aws-sam
+            sam build --parallel --use-container
       - run:
           name: Deploy SAM application
           no_output_timeout: 30m
