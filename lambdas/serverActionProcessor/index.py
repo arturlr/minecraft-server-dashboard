@@ -7,7 +7,7 @@ import ec2Helper
 import utilHelper
 import dynHelper
 import httpx
-from httpx_aws_auth import AWSSigV4Auth, AwsCredentials
+from httpx_aws_auth import AwsSigV4Auth, AwsCredentials
 from botocore.exceptions import ClientError
 
 logger = logging.getLogger()
@@ -33,10 +33,9 @@ sts_client = boto3.client('sts')
 account_id = sts_client.get_caller_identity()['Account']
 aws_region = boto3_session.region_name
 
-# Set up AWS4Auth for AppSync
-
+# Set up AwsSigV4Auth for AppSync
+boto3_session = boto3.Session()
 boto3_credentials = boto3_session.get_credentials()
-boto3_credentials = boto3_credentials.get_frozen_credentials()
 
 credentials = AwsCredentials(
     access_key=boto3_credentials.access_key,
@@ -44,10 +43,13 @@ credentials = AwsCredentials(
     session_token=boto3_credentials.token,
 )
 
-auth = AWSSigV4Auth(
-    credentials=credentials,
-    region=boto3_session.region_name,
-    service='appsync',
+# Create an authenticated client
+httpxClient = httpx.Client(
+    auth=AwsSigV4Auth(
+        credentials=credentials,
+        region=boto3_session.region_name,
+        service='appsync',
+    )
 )
 
 # GraphQL mutation for server action status
