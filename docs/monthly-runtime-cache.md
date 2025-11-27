@@ -105,7 +105,7 @@ The `get_total_hours_running_per_month()` method was also optimized:
 1. **Build Lambda layers** (if modified):
    ```bash
    cd layers/ec2Helper && make
-   cd ../dynHelper && make
+   cd ../ddbHelper && make
    ```
 
 2. **Deploy CloudFormation stack**:

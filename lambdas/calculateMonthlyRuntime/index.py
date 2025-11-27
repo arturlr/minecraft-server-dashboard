@@ -5,13 +5,13 @@ import json
 from datetime import datetime, timezone
 from decimal import Decimal
 import ec2Helper
-import dynHelper
+import ddbHelper
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 ec2_utils = ec2Helper.Ec2Utils()
-dyn = dynHelper.Dyn()
+dyn = ddbHelper.Dyn()
 
 appValue = os.getenv('TAG_APP_VALUE')
 
