@@ -371,7 +371,7 @@ def handler(event, context):
                     ensure_server_has_cognito_group(instance_id)
                 
                 # Check if server needs bootstrapping
-                if config and not config.get('isBootstrapComplete')
+                if config and not config.get('isBootstrapComplete'):
                     logger.warning(f"Server {instance_id} is not bootstrapped, queueing bootstrap command")            
                     queue_bootstrap_server(instance_id)
 

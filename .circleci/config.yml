@@ -56,9 +56,9 @@ jobs:
       - checkout
       - restore_cache:
           keys:
-            - sam-cache-{{ .Branch }}-{{ checksum "cfn/template.yaml" }}
-            - sam-cache-{{ .Branch }}-
-            - sam-cache-
+            - sam-cache-v2-{{ .Branch }}-{{ checksum "cfn/template.yaml" }}
+            - sam-cache-v2-{{ .Branch }}-
+            - sam-cache-v2-
       - aws-cli/setup
       - aws-sam/install
       - run:
@@ -146,7 +146,7 @@ jobs:
               aws s3 cp amazon-cloudwatch-agent.json "s3://$SUPPORT_BUCKET/amazon-cloudwatch-agent.json"
             fi
       - save_cache:
-          key: sam-cache-{{ .Branch }}-{{ checksum "cfn/template.yaml" }}
+          key: sam-cache-v2-{{ .Branch }}-{{ checksum "cfn/template.yaml" }}
           paths:
             - ~/.aws-sam
             - cfn/.aws-sam
