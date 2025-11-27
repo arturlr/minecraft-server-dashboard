@@ -5,6 +5,7 @@ import os
 import time
 import ec2Helper
 import utilHelper
+import dynHelper
 import httpx
 from httpx_aws_auth import AWSSigV4Auth, AwsCredentials
 from botocore.exceptions import ClientError
@@ -16,6 +17,7 @@ ec2_client = boto3.client('ec2')
 eventbridge_client = boto3.client('events')
 ec2_utils = ec2Helper.Ec2Utils()
 utl = utilHelper.Utils()
+dyn = dynHelper.Dyn()
 boto3_session = boto3.Session()
 
 # Environment variables
@@ -589,22 +591,26 @@ def handle_update_server_config(instance_id, arguments):
         
         logger.info(f"Config update: Processing arguments - instance={instance_id}, arguments={arguments}")
         
-        # Set instance attributes to tags
+        # Ensure instance_id is in the config
+        if 'id' not in arguments:
+            arguments['id'] = instance_id
+        
+        # Save configuration to DynamoDB
         try:
-            logger.info(f"Setting instance attributes to tags: instance={instance_id}")
-            response = ec2_utils.set_instance_attributes_to_tags(arguments)
-            logger.info(f"Instance attributes set successfully: instance={instance_id}, response={response}")
+            logger.info(f"Saving server config to DynamoDB: instance={instance_id}")
+            response = dyn.put_server_config(arguments)
+            logger.info(f"Server config saved successfully: instance={instance_id}, response={response}")
         except Exception as e:
-            logger.error(f"Config update FAILED: Failed to set instance attributes to tags - instance={instance_id}, error={str(e)}", exc_info=True)
+            logger.error(f"Config update FAILED: Failed to save server config to DynamoDB - instance={instance_id}, error={str(e)}", exc_info=True)
             return False
         
-        shutdown_method = response.get('shutdownMethod', '')
+        shutdown_method = arguments.get('shutdownMethod', '')
         logger.info(f"Config update: Processing shutdown method - instance={instance_id}, method={shutdown_method}")
         
         # Handle Schedule-based shutdown
         if shutdown_method == 'Schedule':
-            stop_schedule = response.get('stopScheduleExpression')
-            timezone = response.get('timezone', 'UTC')
+            stop_schedule = arguments.get('stopScheduleExpression')
+            timezone = arguments.get('timezone', 'UTC')
             
             if not stop_schedule:
                 logger.error(f"Config update FAILED: Missing stop schedule expression - instance={instance_id}")
@@ -622,7 +628,7 @@ def handle_update_server_config(instance_id, arguments):
                 logger.info(f"Shutdown schedule configured successfully: instance={instance_id}")
                 
                 # Configure start schedule if provided
-                start_schedule = response.get('startScheduleExpression')
+                start_schedule = arguments.get('startScheduleExpression')
                 if start_schedule:
                     logger.info(f"Config update: Configuring start schedule - instance={instance_id}, schedule={start_schedule}, timezone={timezone}")
                     configure_start_event(instance_id, start_schedule, timezone)
@@ -646,8 +652,8 @@ def handle_update_server_config(instance_id, arguments):
                 
         # Handle CPU/Connections-based shutdown
         elif shutdown_method in ['CPUUtilization', 'Connections']:
-            alarm_threshold = response.get('alarmThreshold')
-            alarm_period = response.get('alarmEvaluationPeriod')
+            alarm_threshold = arguments.get('alarmThreshold')
+            alarm_period = arguments.get('alarmEvaluationPeriod')
             
             if alarm_threshold is None or alarm_period is None:
                 logger.error(f"Config update FAILED: Missing alarm parameters - instance={instance_id}, threshold={alarm_threshold}, period={alarm_period}")
