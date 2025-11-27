@@ -671,7 +671,8 @@ Resources:
       Layers:
         - !Ref AuthLayer
         - !Ref UtilLayer
-        - !Ref Ec2Layer        
+        - !Ref Ec2Layer  
+        - !Ref DynLayer      
       Policies:
         - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
         - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess
