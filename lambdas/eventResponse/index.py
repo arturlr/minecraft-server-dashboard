@@ -320,7 +320,7 @@ def state_change_response(instance_id):
 
     return input
     
-def bootstrap_server(instance_id):
+def queue_bootstrap_server(instance_id):
     """
     Queue bootstrap SSM command for asynchronous execution.
     The SSMCommandProcessor Lambda will handle retries and execution.
@@ -328,28 +328,17 @@ def bootstrap_server(instance_id):
     Args:
         instance_id (str): EC2 instance ID
     """
-    logger.info(f"------- bootstrap_server {instance_id}")
+    logger.info(f"------- queue_bootstrap_server {instance_id}")
     
-    try:
-        # Get server configuration from DynamoDB
-        config = dyn.get_server_config(instance_id)
+    try:        
+        # Queue the bootstrap command for asynchronous execution
+        result = ssm_helper.queue_bootstrap_command(instance_id)
         
-        # Check if server needs bootstrapping
-        is_bootstrap_complete = config.get('isBootstrapComplete', False)
-        
-        if not is_bootstrap_complete:
-            logger.info(f"Server {instance_id} is not bootstrapped, queueing bootstrap command")
-            
-            # Queue the bootstrap command for asynchronous execution
-            result = ssm_helper.queue_bootstrap_command(instance_id)
-            
-            if result['success']:
-                logger.info(f"Bootstrap command queued for {instance_id}: MessageId={result['messageId']}")
-            else:
-                logger.error(f"Failed to queue bootstrap command for {instance_id}: {result['message']}")
+        if result['success']:
+            logger.info(f"Bootstrap command queued for {instance_id}: MessageId={result['messageId']}")
         else:
-            logger.info(f"Server {instance_id} is already bootstrapped, skipping")
-            
+            logger.error(f"Failed to queue bootstrap command for {instance_id}: {result['message']}")
+
     except Exception as e:
         logger.error(f"Error in bootstrap_server for {instance_id}: {str(e)}", exc_info=True)
         # Don't raise - allow the event handler to continue
@@ -373,6 +362,7 @@ def handler(event, context):
                 # Ensure server exists in DynamoDB
                 config = dyn.get_server_config(instance_id)
                 if not config or not config.get('shutdownMethod'):
+                    logger.warning(f"Server {instance_id} has not record. Creating one")    
                     ensure_server_in_dynamodb(instance_id)
                     config = dyn.get_server_config(instance_id)
                 
@@ -380,8 +370,11 @@ def handler(event, context):
                 if config and not config.get('hasCognitoGroup'):
                     ensure_server_has_cognito_group(instance_id)
                 
-                # Bootstrap the server if needed
-                bootstrap_server(instance_id)
+                # Check if server needs bootstrapping
+                if config and not config.get('isBootstrapComplete')
+                    logger.warning(f"Server {instance_id} is not bootstrapped, queueing bootstrap command")            
+                    queue_bootstrap_server(instance_id)
+
             elif event['detail']['state'] == "stopped":
                 disable_scheduled_rule()
 

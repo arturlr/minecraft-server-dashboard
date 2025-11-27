@@ -61,6 +61,7 @@ Resources:
               - Effect: Allow
                 Action:
                   - "dynamodb:UpdateItem"
+                  - "dynamodb:PutItem"
                   - "dynamodb:GetItem"
                 Resource:
                   Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-ServersTable"
