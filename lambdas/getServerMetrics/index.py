@@ -36,15 +36,15 @@ def handler(event, context):
             statistic='Average',
             dimensions=[
                 {'Name': 'InstanceId', 'Value': instance_id},
-                {'cpu': 'cpu-total'}
+                {'Name': 'cpu', 'Value': 'cpu-total'}
             ]
         )
         
         # Fetch Network In metrics
         network_in = get_metric_data(
             instance_id=instance_id,
-            metric_name='NetworkPacketsIn',
-            namespace='AWS/EC2',
+            metric_name='transmit_bandwidth',
+            namespace='MinecraftDashboard',
             start_time=start_time,
             end_time=end_time,
             statistic='Sum'
@@ -66,7 +66,7 @@ def handler(event, context):
         # Fetch User Count (custom metric)
         user_stats = get_metric_data(
             instance_id=instance_id,
-            metric_name='UserCount',
+            metric_name='user_count',
             namespace='MinecraftDashboard',
             start_time=start_time,
             end_time=end_time,

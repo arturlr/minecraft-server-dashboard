@@ -338,7 +338,7 @@ Resources:
                   INSTANCE_ID="$INSTANCE_ID"
                   REGION="$REGION"
                   PORT_COUNT=\$(netstat -an | grep ESTABLISHED | grep ':25565' | wc -l)
-                  aws cloudwatch put-metric-data --metric-name UserCount --dimensions InstanceId=\$INSTANCE_ID --namespace 'MinecraftDashboard' --region \$REGION
+                  aws cloudwatch put-metric-data --metric-name user_count --dimensions InstanceId=\$INSTANCE_ID --namespace 'MinecraftDashboard' --region \$REGION
                   EOF
                     
                     chmod +x $SCRIPT_PATH
@@ -516,8 +516,8 @@ Resources:
                   if /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -m ec2 -a query 2>&1 | grep -q '"status":"running"'; then
                     echo "✓ CloudWatch agent is running"
                   else
-                    echo "WARNING: CloudWatch agent may not be running, but continuing..."
-                    # Don't exit - agent might be running but query command format changed
+                    echo "ERROR: CloudWatch agent may not be running"
+                    exit 1
                   fi
                   
                   # Verify port count script exists and is executable
