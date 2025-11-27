@@ -18,7 +18,7 @@ An asynchronous caching system for monthly server runtime calculations that impr
    - Added `get_cached_running_minutes()` - Smart cache reader with fallback, returns dict with `minutes` and `timestamp`
    - Optimized `get_total_hours_running_per_month()` - Better performance, error handling, and returns dict format
 
-2. **layers/dynHelper/dynHelper.py**
+2. **layers/ddbHelper/ddbHelper.py**
    - Added cache fields to `get_server_config()` return value
    - Added cache fields to `update_server_config()` field mapping
 
@@ -97,7 +97,7 @@ User requests server info:
 ```bash
 # Build Lambda layers (if modified)
 cd layers/ec2Helper && make
-cd ../dynHelper && make
+cd ../ddbHelper && make
 
 # Deploy CloudFormation stack
 cd cfn

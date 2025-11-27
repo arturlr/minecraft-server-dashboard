@@ -53,7 +53,7 @@ dashboard/
 
 ### Lambda Layers (`layers/`)
 - **authHelper/**: Cognito authentication utilities
-- **dynHelper/**: DynamoDB operations helper
+- **ddbHelper/**: DynamoDB operations helper
 - **ec2Helper/**: EC2 instance management utilities
   - CloudWatch alarm management (CPU-based and user-based shutdown)
   - EventBridge rule management for scheduled operations

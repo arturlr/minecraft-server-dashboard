@@ -6,7 +6,7 @@ import time
 import authHelper
 import ec2Helper
 import utilHelper
-import dynHelper
+import ddbHelper
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -23,7 +23,7 @@ server_action_queue_url = os.getenv('SERVER_ACTION_QUEUE_URL')
 auth = authHelper.Auth(cognito_pool_id)
 ec2_utils = ec2Helper.Ec2Utils()
 utl = utilHelper.Utils()
-dyn = dynHelper.Dyn()
+dyn = ddbHelper.Dyn()
 
 def check_authorization(event, instance_id, user_attributes):
     """

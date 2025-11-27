@@ -373,11 +373,11 @@ Resources:
     Metadata:
       BuildMethod: makefile
 
-  DynLayer:
+  DdbLayer:
     Type: AWS::Serverless::LayerVersion
     Properties:
       Description: MinecraftDashboardHelpers
-      ContentUri: ../../layers/dynHelper/
+      ContentUri: ../../layers/ddbHelper/
       CompatibleRuntimes:
         - python3.13
       RetentionPolicy: Delete
@@ -426,7 +426,7 @@ Resources:
         - !Ref AuthLayer
         - !Ref UtilLayer
         - !Ref Ec2Layer
-        - !Ref DynLayer
+        - !Ref DdbLayer
         - !Ref SsmLayer 
       Events:
         EC2StateTrigger:
@@ -558,7 +558,7 @@ Resources:
         - !Ref AuthLayer
         - !Ref UtilLayer
         - !Ref Ec2Layer
-        - !Ref DynLayer
+        - !Ref DdbLayer
       Policies:
         - CostExplorerReadOnlyPolicy: {}
         - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
@@ -600,7 +600,7 @@ Resources:
       Layers:
         - !Ref UtilLayer
         - !Ref Ec2Layer
-        - !Ref DynLayer
+        - !Ref DdbLayer
       Events:
         SQSEvent:
           Type: SQS
@@ -672,7 +672,7 @@ Resources:
         - !Ref AuthLayer
         - !Ref UtilLayer
         - !Ref Ec2Layer  
-        - !Ref DynLayer      
+        - !Ref DdbLayer      
       Policies:
         - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
         - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess
@@ -786,7 +786,7 @@ Resources:
       CodeUri: ../../lambdas/calculateMonthlyRuntime/
       Layers:
         - !Ref Ec2Layer
-        - !Ref DynLayer
+        - !Ref DdbLayer
       Policies:
         - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
         - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess

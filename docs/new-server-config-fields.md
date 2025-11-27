@@ -44,7 +44,7 @@ input ServerConfigInput {
 }
 ```
 
-### 2. dynHelper Layer (`layers/dynHelper/dynHelper.py`)
+### 2. ddbHelper Layer (`layers/ddbHelper/ddbHelper.py`)
 **Updated Methods:**
 - `get_server_config()` - Returns new fields with proper defaults
 - `put_server_config()` - Saves new fields to DynamoDB

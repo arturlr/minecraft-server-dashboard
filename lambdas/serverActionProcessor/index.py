@@ -5,7 +5,7 @@ import os
 import time
 import ec2Helper
 import utilHelper
-import dynHelper
+import ddbHelper
 import httpx
 from httpx_aws_auth import AwsSigV4Auth, AwsCredentials
 from botocore.exceptions import ClientError
@@ -17,7 +17,7 @@ ec2_client = boto3.client('ec2')
 eventbridge_client = boto3.client('events')
 ec2_utils = ec2Helper.Ec2Utils()
 utl = utilHelper.Utils()
-dyn = dynHelper.Dyn()
+dyn = ddbHelper.Dyn()
 boto3_session = boto3.Session()
 
 # Environment variables
