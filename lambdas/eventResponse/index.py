@@ -125,7 +125,7 @@ def schedule_event_response():
             'id': instance["InstanceId"],
             'memStats': get_metrics_data(instance["InstanceId"], 'CWAgent', 'mem_used_percent', 'Percent', 'Average', dt_4_four_hours_before, dt_now, 300),
             'cpuStats': get_metrics_data(instance["InstanceId"], 'CWAgent', 'cpu_usage_active', 'Percent', 'Average', dt_4_four_hours_before, dt_now, 300),
-            'networkStats': get_metrics_data(instance["InstanceId"], 'MinecraftDashboard', 'transmit_bandwidth', 'Bytes/Seconds', 'Sum', dt_4_four_hours_before, dt_now, 300),
+            'networkStats': get_metrics_data(instance["InstanceId"], 'MinecraftDashboard', 'transmit_bandwidth', 'Bytes/Second', 'Sum', dt_4_four_hours_before, dt_now, 300),
             'activeUsers': get_metrics_data(instance["InstanceId"], 'MinecraftDashboard', 'user_count', 'Count', 'Maximum', dt_4_four_hours_before, dt_now, 300),
             #'alertMsg': get_alert(instance["InstanceId"])
         }
