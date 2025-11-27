@@ -6,6 +6,7 @@ import time
 import authHelper
 import ec2Helper
 import utilHelper
+import dynHelper
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -22,6 +23,7 @@ server_action_queue_url = os.getenv('SERVER_ACTION_QUEUE_URL')
 auth = authHelper.Auth(cognito_pool_id)
 ec2_utils = ec2Helper.Ec2Utils()
 utl = utilHelper.Utils()
+dyn = dynHelper.Dyn()
 
 def check_authorization(event, instance_id, user_attributes):
     """
@@ -297,8 +299,32 @@ def handle_get_server_users(instance_id):
 
 def handle_get_server_config(instance_id):
     """Helper function to handle get server config action"""
-    instance_tags = ec2_utils.get_instance_attributes_from_tags(instance_id)
-    return instance_tags
+    try:
+        server_config = dyn.get_server_config(instance_id)
+        if server_config is None:
+            logger.warning(f"No config found for instance {instance_id}, returning empty config")
+            # Return empty config structure matching GraphQL schema
+            return {
+                'id': instance_id,
+                'shutdownMethod': '',
+                'stopScheduleExpression': '',
+                'startScheduleExpression': '',
+                'alarmThreshold': 0.0,
+                'alarmEvaluationPeriod': 0,
+                'runCommand': '',
+                'workDir': '',
+                'timezone': 'UTC',
+                'isBootstrapComplete': False,
+                'hasCognitoGroup': False,
+                'minecraftVersion': '',
+                'latestPatchUpdate': '',
+                'runningMinutesCache': None,
+                'runningMinutesCacheTimestamp': ''
+            }
+        return server_config
+    except Exception as e:
+        logger.error(f"Error getting server config for {instance_id}: {str(e)}", exc_info=True)
+        return utl.response(500, {"error": f"Failed to get server config: {str(e)}"})
 
 def handle_local_invocation(event, context):
     # Handle local invocations here
