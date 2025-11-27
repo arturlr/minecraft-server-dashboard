@@ -5,7 +5,7 @@ Migrated server configuration storage from EC2 tags to DynamoDB ServersTable for
 
 ## Changes Made
 
-### 1. DynHelper Layer (`layers/dynHelper/DynHelper.py`)
+### 1. dynHelper Layer (`layers/dynHelper/dynHelper.py`)
 **Updated Methods:**
 - `get_server_config(instance_id)` - Retrieves server config from DynamoDB
 - `put_server_config(config)` - Saves complete server configuration
@@ -28,7 +28,7 @@ All ServerConfig GraphQL fields now stored in DynamoDB:
 **Updated Methods:**
 - `get_instance_attributes_from_tags()` - Now reads from DynamoDB instead of EC2 tags
 - `set_instance_attributes_to_tags()` - Now writes to DynamoDB instead of EC2 tags
-- Added DynHelper import and initialization
+- Added dynHelper import and initialization
 
 ### 3. CloudFormation (`cfn/templates/lambdas.yaml`)
 **Infrastructure Changes:**
@@ -89,7 +89,7 @@ All ServerConfig GraphQL fields now stored in DynamoDB:
 - No EC2 tags created for configuration
 
 ## Backward Compatibility
-- Legacy method names preserved in DynHelper
+- Legacy method names preserved in dynHelper
 - EC2Helper method signatures unchanged
 - GraphQL schema unchanged
 - Frontend requires no changes

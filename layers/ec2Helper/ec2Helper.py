@@ -217,9 +217,9 @@ class Ec2Utils:
         logger.info(f"------- get_cached_running_minutes: {instance_id}")
         
         try:
-            # Import DynHelper here to avoid circular dependency
-            import DynHelper
-            dyn = DynHelper.Dyn()
+            # Import dynHelper here to avoid circular dependency
+            import dynHelper
+            dyn = dynHelper.Dyn()
             
             # Get server config with cache
             config = dyn.get_server_config(instance_id)

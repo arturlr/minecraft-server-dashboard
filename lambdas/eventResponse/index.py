@@ -9,7 +9,7 @@ import httpx
 from httpx_aws_auth import AwsSigV4Auth, AwsCredentials 
 import ec2Helper
 import utilHelper
-import DynHelper
+import dynHelper
 import ssmHelper
 import pytz
 
@@ -35,7 +35,7 @@ bootstrap_doc_name = os.getenv('BOOTSTRAP_SSM_DOC_NAME')
 
 utl = utilHelper.Utils()
 ec2_utils = ec2Helper.Ec2Utils()
-dyn = DynHelper.Dyn()
+dyn = dynHelper.Dyn()
 ssm_helper = ssmHelper.SSMHelper(queue_url,bootstrap_doc_name)
 utc = pytz.utc
 pst = pytz.timezone('US/Pacific')
