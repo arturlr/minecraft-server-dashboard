@@ -513,7 +513,8 @@ Resources:
                   TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
                   
                   # Verify CloudWatch agent is running
-                  if /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -m ec2 -a query 2>&1 | grep -q '"status":"running"'; then
+                  /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -m ec2 -a status
+                  if /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -m ec2 -a status | jq -e '.status == "running"'; then
                     echo "✓ CloudWatch agent is running"
                   else
                     echo "ERROR: CloudWatch agent may not be running"
