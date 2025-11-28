@@ -54,9 +54,15 @@ const diskSize = computed(() => server.value.diskSize || 0);
 
 // Memoized running time display
 const runningTime = computed(() => {
-  const minutes = server.value.runningMinutes || 0;
-  if (minutes === 0) return '0 hours';
-  const hours = (minutes / 60).toFixed(1);
+  const minutes = server.value.runningMinutes;
+  const numMinutes = Number(minutes);
+  
+  // Validate input is a valid number
+  if (!minutes || isNaN(numMinutes) || numMinutes <= 0) {
+    return '0 hours';
+  }
+  
+  const hours = (numMinutes / 60).toFixed(1);
   return `${hours} hours`;
 });
 

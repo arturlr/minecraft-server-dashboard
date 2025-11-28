@@ -104,6 +104,7 @@
           :iam-status="item.iamStatus"
           @open-config="$emit('open-config', item.id)"
           @open-stats="$emit('open-stats', item.id)"
+          @open-users="openUserManagement(item.id, item.name || item.id)"
         />
       </template>
 
@@ -128,12 +129,21 @@
         </div>
       </template>
     </v-data-table>
+
+    <!-- User Management Dialog -->
+    <UserManagementDialog
+      v-if="selectedServerId"
+      v-model="userManagementDialog"
+      :server-id="selectedServerId"
+      :server-name="selectedServerName"
+    />
   </div>
 </template>
 
 <script setup>
 import { ref, computed, watch } from 'vue'
 import ServerActionsMenu from './ServerActionsMenu.vue'
+import UserManagementDialog from './UserManagementDialog.vue'
 
 const props = defineProps({
   servers: {
@@ -148,6 +158,24 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['open-config', 'open-stats', 'open-power', 'copy-ip'])
+
+// User management dialog state
+const userManagementDialog = ref(false)
+const selectedServerId = ref('')
+const selectedServerName = ref('')
+
+/**
+ * Open user management dialog for a specific server
+ * Requirements: 1.2
+ * 
+ * @param {string} serverId - The EC2 instance ID
+ * @param {string} serverName - The display name of the server
+ */
+const openUserManagement = (serverId, serverName) => {
+  selectedServerId.value = serverId
+  selectedServerName.value = serverName
+  userManagementDialog.value = true
+}
 
 // Status chip helpers (merged from ServerStatusChip.vue)
 const getChipColor = (state) => {
@@ -272,17 +300,19 @@ const headers = ref([
 const runningTimeCache = new Map()
 
 function formatRunningTime(minutes) {
-  if (!minutes || minutes === 0) {
+  // Validate input is a valid number
+  const numMinutes = Number(minutes)
+  if (!minutes || minutes === 0 || isNaN(numMinutes) || numMinutes < 0) {
     return '-'
   }
   
   // Check cache first
-  if (runningTimeCache.has(minutes)) {
-    return runningTimeCache.get(minutes)
+  if (runningTimeCache.has(numMinutes)) {
+    return runningTimeCache.get(numMinutes)
   }
   
-  const hours = Math.floor(minutes / 60)
-  const mins = minutes % 60
+  const hours = Math.floor(numMinutes / 60)
+  const mins = Math.floor(numMinutes % 60)
   
   let result
   if (hours > 24) {
@@ -300,7 +330,7 @@ function formatRunningTime(minutes) {
     const firstKey = runningTimeCache.keys().next().value
     runningTimeCache.delete(firstKey)
   }
-  runningTimeCache.set(minutes, result)
+  runningTimeCache.set(numMinutes, result)
   
   return result
 }

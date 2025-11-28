@@ -29,6 +29,21 @@
         </v-btn>
       </template>
     </v-tooltip>
+    
+    <v-tooltip text="Manage Users" location="top">
+      <template v-slot:activator="{ props }">
+        <v-btn 
+          icon 
+          size="small" 
+          variant="text"
+          class="action-btn"
+          v-bind="props" 
+          @click="$emit('open-users')"
+        >
+          <v-icon>mdi-account-multiple</v-icon>
+        </v-btn>
+      </template>
+    </v-tooltip>
   </div>
 </template>
 
@@ -48,7 +63,7 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['open-config', 'open-stats'])
+const emit = defineEmits(['open-config', 'open-stats', 'open-users'])
 </script>
 
 <style scoped>
