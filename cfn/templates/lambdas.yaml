@@ -525,8 +525,6 @@ Resources:
         - arn:aws:iam::aws:policy/AmazonCognitoReadOnly
         - SSMParameterReadPolicy:
             ParameterName: !Sub "${ProjectName}*"
-        - DynamoDBCrudPolicy:
-             TableName: !Ref InstancesTable
 
   GetServerMetrics:
     Type: AWS::Serverless::Function 
