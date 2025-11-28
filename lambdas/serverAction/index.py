@@ -23,7 +23,6 @@ server_action_queue_url = os.getenv('SERVER_ACTION_QUEUE_URL')
 auth = authHelper.Auth(cognito_pool_id)
 ec2_utils = ec2Helper.Ec2Utils()
 utl = utilHelper.Utils()
-dyn = ddbHelper.Dyn()
 
 def check_authorization(event, instance_id, user_attributes):
     """
@@ -68,7 +67,9 @@ def check_authorization(event, instance_id, user_attributes):
 
 def send_status_to_appsync(action, instance_id, status, message=None, user_email=None):
     """
-    Send action status update to AppSync for real-time subscriptions
+    Log action status for monitoring and debugging.
+    Note: Status updates are not persisted to DynamoDB.
+    Future: Could broadcast via subscription for real-time UI updates.
     
     Args:
         action: Action being performed
@@ -78,91 +79,12 @@ def send_status_to_appsync(action, instance_id, status, message=None, user_email
         user_email: Email of user who initiated the action
         
     Returns:
-        bool: True if successful, False otherwise
+        bool: Always returns True (logging only)
     """
-    logger.info(f"AppSync status update: action={action}, instance={instance_id}, status={status}, user={user_email}")
+    logger.info(f"Action status: action={action}, instance={instance_id}, status={status}, user={user_email}, message={message}")
     
-    appsync_url = os.getenv('APPSYNC_URL')
-    if not appsync_url:
-        logger.warning(f"AppSync status update SKIPPED: APPSYNC_URL not configured for action={action}, instance={instance_id}")
-        return False
-    
-    mutation = """
-    mutation PutServerActionStatus($input: ServerActionStatusInput!) {
-        putServerActionStatus(input: $input) {
-            id
-            action
-            status
-            timestamp
-            message
-            userEmail
-        }
-    }
-    """
-    
-    variables = {
-        "input": {
-            "id": instance_id,
-            "action": action,
-            "status": status,
-            "timestamp": int(time.time()),
-            "message": message,
-            "userEmail": user_email
-        }
-    }
-    
-    try:
-        # Get AWS credentials for signing the request
-        session = boto3.Session()
-        credentials = session.get_credentials()
-        
-        # Prepare the GraphQL request
-        headers = {
-            'Content-Type': 'application/json'
-        }
-        
-        payload = {
-            'query': mutation,
-            'variables': variables
-        }
-        
-        # Use requests_aws4auth if available, otherwise use IAM auth
-        try:
-            from requests_aws4auth import AWS4Auth
-            region = os.getenv('AWS_REGION', 'us-east-1')
-            auth_header = AWS4Auth(
-                credentials.access_key,
-                credentials.secret_key,
-                region,
-                'appsync',
-                session_token=credentials.token
-            )
+    return True
             
-            import requests
-            response = requests.post(
-                appsync_url,
-                auth=auth_header,
-                json=payload,
-                headers=headers
-            )
-            
-            if response.status_code == 200:
-                logger.info(f"AppSync status update SUCCESS: action={action}, instance={instance_id}, status={status}")
-                return True
-            else:
-                logger.error(f"AppSync status update FAILED: action={action}, instance={instance_id}, status={status}, http_code={response.status_code}, response={response.text}")
-                return False
-                
-        except ImportError as ie:
-            # Fallback: log the status update but don't fail
-            logger.warning(f"AppSync status update SKIPPED: requests_aws4auth not available - action={action}, instance={instance_id}, error={str(ie)}")
-            logger.info(f"Status update (not sent): {action} on {instance_id} - {status}: {message}")
-            return False
-            
-    except Exception as e:
-        logger.error(f"AppSync status update FAILED with exception: action={action}, instance={instance_id}, status={status}, error={str(e)}", exc_info=True)
-        return False
-
 def validate_queue_message(action, instance_id, arguments=None, user_email=None):
     """
     Validate message before sending to queue
@@ -300,6 +222,8 @@ def handle_get_server_users(instance_id):
 def handle_get_server_config(instance_id):
     """Helper function to handle get server config action"""
     try:
+        dyn = ddbHelper.Dyn()
+        
         server_config = dyn.get_server_config(instance_id)
         if server_config is None:
             logger.warning(f"No config found for instance {instance_id}, returning empty config")

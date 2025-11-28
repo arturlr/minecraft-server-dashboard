@@ -13,36 +13,17 @@ session = boto3.session.Session()
 aws_region = session.region_name
 
 class Dyn:
-    # Allowed fields for update operations (whitelist)
-    # Potentially create a script to create it from the
-    # GraphQL variables
-    ALLOWED_UPDATE_FIELDS = {
-        'shutdownMethod',
-        'stopScheduleExpression',
-        'startScheduleExpression',
-        'alarmThreshold',
-        'alarmEvaluationPeriod',
-        'runCommand',
-        'workDir',
-        'timezone',
-        'isBootstrapComplete',
-        'hasCognitoGroup',
-        'minecraftVersion',
-        'latestPatchUpdate',
-        'autoConfigured',
-        'runningMinutesCache',
-        'runningMinutesCacheTimestamp'
-    }
-    
-    # Fields that need Decimal conversion for DynamoDB
-    NUMERIC_FIELDS = {'alarmThreshold', 'runningMinutesCache'}
-    
-    def __init__(self):
+
+    def __init__(self, table_name=None):
         logger.info("------- DynamoDb Class Initialization")
         dynamodb = boto3.resource('dynamodb', region_name=aws_region)
-        serversTable = os.getenv('SERVERS_TABLE_NAME')
+        serversTable = table_name
         if not serversTable:
-            raise ValueError("SERVERS_TABLE_NAME environment variable not set")
+            # fallback to the oldwway
+            serversTable = os.getenv('SERVERS_TABLE_NAME')
+            if not serversTable:
+                raise ValueError("SERVERS_TABLE_NAME environment variable not set")
+        
         self.table = dynamodb.Table(serversTable)
 
     @staticmethod
@@ -102,7 +83,7 @@ class Dyn:
             logger.warning(f"Could not convert {value} to int, using default {default}")
             return default
 
-    def _convert_dynamodb_item(self, item, instance_id):
+    def _convert_dynamodb_config_item(self, item, instance_id):
         """
         Convert DynamoDB item to ServerConfig format with proper type handling.
         
@@ -149,7 +130,7 @@ class Dyn:
             response = self.table.get_item(Key={'id': instance_id})
             
             if 'Item' in response:
-                return self._convert_dynamodb_item(response['Item'], instance_id)
+                return self._convert_dynamodb_config_item(response['Item'], instance_id)
             else:
                 logger.info(f"Server config not found for {instance_id}")
                 return None
@@ -177,7 +158,7 @@ class Dyn:
             
         try:
             logger.info(f"put_server_config: {instance_id}")
-            
+
             # Build item with all fields
             item = {
                 'id': instance_id,
@@ -238,7 +219,31 @@ class Dyn:
         instance_id = config.get('id')
         if not instance_id:
             raise ValueError("Instance ID is required")
-            
+
+        # Allowed fields for update operations (whitelist)
+        # Potentially create a script to create it from the
+        # GraphQL variables
+        ALLOWED_UPDATE_FIELDS = {
+            'shutdownMethod',
+            'stopScheduleExpression',
+            'startScheduleExpression',
+            'alarmThreshold',
+            'alarmEvaluationPeriod',
+            'runCommand',
+            'workDir',
+            'timezone',
+            'isBootstrapComplete',
+            'hasCognitoGroup',
+            'minecraftVersion',
+            'latestPatchUpdate',
+            'autoConfigured',
+            'runningMinutesCache',
+            'runningMinutesCacheTimestamp'
+        }
+        
+        # Fields that need Decimal conversion for DynamoDB
+        NUMERIC_FIELDS = {'alarmThreshold', 'runningMinutesCache'}
+
         try:
             logger.info(f"update_server_config: {instance_id}")
             
@@ -288,7 +293,7 @@ class Dyn:
             logger.info(f"Server config updated for {instance_id}")
             
             # Convert the returned item to proper format
-            return self._convert_dynamodb_item(response['Attributes'], instance_id)
+            return self._convert_dynamodb_config_item(response['Attributes'], instance_id)
 
         except ClientError as e:
             logger.error(f"Error updating server config for {instance_id}: {e.response['Error']['Message']}")

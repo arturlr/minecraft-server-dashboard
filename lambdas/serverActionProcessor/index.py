@@ -4,7 +4,6 @@ import json
 import os
 import time
 import ec2Helper
-import utilHelper
 import ddbHelper
 import httpx
 from httpx_aws_auth import AwsSigV4Auth, AwsCredentials
@@ -16,8 +15,6 @@ logger.setLevel(logging.INFO)
 ec2_client = boto3.client('ec2')
 eventbridge_client = boto3.client('events')
 ec2_utils = ec2Helper.Ec2Utils()
-utl = utilHelper.Utils()
-dyn = ddbHelper.Dyn()
 boto3_session = boto3.Session()
 
 # Environment variables
@@ -33,38 +30,6 @@ sts_client = boto3.client('sts')
 account_id = sts_client.get_caller_identity()['Account']
 aws_region = boto3_session.region_name
 
-# Set up AwsSigV4Auth for AppSync
-boto3_session = boto3.Session()
-boto3_credentials = boto3_session.get_credentials()
-
-credentials = AwsCredentials(
-    access_key=boto3_credentials.access_key,
-    secret_key=boto3_credentials.secret_key,
-    session_token=boto3_credentials.token,
-)
-
-# Create an authenticated client
-httpxClient = httpx.Client(
-    auth=AwsSigV4Auth(
-        credentials=credentials,
-        region=boto3_session.region_name,
-        service='appsync',
-    )
-)
-
-# GraphQL mutation for server action status
-putServerActionStatus = """
-mutation PutServerActionStatus($input: ServerActionStatusInput!) {
-    putServerActionStatus(input: $input) {
-        id
-        action
-        status
-        timestamp
-        message
-        userEmail
-    }
-}
-"""
 
 # ============================================================================
 # Schedule Event Management Functions
@@ -355,49 +320,16 @@ def remove_start_event(instance_id):
         logger.error(f"Error removing start event: {e}")
 
 def send_to_appsync(action, instance_id, status, message=None, user_email=None):
-    """Send action status to AppSync"""
-    logger.info(f"AppSync status update: action={action}, instance={instance_id}, status={status}, user={user_email}, message={message}")
+    """
+    Log action status for monitoring and debugging.
+    Note: Status updates are not persisted to DynamoDB.
+    Future: Could broadcast via subscription for real-time UI updates.
+    """
+    logger.info(f"Action status: action={action}, instance={instance_id}, status={status}, user={user_email}, message={message}")
     
-    if not endpoint:
-        logger.warning(f"AppSync status update SKIPPED: No endpoint configured - action={action}, instance={instance_id}, status={status}")
-        return False
-    
-    try:
-        input_data = {
-            "id": instance_id,
-            "action": action,
-            "status": status,
-            "timestamp": int(time.time()),
-            "message": message,
-            "userEmail": user_email
-        }
-        
-        payload = {
-            "query": putServerActionStatus,
-            "variables": {
-                "input": input_data
-            }
-        }
-        
-        logger.info(f"Sending status to AppSync endpoint: action={action}, instance={instance_id}, status={status}")
-        
-        headers = {"Content-Type": "application/json"}
-        response = httpx.post(
-            endpoint,
-            auth=auth,
-            headers=headers,
-            json=payload
-        )
-        
-        if response.status_code == 200:
-            logger.info(f"AppSync status update SUCCESS: action={action}, instance={instance_id}, status={status}")
-            return True
-        else:
-            logger.error(f"AppSync status update FAILED: action={action}, instance={instance_id}, status={status}, http_code={response.status_code}, response={response.text}")
-            return False
-    except Exception as e:
-        logger.error(f"AppSync status update FAILED with exception: action={action}, instance={instance_id}, status={status}, error={str(e)}", exc_info=True)
-        return False
+    # Status is logged but not persisted or broadcast
+    # This keeps the logs clean for CloudWatch monitoring
+    return True
 
 def process_server_action(message_body):
     """Process server action from SQS message"""
@@ -597,11 +529,14 @@ def handle_update_server_config(instance_id, arguments):
         if 'id' not in arguments:
             arguments['id'] = instance_id
         
+        dyn = ddbHelper.Dyn()
+
         # Save configuration to DynamoDB
         try:
             logger.info(f"Saving server config to DynamoDB: instance={instance_id}")
             response = dyn.put_server_config(arguments)
             logger.info(f"Server config saved successfully: instance={instance_id}, response={response}")
+
         except Exception as e:
             logger.error(f"Config update FAILED: Failed to save server config to DynamoDB - instance={instance_id}, error={str(e)}", exc_info=True)
             return False
