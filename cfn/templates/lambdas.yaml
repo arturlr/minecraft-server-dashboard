@@ -211,12 +211,6 @@ Resources:
               Version: "1.0.0"
             Pipeline:
               - getLogAuditFunction
-          putServerActionStatus:
-            Runtime:
-              Name: APPSYNC_JS
-              Version: "1.0.0"
-            Pipeline:
-              - putServerRecordFunction
         Query:
           listServers:
             Runtime:
