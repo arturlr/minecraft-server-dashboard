@@ -14,9 +14,38 @@ const graphQlClient = generateClient();
 const cpuOptions = ref({
     chart: {
         type: "area",
-        sparkline: {
-            enabled: true,
+        group: 'server-metrics', // Synchronized charts
+        height: 150,
+        toolbar: {
+            show: true,
+            tools: {
+                download: false,
+                selection: true,
+                zoom: true,
+                zoomin: true,
+                zoomout: true,
+                pan: false,
+                reset: true
+            }
         },
+        zoom: {
+            enabled: true,
+            type: 'x',
+            autoScaleYaxis: true
+        },
+        animations: {
+            enabled: true,
+            easing: 'easeinout',
+            speed: 800,
+            animateGradually: {
+                enabled: true,
+                delay: 150
+            },
+            dynamicAnimation: {
+                enabled: true,
+                speed: 350
+            }
+        }
     },
     title: {
         text: "CPU",
@@ -28,12 +57,28 @@ const cpuOptions = ref({
     },
     stroke: {
         curve: "straight",
+        width: 2
     },
     fill: {
-        opacity: 0.3,
+        type: 'gradient',
+        gradient: {
+            shadeIntensity: 1,
+            opacityFrom: 0.7,
+            opacityTo: 0.3,
+            stops: [0, 90, 100]
+        }
+    },
+    dataLabels: {
+        enabled: false
     },
     yaxis: {
         min: 0,
+        max: 100,
+        labels: {
+            formatter: function (val) {
+                return val.toFixed(0) + '%';
+            }
+        }
     },
     xaxis: {
         type: "datetime",
@@ -43,15 +88,66 @@ const cpuOptions = ref({
             },
         },
     },
+    tooltip: {
+        enabled: true,
+        x: {
+            format: 'HH:mm:ss'
+        },
+        y: {
+            formatter: (val) => `${val.toFixed(1)}%`
+        }
+    },
+    annotations: {
+        yaxis: [{
+            y: 80,
+            borderColor: '#FF4560',
+            label: {
+                text: 'High CPU',
+                style: {
+                    color: '#fff',
+                    background: '#FF4560'
+                }
+            }
+        }]
+    },
     colors: ["#154360"],
 })
 
 const memOptions = ref({
     chart: {
         type: "area",
-        sparkline: {
-            enabled: true,
+        group: 'server-metrics', // Synchronized charts
+        height: 150,
+        toolbar: {
+            show: true,
+            tools: {
+                download: false,
+                selection: true,
+                zoom: true,
+                zoomin: true,
+                zoomout: true,
+                pan: false,
+                reset: true
+            }
         },
+        zoom: {
+            enabled: true,
+            type: 'x',
+            autoScaleYaxis: true
+        },
+        animations: {
+            enabled: true,
+            easing: 'easeinout',
+            speed: 800,
+            animateGradually: {
+                enabled: true,
+                delay: 150
+            },
+            dynamicAnimation: {
+                enabled: true,
+                speed: 350
+            }
+        }
     },
     title: {
         text: "Memory",
@@ -63,12 +159,28 @@ const memOptions = ref({
     },
     stroke: {
         curve: "straight",
+        width: 2
     },
     fill: {
-        opacity: 0.3,
+        type: 'gradient',
+        gradient: {
+            shadeIntensity: 1,
+            opacityFrom: 0.7,
+            opacityTo: 0.3,
+            stops: [0, 90, 100]
+        }
+    },
+    dataLabels: {
+        enabled: false
     },
     yaxis: {
         min: 0,
+        max: 100,
+        labels: {
+            formatter: function (val) {
+                return val.toFixed(0) + '%';
+            }
+        }
     },
     xaxis: {
         type: "datetime",
@@ -78,15 +190,66 @@ const memOptions = ref({
             },
         },
     },
+    tooltip: {
+        enabled: true,
+        x: {
+            format: 'HH:mm:ss'
+        },
+        y: {
+            formatter: (val) => `${val.toFixed(1)}%`
+        }
+    },
+    annotations: {
+        yaxis: [{
+            y: 80,
+            borderColor: '#FF9800',
+            label: {
+                text: 'High Memory',
+                style: {
+                    color: '#fff',
+                    background: '#FF9800'
+                }
+            }
+        }]
+    },
     colors: ["#5DADE2"],
 })
 
 const netOptions = ref({
     chart: {
         type: "area",
-        sparkline: {
-            enabled: true,
+        group: 'server-metrics', // Synchronized charts
+        height: 150,
+        toolbar: {
+            show: true,
+            tools: {
+                download: false,
+                selection: true,
+                zoom: true,
+                zoomin: true,
+                zoomout: true,
+                pan: false,
+                reset: true
+            }
         },
+        zoom: {
+            enabled: true,
+            type: 'x',
+            autoScaleYaxis: true
+        },
+        animations: {
+            enabled: true,
+            easing: 'easeinout',
+            speed: 800,
+            animateGradually: {
+                enabled: true,
+                delay: 150
+            },
+            dynamicAnimation: {
+                enabled: true,
+                speed: 350
+            }
+        }
     },
     title: {
         text: "Networking",
@@ -98,12 +261,27 @@ const netOptions = ref({
     },
     stroke: {
         curve: "straight",
+        width: 2
     },
     fill: {
-        opacity: 0.3,
+        type: 'gradient',
+        gradient: {
+            shadeIntensity: 1,
+            opacityFrom: 0.7,
+            opacityTo: 0.3,
+            stops: [0, 90, 100]
+        }
+    },
+    dataLabels: {
+        enabled: false
     },
     yaxis: {
         min: 0,
+        labels: {
+            formatter: function (val) {
+                return val.toFixed(0);
+            }
+        }
     },
     xaxis: {
         type: "datetime",
@@ -113,15 +291,53 @@ const netOptions = ref({
             },
         },
     },
+    tooltip: {
+        enabled: true,
+        x: {
+            format: 'HH:mm:ss'
+        },
+        y: {
+            formatter: (val) => `${val.toFixed(0)} packets`
+        }
+    },
     colors: ["#D35400"],
 })
 
 const usersOptions = ref({
     chart: {
         type: "area",
-        sparkline: {
-            enabled: true,
+        group: 'server-metrics', // Synchronized charts
+        height: 150,
+        toolbar: {
+            show: true,
+            tools: {
+                download: false,
+                selection: true,
+                zoom: true,
+                zoomin: true,
+                zoomout: true,
+                pan: false,
+                reset: true
+            }
         },
+        zoom: {
+            enabled: true,
+            type: 'x',
+            autoScaleYaxis: true
+        },
+        animations: {
+            enabled: true,
+            easing: 'easeinout',
+            speed: 800,
+            animateGradually: {
+                enabled: true,
+                delay: 150
+            },
+            dynamicAnimation: {
+                enabled: true,
+                speed: 350
+            }
+        }
     },
     title: {
         text: "Users",
@@ -132,13 +348,28 @@ const usersOptions = ref({
         }
     },
     stroke: {
-        curve: "straight",
+        curve: "stepline", // Step line for discrete user counts
+        width: 2
     },
     fill: {
-        opacity: 0.3,
+        type: 'gradient',
+        gradient: {
+            shadeIntensity: 1,
+            opacityFrom: 0.7,
+            opacityTo: 0.3,
+            stops: [0, 90, 100]
+        }
+    },
+    dataLabels: {
+        enabled: false
     },
     yaxis: {
         min: 0,
+        labels: {
+            formatter: function (val) {
+                return val.toFixed(0);
+            }
+        }
     },
     xaxis: {
         type: "datetime",
@@ -147,6 +378,15 @@ const usersOptions = ref({
                 return dayjs(timestamp).format("HH:mm");
             },
         },
+    },
+    tooltip: {
+        enabled: true,
+        x: {
+            format: 'HH:mm:ss'
+        },
+        y: {
+            formatter: (val) => `${val.toFixed(0)} users`
+        }
     },
     colors: ["#52B12C"],
 })
@@ -444,21 +684,29 @@ onUnmounted(() => {
 
 <template>
   <v-row>
-    <v-card variant="plain">
-      <VueApexCharts ref="usersChart" height="70" :options="usersOptions" :series="usersSeries" />
-    </v-card>
+    <v-col cols="12" md="6">
+      <v-card elevation="2" class="pa-2">
+        <VueApexCharts ref="usersChart" height="150" :options="usersOptions" :series="usersSeries" />
+      </v-card>
+    </v-col>
 
-    <v-card variant="plain">
-      <VueApexCharts ref="cpuChart" height="70" :options="cpuOptions" :series="cpuSeries" />
-    </v-card>
+    <v-col cols="12" md="6">
+      <v-card elevation="2" class="pa-2">
+        <VueApexCharts ref="cpuChart" height="150" :options="cpuOptions" :series="cpuSeries" />
+      </v-card>
+    </v-col>
 
-    <v-card variant="plain">
-      <VueApexCharts ref="memChart" height="70" :options="memOptions" :series="memSeries" />
-    </v-card>
+    <v-col cols="12" md="6">
+      <v-card elevation="2" class="pa-2">
+        <VueApexCharts ref="memChart" height="150" :options="memOptions" :series="memSeries" />
+      </v-card>
+    </v-col>
 
-    <v-card variant="plain">
-      <VueApexCharts ref="netChart" height="70" :options="netOptions" :series="netSeries" />
-    </v-card>
+    <v-col cols="12" md="6">
+      <v-card elevation="2" class="pa-2">
+        <VueApexCharts ref="netChart" height="150" :options="netOptions" :series="netSeries" />
+      </v-card>
+    </v-col>
   </v-row>
 
 

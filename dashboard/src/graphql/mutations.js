@@ -115,3 +115,9 @@ export const putServerConfig = /* GraphQL */ `
     }
   }
 `;
+
+export const addUserToServer = /* GraphQL */ `
+  mutation AddUserToServer($instanceId: String!, $userEmail: AWSEmail!) {
+    addUserToServer(instanceId: $instanceId, userEmail: $userEmail)
+  }
+`;

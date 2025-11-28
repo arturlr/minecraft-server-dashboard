@@ -69,8 +69,8 @@ export const useServerStore = defineStore("server", {
                 // Populating serversDict and serversList
                 this.serversDict = {};
                 this.serversList = [];
-                results.data.listServers.forEach(({ id, name, memSize, diskSize, vCpus, state, initStatus, iamStatus, publicIp, launchTime, runningMinutes, groupMembers }) => {
-                    const server = { id, name, memSize, diskSize, vCpus, state, initStatus, iamStatus, publicIp, launchTime, runningMinutes, groupMembers };
+                results.data.listServers.forEach(({ id, name, memSize, diskSize, vCpus, state, initStatus, iamStatus, publicIp, launchTime, runningMinutes, runningMinutesCacheTimestamp, groupMembers }) => {
+                    const server = { id, name, memSize, diskSize, vCpus, state, initStatus, iamStatus, publicIp, launchTime, runningMinutes, runningMinutesCacheTimestamp, groupMembers };
                     this.serversDict[id] = server;
                     this.serversList.push(server);
                 });
@@ -104,7 +104,8 @@ export const useServerStore = defineStore("server", {
                     state: server.state,
                     initStatus: server.initStatus,
                     publicIp: server.publicIp,
-                    runningMinutes: server.runningMinutes  
+                    runningMinutes: server.runningMinutes,
+                    runningMinutesCacheTimestamp: server.runningMinutesCacheTimestamp
                  };
                 
                 // Update serversList
