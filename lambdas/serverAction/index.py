@@ -217,7 +217,77 @@ def handle_get_server_users(instance_id):
     
     except Exception as e:
         logger.error("Error retrieving users for instance %s: %s", instance_id, str(e))
-        return utl.response(500, {"error": f"Failed to retrieve users: {str(e)}"})    
+        return utl.response(500, {"error": f"Failed to retrieve users: {str(e)}"})
+
+def handle_add_user_to_server(instance_id, user_email):
+    """
+    Helper function to add a user to a server's Cognito group
+    
+    Args:
+        instance_id: EC2 instance ID (used as Cognito group name)
+        user_email: Email address of the user to add
+        
+    Returns:
+        dict: Success response or error response with appropriate status code
+    """
+    try:
+        logger.info(f"Adding user to server: email={user_email}, instance={instance_id}")
+        
+        # Step 1: Find user by email in Cognito
+        user_info = auth.find_user_by_email(user_email)
+        
+        if user_info is None:
+            logger.warning(f"User not found in Cognito: email={user_email}")
+            return utl.response(404, {
+                "error": "USER_NOT_FOUND",
+                "message": f"No user found with email {user_email}. The user must log in to the dashboard at least once before they can be added to a server."
+            })
+        
+        username = user_info['username']
+        logger.info(f"User found in Cognito: email={user_email}, username={username}")
+        
+        # Step 2: Check if group exists, create if it doesn't
+        if not auth.group_exists(instance_id):
+            logger.info(f"Group does not exist, creating: group={instance_id}")
+            if not auth.create_group(instance_id):
+                logger.error(f"Failed to create group: group={instance_id}")
+                return utl.response(500, {
+                    "error": "GROUP_CREATION_FAILED",
+                    "message": "Failed to create server access group"
+                })
+        
+        # Step 3: Check if user is already in the group
+        user_groups = auth.list_groups_for_user(username)
+        if instance_id in user_groups:
+            logger.info(f"User already has access: email={user_email}, instance={instance_id}")
+            return utl.response(409, {
+                "error": "USER_ALREADY_EXISTS",
+                "message": f"User {user_email} already has access to this server"
+            })
+        
+        # Step 4: Add user to group
+        if auth.add_user_to_group(instance_id, username):
+            logger.info(f"Successfully added user to server: email={user_email}, instance={instance_id}")
+            return utl.response(200, {
+                "message": f"Successfully added {user_email} to the server",
+                "user": {
+                    "email": user_info['email'],
+                    "fullName": user_info['fullName']
+                }
+            })
+        else:
+            logger.error(f"Failed to add user to group: email={user_email}, instance={instance_id}")
+            return utl.response(500, {
+                "error": "ADD_USER_FAILED",
+                "message": "Failed to add user to server group"
+            })
+    
+    except Exception as e:
+        logger.error(f"Error adding user to server: email={user_email}, instance={instance_id}, error={str(e)}", exc_info=True)
+        return utl.response(500, {
+            "error": "INTERNAL_ERROR",
+            "message": f"An unexpected error occurred: {str(e)}"
+        })    
 
 def handle_get_server_config(instance_id):
     """Helper function to handle get server config action"""
@@ -339,6 +409,14 @@ def handler(event, context):
     # Read-only operations processed immediately
     if field_name.lower() in ["getserverconfig", "getserverusers"]:
         return action_process_sync(field_name, instance_id, input_data)
+    
+    # Handle addUserToServer synchronously
+    if field_name.lower() == "addusertoserver":
+        user_email = event["arguments"].get("userEmail")
+        if not user_email:
+            logger.error("userEmail is required for addUserToServer")
+            return utl.response(400, {"err": "userEmail is required"})
+        return handle_add_user_to_server(instance_id, user_email)
     
     # Config mutations need to return the config data after queuing
     if field_name.lower() in ["putserverconfig", "updateserverconfig"]:

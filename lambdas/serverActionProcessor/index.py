@@ -167,7 +167,7 @@ def _format_schedule_expression(cron_expression, timezone='UTC'):
     
     return None
 
-def configure_shutdown_event(instance_id, cron_expression, timezone='UTC'):
+def configure_scheduled_shutdown_event(instance_id, cron_expression, timezone='UTC'):
     """Configure EventBridge rule to stop EC2 instance on schedule."""
     logger.info(f"Original shutdown cron expression: {cron_expression}, timezone: {timezone}")
     
@@ -223,7 +223,7 @@ def configure_shutdown_event(instance_id, cron_expression, timezone='UTC'):
     )
     logger.info(f"Shutdown event configured for {instance_id} with schedule: {formatted_schedule}")
 
-def remove_shutdown_event(instance_id):
+def remove_scheduled_shutdown_event(instance_id):
     """Remove EventBridge rule for stopping EC2 instance."""
     rule_name = f"shutdown-{instance_id}"
     try:
@@ -561,7 +561,7 @@ def handle_update_server_config(instance_id, arguments):
                 
                 # Configure event for scheduled shutdown
                 logger.info(f"Config update: Configuring shutdown schedule - instance={instance_id}, schedule={stop_schedule}, timezone={timezone}")
-                configure_shutdown_event(instance_id, stop_schedule, timezone)
+                configure_scheduled_shutdown_event(instance_id, stop_schedule, timezone)
                 logger.info(f"Shutdown schedule configured successfully: instance={instance_id}")
                 
                 # Configure start schedule if provided
@@ -599,7 +599,7 @@ def handle_update_server_config(instance_id, arguments):
             try:
                 # Remove schedule events (switching to alarm)
                 logger.info(f"Config update: Removing schedule events (switching to alarm) - instance={instance_id}")
-                remove_shutdown_event(instance_id)
+                remove_scheduled_shutdown_event(instance_id)
                 remove_start_event(instance_id)
                 logger.info(f"Schedule events removed successfully: instance={instance_id}")
                 
