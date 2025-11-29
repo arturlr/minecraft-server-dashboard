@@ -53,6 +53,16 @@ watch(selectedShutdownMethod, () => {
     updateShutdownMethodOptions();
 }, { deep: true });
 
+// Auto-detect browser timezone
+const detectedTimezone = ref(dayjs.tz.guess());
+
+// Get friendly timezone name with offset
+const timezoneDisplay = computed(() => {
+    const tz = detectedTimezone.value;
+    const offset = dayjs().tz(tz).format('Z');
+    return `${tz} (UTC${offset})`;
+});
+
 // ServerConfig Input - groupMembers will be processed 
 const serverConfigInput = reactive({
     id: null,
@@ -63,7 +73,7 @@ const serverConfigInput = reactive({
     stopScheduleExpression: '',
     startScheduleExpression: '',
     shutdownMethod: null,
-    timezone: 'UTC'
+    timezone: detectedTimezone.value
 });
 
 // Variables for weekday scheduling
@@ -293,15 +303,14 @@ function convertFromUTC(utcTime, targetTimezone) {
     return localTime;
 }
 
-// Helper to generate cron expression from time and weekdays (converts local time to UTC)
+// Helper to generate cron expression from time and weekdays (keeps local time, backend will convert to UTC)
 function generateCronExpression(time, weekdays) {
     if (!time || !weekdays?.length || (weekdays.length === 1 && weekdays[0] === 'ALL')) {
         return null;
     }
     
-    // Convert local time to UTC before creating cron expression
-    const utcTime = convertToUTC(time, serverConfigInput.timezone);
-    const [hours, minutes] = utcTime.split(':');
+    // Keep time in local timezone - backend will convert to UTC
+    const [hours, minutes] = time.split(':');
     
     const weekdayToCron = { 'SUN': 0, 'MON': 1, 'TUE': 2, 'WED': 3, 'THU': 4, 'FRI': 5, 'SAT': 6 };
     const cronWeekdays = weekdays
@@ -309,7 +318,7 @@ function generateCronExpression(time, weekdays) {
         .map(day => weekdayToCron[day])
         .join(',');
     
-    // Return standard 5-field cron expression in UTC
+    // Return standard 5-field cron expression in local time (backend will convert to UTC)
     return `${minutes} ${hours} * * ${cronWeekdays}`;
 }
 
@@ -333,7 +342,7 @@ const WEEKDAY_MAP = {
     '4': 'THU', '5': 'FRI', '6': 'SAT'
 };
 
-// Parse standard cron expression to extract time and weekdays (converts UTC to local timezone)
+// Parse standard cron expression to extract time and weekdays (already in local timezone from backend)
 function parseCronExpression(cronExpression, isStartSchedule = false) {
     if (!cronExpression) return;
     
@@ -346,10 +355,8 @@ function parseCronExpression(cronExpression, isStartSchedule = false) {
     }
     
     const [minutes, hours, , , weekdaysPart] = parts;
-    const utcTime = `${hours.padStart(2, '0')}:${minutes.padStart(2, '0')}`;
-    
-    // Convert UTC time to local timezone
-    const localTime = convertFromUTC(utcTime, serverConfigInput.timezone);
+    // Backend stores cron in local time, so no conversion needed
+    const localTime = `${hours.padStart(2, '0')}:${minutes.padStart(2, '0')}`;
     
     // Set time based on schedule type
     if (isStartSchedule) {
@@ -412,7 +419,7 @@ async function getServerSettings() {
             stopScheduleExpression: serverSettings.stopScheduleExpression || '',
             startScheduleExpression: serverSettings.startScheduleExpression || '',
             shutdownMethod: foundMethod,
-            timezone: serverSettings.timezone || 'UTC'
+            timezone: detectedTimezone.value  // Always use browser's detected timezone
         };
 
         // Update all values at once
@@ -449,7 +456,7 @@ function resetForm() {
         serverConfigInput.stopScheduleExpression = "",
         serverConfigInput.startScheduleExpression = "",
         serverConfigInput.shutdownMethod = { metric: 'CPUUtilization', abbr: '% CPU' }
-        serverConfigInput.timezone = 'UTC'
+        serverConfigInput.timezone = detectedTimezone.value
         selectedShutdownMethod.value = { metric: 'CPUUtilization', abbr: '% CPU' };
         selectedStartTime.value = null;
         enableStartSchedule.value = false;               
@@ -577,18 +584,21 @@ async function onSubmit() {
                                 </v-select>
                             </v-col>
                             <v-col cols="12" md="6" v-if="selectedShutdownMethod?.metric === 'Schedule'">
-                                <v-select
-                                    v-model="serverConfigInput.timezone"
-                                    :items="timezoneOptions"
-                                    item-title="text"
-                                    item-value="value"
-                                    label="Timezone"
-                                    hint="Your local timezone for schedule times"
-                                    persistent-hint
-                                    variant="outlined"
-                                    prepend-inner-icon="mdi-earth"
-                                    color="primary"
-                                ></v-select>
+                                <v-alert
+                                    type="info"
+                                    variant="tonal"
+                                    density="compact"
+                                    class="mb-0"
+                                >
+                                    <div class="d-flex align-center">
+                                        <v-icon class="me-2" size="20">mdi-earth</v-icon>
+                                        <div>
+                                            <div class="text-subtitle-2 font-weight-medium">Detected Timezone</div>
+                                            <div class="text-body-2">{{ timezoneDisplay }}</div>
+                                            <div class="text-caption text-medium-emphasis">Schedule times will use your local timezone</div>
+                                        </div>
+                                    </div>
+                                </v-alert>
                             </v-col>
                         </v-row>
 

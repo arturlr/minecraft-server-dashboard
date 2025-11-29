@@ -73,6 +73,17 @@
           <!-- Add User Form -->
           <v-card variant="outlined" class="mb-4">
             <v-card-text>
+              <v-alert
+                type="info"
+                variant="tonal"
+                density="compact"
+                class="mb-3"
+                role="status"
+              >
+                <span class="text-body-2">
+                  Note: Users must log in to the dashboard at least once before they can be added to a server.
+                </span>
+              </v-alert>
               <v-text-field
                 v-model="newUserEmail"
                 label="Email Address"
@@ -275,26 +286,32 @@ const extractUserFriendlyErrorMessage = (error, operation) => {
   }
   
   if (operation === 'add') {
-    // Check for specific user addition errors
+    // Check for specific backend error codes first
     const errorMsg = baseMessage.toLowerCase()
     
-    // User already exists
-    if (errorMsg.includes('already')) {
+    // User not found in Cognito (needs to log in first)
+    if (errorMsg.includes('user_not_found') || 
+        errorMsg.includes('user must log in') ||
+        errorMsg.includes('no user found with email')) {
+      return 'User not found. They must log in to the dashboard at least once before being added to a server.'
+    }
+    
+    // User already has access
+    if (errorMsg.includes('user_already_exists') || 
+        errorMsg.includes('already has access') ||
+        errorMsg.includes('already')) {
       return 'User already has access to this server.'
     }
     
-    // Invalid email
+    // Invalid email format
     if (errorMsg.includes('invalid') && errorMsg.includes('email')) {
       return 'Please enter a valid email address.'
     }
     
-    // User not found
-    if (errorMsg.includes('not found') || errorMsg.includes('does not exist')) {
-      return 'No user found with that email address.'
-    }
-    
     // Permission denied
-    if (errorMsg.includes('permission') || errorMsg.includes('authorized') || errorMsg.includes('forbidden')) {
+    if (errorMsg.includes('permission') || 
+        errorMsg.includes('authorized') || 
+        errorMsg.includes('forbidden')) {
       return "You don't have permission to add users to this server."
     }
     

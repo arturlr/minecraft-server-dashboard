@@ -207,6 +207,64 @@ class Auth:
             logger.warning(str(e))
             return []
       
+    def find_user_by_email(self, email):
+        """
+        Find a user in Cognito by their email address.
+        
+        Args:
+            email (str): The email address to search for
+            
+        Returns:
+            dict: User information if found, None if not found
+            Format: {'username': str, 'email': str, 'fullName': str, 'sub': str}
+        """
+        try:
+            # Use list_users with email filter
+            response = self.cognito_idp.list_users(
+                UserPoolId=self.cognito_pool_id,
+                Filter=f'email = "{email}"',
+                Limit=1
+            )
+            
+            users = response.get('Users', [])
+            
+            if not users:
+                logger.info(f"No user found with email: {email}")
+                return None
+            
+            user = users[0]
+            user_attrs = {
+                attr['Name']: attr['Value'] 
+                for attr in user.get('Attributes', [])
+            }
+            
+            # Verify the user has all required attributes
+            if not all(key in user_attrs for key in ['sub', 'email']):
+                logger.warning(f"User found but missing required attributes: {email}")
+                return None
+            
+            # Get full name from attributes
+            given_name = user_attrs.get('given_name', '')
+            family_name = user_attrs.get('family_name', '')
+            full_name = f"{given_name} {family_name}".strip() or user_attrs.get('email', 'Unknown')
+            
+            return {
+                'username': user.get('Username'),
+                'email': user_attrs['email'],
+                'fullName': full_name,
+                'sub': user_attrs['sub']
+            }
+            
+        except self.cognito_idp.exceptions.InvalidParameterException as e:
+            logger.error(f"Invalid parameters when searching for user by email: {str(e)}")
+            return None
+        except self.cognito_idp.exceptions.TooManyRequestsException:
+            logger.error("Rate limit exceeded when querying Cognito")
+            return None
+        except Exception as e:
+            logger.error(f"Unexpected error in find_user_by_email: {str(e)}")
+            return None
+    
     def list_groups_for_user(self, username):
         groups = []
         next_token = None
