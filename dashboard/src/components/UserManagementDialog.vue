@@ -84,34 +84,111 @@
                   Note: Users must log in to the dashboard at least once before they can be added to a server.
                 </span>
               </v-alert>
+              
+              <!-- Email Input with Search -->
               <v-text-field
                 v-model="newUserEmail"
                 label="Email Address"
                 placeholder="user@example.com"
                 :rules="emailRules"
-                :disabled="addingUser"
+                :disabled="addingUser || searching"
                 variant="outlined"
                 density="comfortable"
                 prepend-inner-icon="mdi-email"
-                @keyup.enter="addUser"
+                @keyup.enter="searchUser"
+                @keyup.ctrl.enter="searchResults ? addUser() : null"
                 aria-label="Enter user email address"
                 aria-required="true"
                 aria-describedby="email-input-help"
-              ></v-text-field>
+              >
+                <template v-slot:append-inner>
+                  <v-btn
+                    v-if="searchResults || searchMessage"
+                    icon="mdi-close"
+                    variant="text"
+                    size="small"
+                    @click="clearSearch"
+                    aria-label="Clear search"
+                    class="mr-1"
+                  ></v-btn>
+                  <v-btn
+                    icon="mdi-magnify"
+                    variant="text"
+                    size="small"
+                    :loading="searching"
+                    :disabled="!isEmailValid || searching"
+                    @click="searchUser"
+                    aria-label="Search for user"
+                  ></v-btn>
+                </template>
+              </v-text-field>
               <span id="email-input-help" class="sr-only">
                 Enter the email address of the user you want to add to this server
               </span>
-              <v-btn
-                color="primary"
-                :loading="addingUser"
-                :disabled="!isEmailValid || addingUser"
-                @click="addUser"
-                block
-                :min-height="touchTargetSize"
-                aria-label="Add user to server"
+              
+              <!-- Search Results -->
+              <v-alert
+                v-if="searchMessage"
+                :type="searchResults ? 'success' : 'warning'"
+                variant="tonal"
+                density="compact"
+                class="mb-3"
+                role="status"
+                aria-live="polite"
               >
-                Add User
-              </v-btn>
+                {{ searchMessage }}
+              </v-alert>
+              
+              <!-- User Preview Card -->
+              <v-card
+                v-if="searchResults"
+                variant="outlined"
+                class="mb-3"
+                color="success"
+              >
+                <v-card-text class="py-2">
+                  <div class="d-flex align-center">
+                    <v-icon icon="mdi-account-circle" class="mr-3" color="success"></v-icon>
+                    <div>
+                      <div class="text-subtitle-2">{{ searchResults.fullName }}</div>
+                      <div class="text-caption text-medium-emphasis">{{ searchResults.email }}</div>
+                    </div>
+                  </div>
+                </v-card-text>
+              </v-card>
+              
+              <!-- Action Buttons -->
+              <div class="d-flex gap-2">
+                <v-btn
+                  color="primary"
+                  variant="outlined"
+                  :loading="searching"
+                  :disabled="!isEmailValid || searching || addingUser"
+                  @click="searchUser"
+                  :min-height="touchTargetSize"
+                  aria-label="Search for user by email"
+                >
+                  <v-icon start>mdi-magnify</v-icon>
+                  Search User
+                </v-btn>
+                <v-btn
+                  color="primary"
+                  :loading="addingUser"
+                  :disabled="!searchResults || addingUser || searching"
+                  @click="addUser"
+                  :min-height="touchTargetSize"
+                  aria-label="Add user to server"
+                >
+                  <v-icon start>mdi-plus</v-icon>
+                  Add User
+                </v-btn>
+              </div>
+              
+              <!-- Helper Text -->
+              <div class="text-caption text-medium-emphasis mt-2">
+                <v-icon size="small" class="mr-1">mdi-information-outline</v-icon>
+                Search for users by their email address to verify they exist before adding them to the server.
+              </div>
             </v-card-text>
           </v-card>
 
@@ -177,9 +254,9 @@
 
 import { ref, watch, computed, onMounted, onUnmounted } from 'vue'
 import { generateClient } from 'aws-amplify/api'
-import { getServerUsers } from '@/graphql/queries'
+import { getServerUsers, searchUserByEmail } from '@/graphql/queries'
 import { addUserToServer } from '@/graphql/mutations'
-import { parseGraphQLError, retryOperation, isRetryableError } from '@/utils/errorHandler'
+import { parseGraphQLError, retryOperation } from '@/utils/errorHandler'
 import { useDisplay } from 'vuetify'
 
 // Initialize Amplify API client
@@ -207,7 +284,7 @@ defineEmits(['update:modelValue'])
 
 // Vuetify display composable for responsive breakpoints
 // Requirements: 4.4
-const { mobile, smAndDown, mdAndUp } = useDisplay()
+const { mobile, smAndDown } = useDisplay()
 
 // Reactive state
 const users = ref([])
@@ -216,6 +293,9 @@ const errorMessage = ref('')
 const newUserEmail = ref('')
 const addingUser = ref(false)
 const successMessage = ref('')
+const searchResults = ref(null)
+const searching = ref(false)
+const searchMessage = ref('')
 
 // Responsive design: Check if device is mobile
 // Requirements: 4.4
@@ -283,6 +363,36 @@ const extractUserFriendlyErrorMessage = (error, operation) => {
     
     // Return parsed message or default
     return baseMessage || 'An error occurred while loading users. Please try again.'
+  }
+  
+  if (operation === 'search') {
+    // Check for specific backend error codes first
+    const errorMsg = baseMessage.toLowerCase()
+    
+    // User not found in Cognito (needs to log in first)
+    if (errorMsg.includes('user_not_found') || 
+        errorMsg.includes('user must log in') ||
+        errorMsg.includes('no user found with email')) {
+      return 'User not found. They must log in to the dashboard at least once before being added to a server.'
+    }
+    
+    // Invalid email format
+    if (errorMsg.includes('invalid') && errorMsg.includes('email')) {
+      return 'Please enter a valid email address.'
+    }
+    
+    // Network failures
+    if (error.message?.includes('Network') || error.message?.includes('network')) {
+      return 'Unable to search for user. Please check your connection and try again.'
+    }
+    
+    // Authentication errors
+    if (error.message?.includes('Unauthorized') || error.message?.includes('401')) {
+      return 'Session expired. Please log in again.'
+    }
+    
+    // Return parsed message or default
+    return baseMessage || 'Unable to search for user. Please try again.'
   }
   
   if (operation === 'add') {
@@ -375,6 +485,61 @@ const fetchUsers = async () => {
 }
 
 /**
+ * Search for a user by email address
+ * Requirements: 3.1, 3.2, 3.7, 5.4
+ */
+const searchUser = async () => {
+  // Prevent search when email is empty or invalid
+  if (!isEmailValid.value) {
+    return
+  }
+
+  searching.value = true
+  searchMessage.value = ''
+  searchResults.value = null
+  errorMessage.value = ''
+
+  try {
+    // Call GraphQL query to search for user
+    const response = await retryOperation(async () => {
+      return await client.graphql({
+        query: searchUserByEmail,
+        variables: { email: newUserEmail.value.trim() }
+      })
+    })
+
+    const user = response.data.searchUserByEmail
+    if (user) {
+      searchResults.value = user
+      searchMessage.value = `Found user: ${user.fullName} (${user.email})`
+    } else {
+      searchMessage.value = 'User not found. They must log in to the dashboard at least once before being added.'
+    }
+  } catch (error) {
+    console.error('Error searching for user:', error)
+    
+    // Handle specific error cases
+    const errorMsg = extractUserFriendlyErrorMessage(error, 'search')
+    if (errorMsg.includes('USER_NOT_FOUND') || errorMsg.includes('user must log in')) {
+      searchMessage.value = 'User not found. They must log in to the dashboard at least once before being added to a server.'
+    } else {
+      errorMessage.value = errorMsg
+    }
+  } finally {
+    searching.value = false
+  }
+}
+
+/**
+ * Clear search results and messages
+ */
+const clearSearch = () => {
+  searchResults.value = null
+  searchMessage.value = ''
+  errorMessage.value = ''
+}
+
+/**
  * Add a new user to the server
  * Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 5.4
  */
@@ -414,7 +579,10 @@ const addUser = async () => {
       successMessage.value = ''
     }, 3500)
     
-    newUserEmail.value = '' // Clear input field
+    // Clear form state
+    newUserEmail.value = ''
+    searchResults.value = null
+    searchMessage.value = ''
     
     // Refresh user list to show the newly added user
     await fetchUsers()
@@ -438,6 +606,8 @@ watch(() => props.modelValue, (newValue) => {
     newUserEmail.value = ''
     successMessage.value = ''
     errorMessage.value = ''
+    searchResults.value = null
+    searchMessage.value = ''
     
     // Accessibility: Set focus to dialog title when opened
     // Requirements: 4.4

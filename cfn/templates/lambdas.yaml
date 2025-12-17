@@ -230,6 +230,12 @@ Resources:
               Version: "1.0.0"
             Pipeline:
               - serverActionFunction
+          searchUserByEmail:
+            Runtime:
+              Name: APPSYNC_JS
+              Version: "1.0.0"
+            Pipeline:
+              - serverActionFunction
           getMonthlyCost:
             Runtime:
               Name: APPSYNC_JS
