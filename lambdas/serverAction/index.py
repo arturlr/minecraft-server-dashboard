@@ -227,7 +227,7 @@ def handle_search_user_by_email(email):
         email: Email address to search for
         
     Returns:
-        dict: User information if found, error response if not found or error occurred
+        dict: User information if found, None if not found, error response for exceptions
     """
     try:
         logger.info(f"Searching for user by email: {email}")
@@ -237,10 +237,8 @@ def handle_search_user_by_email(email):
         
         if user_info is None:
             logger.info(f"No user found with email: {email}")
-            return utl.response(404, {
-                "error": "USER_NOT_FOUND",
-                "message": f"No user found with email {email}. The user must log in to the dashboard at least once before they can be added to a server."
-            })
+            # Return None for GraphQL nullable field instead of error response
+            return None
         
         # Return user info in the expected ServerUsers format
         return {
