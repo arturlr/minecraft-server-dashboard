@@ -85,25 +85,25 @@
                 </span>
               </v-alert>
               
-              <!-- Email Input with Search -->
+              <!-- Email Input with Auto-Search -->
               <v-text-field
                 v-model="newUserEmail"
-                label="Email Address"
-                placeholder="user@example.com"
+                label="Search User by Email"
+                placeholder="Enter email address to search..."
                 :rules="emailRules"
-                :disabled="addingUser || searching"
+                :disabled="addingUser"
                 variant="outlined"
                 density="comfortable"
-                prepend-inner-icon="mdi-email"
-                @keyup.enter="searchUser"
-                @keyup.ctrl.enter="searchResults ? addUser() : null"
-                aria-label="Enter user email address"
+                prepend-inner-icon="mdi-account-search"
+                @input="onEmailInput"
+                @keyup.enter="searchResults ? addUser() : null"
+                aria-label="Enter user email address to search"
                 aria-required="true"
-                aria-describedby="email-input-help"
+                aria-describedby="email-search-help"
               >
                 <template v-slot:append-inner>
                   <v-btn
-                    v-if="searchResults || searchMessage"
+                    v-if="newUserEmail"
                     icon="mdi-close"
                     variant="text"
                     size="small"
@@ -111,83 +111,73 @@
                     aria-label="Clear search"
                     class="mr-1"
                   ></v-btn>
-                  <v-btn
-                    icon="mdi-magnify"
-                    variant="text"
-                    size="small"
-                    :loading="searching"
-                    :disabled="!isEmailValid || searching"
-                    @click="searchUser"
-                    aria-label="Search for user"
-                  ></v-btn>
+                  <v-progress-circular
+                    v-if="searching"
+                    indeterminate
+                    size="20"
+                    width="2"
+                    color="primary"
+                  ></v-progress-circular>
                 </template>
               </v-text-field>
-              <span id="email-input-help" class="sr-only">
-                Enter the email address of the user you want to add to this server
+              <span id="email-search-help" class="sr-only">
+                Enter an email address to automatically search for the user
               </span>
               
               <!-- Search Results -->
-              <v-alert
-                v-if="searchMessage"
-                :type="searchResults ? 'success' : 'warning'"
-                variant="tonal"
-                density="compact"
-                class="mb-3"
-                role="status"
-                aria-live="polite"
-              >
-                {{ searchMessage }}
-              </v-alert>
-              
-              <!-- User Preview Card -->
-              <v-card
-                v-if="searchResults"
-                variant="outlined"
-                class="mb-3"
-                color="success"
-              >
-                <v-card-text class="py-2">
-                  <div class="d-flex align-center">
-                    <v-icon icon="mdi-account-circle" class="mr-3" color="success"></v-icon>
-                    <div>
-                      <div class="text-subtitle-2">{{ searchResults.fullName }}</div>
-                      <div class="text-caption text-medium-emphasis">{{ searchResults.email }}</div>
-                    </div>
-                  </div>
-                </v-card-text>
-              </v-card>
-              
-              <!-- Action Buttons -->
-              <div class="d-flex gap-2">
-                <v-btn
-                  color="primary"
+              <div v-if="searchMessage || searchResults || (newUserEmail && !searching && !searchResults)">
+                <!-- User Found -->
+                <v-card
+                  v-if="searchResults"
                   variant="outlined"
-                  :loading="searching"
-                  :disabled="!isEmailValid || searching || addingUser"
-                  @click="searchUser"
-                  :min-height="touchTargetSize"
-                  aria-label="Search for user by email"
+                  class="mb-3"
+                  color="success"
                 >
-                  <v-icon start>mdi-magnify</v-icon>
-                  Search User
-                </v-btn>
-                <v-btn
-                  color="primary"
-                  :loading="addingUser"
-                  :disabled="!searchResults || addingUser || searching"
-                  @click="addUser"
-                  :min-height="touchTargetSize"
-                  aria-label="Add user to server"
+                  <v-card-text class="py-3">
+                    <div class="d-flex align-center justify-space-between">
+                      <div class="d-flex align-center">
+                        <v-icon icon="mdi-account-circle" class="mr-3" color="success" size="large"></v-icon>
+                        <div>
+                          <div class="text-subtitle-1 font-weight-medium">{{ searchResults.fullName }}</div>
+                          <div class="text-body-2 text-medium-emphasis">{{ searchResults.email }}</div>
+                        </div>
+                      </div>
+                      <v-btn
+                        color="success"
+                        :loading="addingUser"
+                        :disabled="addingUser"
+                        @click="addUser"
+                        :min-height="touchTargetSize"
+                        aria-label="Add this user to server"
+                      >
+                        <v-icon start>mdi-plus</v-icon>
+                        Add User
+                      </v-btn>
+                    </div>
+                  </v-card-text>
+                </v-card>
+                
+                <!-- User Not Found -->
+                <v-alert
+                  v-else-if="newUserEmail && !searching && !searchResults && isEmailValid"
+                  type="warning"
+                  variant="tonal"
+                  density="compact"
+                  class="mb-3"
+                  role="status"
+                  aria-live="polite"
                 >
-                  <v-icon start>mdi-plus</v-icon>
-                  Add User
-                </v-btn>
+                  <div class="d-flex align-center">
+                    <v-icon class="mr-2">mdi-account-off</v-icon>
+                    <span>User not found. They must log in to the dashboard at least once before being added.</span>
+                  </div>
+                </v-alert>
               </div>
               
               <!-- Helper Text -->
-              <div class="text-caption text-medium-emphasis mt-2">
+              <div class="text-caption text-medium-emphasis">
                 <v-icon size="small" class="mr-1">mdi-information-outline</v-icon>
-                Search for users by their email address to verify they exist before adding them to the server.
+                Type an email address to automatically search for users in the system.
               </div>
             </v-card-text>
           </v-card>
@@ -296,6 +286,7 @@ const successMessage = ref('')
 const searchResults = ref(null)
 const searching = ref(false)
 const searchMessage = ref('')
+const searchTimeout = ref(null)
 
 // Responsive design: Check if device is mobile
 // Requirements: 4.4
@@ -485,6 +476,32 @@ const fetchUsers = async () => {
 }
 
 /**
+ * Handle email input with debounced auto-search
+ * Requirements: 3.1, 3.2, 3.7, 5.4
+ */
+const onEmailInput = () => {
+  // Clear previous timeout
+  if (searchTimeout.value) {
+    clearTimeout(searchTimeout.value)
+  }
+  
+  // Clear previous results
+  searchResults.value = null
+  searchMessage.value = ''
+  errorMessage.value = ''
+  
+  // Don't search if email is empty or invalid
+  if (!newUserEmail.value || !isEmailValid.value) {
+    return
+  }
+  
+  // Debounce search by 800ms
+  searchTimeout.value = setTimeout(() => {
+    searchUser()
+  }, 800)
+}
+
+/**
  * Search for a user by email address
  * Requirements: 3.1, 3.2, 3.7, 5.4
  */
@@ -513,6 +530,8 @@ const searchUser = async () => {
       searchResults.value = user
       searchMessage.value = `Found user: ${user.fullName} (${user.email})`
     } else {
+      // User not found (null response)
+      searchResults.value = null
       searchMessage.value = 'User not found. They must log in to the dashboard at least once before being added.'
     }
   } catch (error) {
@@ -520,9 +539,17 @@ const searchUser = async () => {
     
     // Handle specific error cases
     const errorMsg = extractUserFriendlyErrorMessage(error, 'search')
-    if (errorMsg.includes('USER_NOT_FOUND') || errorMsg.includes('user must log in')) {
+    
+    // Check if this is a "user not found" error (current backend behavior)
+    if (errorMsg.includes('USER_NOT_FOUND') || 
+        errorMsg.includes('user must log in') ||
+        errorMsg.includes('No user found with email') ||
+        error.message?.includes('Cannot return null for non-nullable type')) {
+      // Treat as "user not found" rather than an error
+      searchResults.value = null
       searchMessage.value = 'User not found. They must log in to the dashboard at least once before being added to a server.'
     } else {
+      // Real error that should be displayed
       errorMessage.value = errorMsg
     }
   } finally {
@@ -534,9 +561,16 @@ const searchUser = async () => {
  * Clear search results and messages
  */
 const clearSearch = () => {
+  newUserEmail.value = ''
   searchResults.value = null
   searchMessage.value = ''
   errorMessage.value = ''
+  
+  // Clear any pending search timeout
+  if (searchTimeout.value) {
+    clearTimeout(searchTimeout.value)
+    searchTimeout.value = null
+  }
 }
 
 /**
@@ -603,11 +637,8 @@ watch(() => props.modelValue, (newValue) => {
   if (newValue && props.serverId) {
     fetchUsers()
     // Reset form state when dialog opens
-    newUserEmail.value = ''
+    clearSearch()
     successMessage.value = ''
-    errorMessage.value = ''
-    searchResults.value = null
-    searchMessage.value = ''
     
     // Accessibility: Set focus to dialog title when opened
     // Requirements: 4.4
@@ -618,6 +649,12 @@ watch(() => props.modelValue, (newValue) => {
         dialogTitle.focus()
       }
     }, 100)
+  } else {
+    // Clear timeout when dialog closes
+    if (searchTimeout.value) {
+      clearTimeout(searchTimeout.value)
+      searchTimeout.value = null
+    }
   }
 })
 
@@ -637,6 +674,9 @@ onMounted(() => {
   // Cleanup on unmount
   onUnmounted(() => {
     window.removeEventListener('keydown', handleEscape)
+    if (searchTimeout.value) {
+      clearTimeout(searchTimeout.value)
+    }
   })
 })
 </script>
