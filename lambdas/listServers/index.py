@@ -282,7 +282,7 @@ def handler(event, context):
         volume = ec2.Volume(volume_id)
 
         pstLaunchTime = launchTime.astimezone(pst)        
-        runningMinutes = ec2_utils.get_total_hours_running_per_month(instance_id)
+        running_time_data = ec2_utils.get_cached_running_minutes(instance_id)
 
         listServer_result.append({
             'id': instance_id,
@@ -297,7 +297,8 @@ def handler(event, context):
             'initStatus': status['initStatus'].lower(),
             'iamStatus': status['iamStatus'].lower(),
             'launchTime': pstLaunchTime.strftime("%m/%d/%Y - %H:%M:%S"),
-            'runningMinutes': runningMinutes,
+            'runningMinutes': str(running_time_data['minutes']),
+            'runningMinutesCacheTimestamp': running_time_data['timestamp'] or '',
             'configStatus': validation['configStatus'],
             'configValid': validation['isValid'],
             'configWarnings': validation['warnings'],

@@ -9,7 +9,12 @@
     "preview": "vite preview",
     "test": "vitest --run",
     "test:watch": "vitest",
-    "test:ui": "vitest --ui"
+    "test:ui": "vitest --ui",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:debug": "playwright test --debug",
+    "test:auth": "playwright test auth.setup.ts",
+    "test:auth:debug": "playwright test auth-debug.setup.ts --headed --timeout=0"
   },
   "dependencies": {
     "@aws-amplify/ui-vue": "^4.2.3",
@@ -24,6 +29,8 @@
     "vuetify": "^3.5.9"
   },
   "devDependencies": {
+    "@playwright/test": "^1.57.0",
+    "@types/node": "^25.0.2",
     "@vitejs/plugin-vue": "^5.0.4",
     "@vitest/ui": "^4.0.10",
     "@vue/test-utils": "^2.4.6",

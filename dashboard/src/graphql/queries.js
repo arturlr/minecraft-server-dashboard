@@ -100,6 +100,16 @@ export const getServerUsers = /* GraphQL */ `
   }
 `;
 
+export const searchUserByEmail = /* GraphQL */ `
+  query SearchUserByEmail($email: AWSEmail!) {
+    searchUserByEmail(email: $email) {
+      id
+      email
+      fullName
+    }
+  }
+`;
+
 export const getServerActionStatus = /* GraphQL */ `
   query GetServerActionStatus($id: String!) {
     getServerActionStatus(id: $id) {

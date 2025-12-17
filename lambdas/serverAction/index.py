@@ -219,6 +219,43 @@ def handle_get_server_users(instance_id):
         logger.error("Error retrieving users for instance %s: %s", instance_id, str(e))
         return utl.response(500, {"error": f"Failed to retrieve users: {str(e)}"})
 
+def handle_search_user_by_email(email):
+    """
+    Helper function to search for a user by email address
+    
+    Args:
+        email: Email address to search for
+        
+    Returns:
+        dict: User information if found, error response if not found or error occurred
+    """
+    try:
+        logger.info(f"Searching for user by email: {email}")
+        
+        # Use the existing find_user_by_email method from authHelper
+        user_info = auth.find_user_by_email(email)
+        
+        if user_info is None:
+            logger.info(f"No user found with email: {email}")
+            return utl.response(404, {
+                "error": "USER_NOT_FOUND",
+                "message": f"No user found with email {email}. The user must log in to the dashboard at least once before they can be added to a server."
+            })
+        
+        # Return user info in the expected ServerUsers format
+        return {
+            'id': user_info['sub'],
+            'email': user_info['email'],
+            'fullName': user_info['fullName']
+        }
+        
+    except Exception as e:
+        logger.error(f"Error searching for user by email {email}: {str(e)}", exc_info=True)
+        return utl.response(500, {
+            "error": "SEARCH_ERROR",
+            "message": f"An error occurred while searching for user: {str(e)}"
+        })
+
 def handle_add_user_to_server(instance_id, user_email):
     """
     Helper function to add a user to a server's Cognito group
@@ -374,6 +411,15 @@ def handler(event, context):
         logger.error("No arguments found in the event")
         return utl.response(400, {"err": "No arguments found in the event"})
 
+    # Handle searchUserByEmail - doesn't require instance authorization
+    field_name = event["info"]["fieldName"]
+    if field_name.lower() == "searchuserbyemail":
+        email = event["arguments"].get("email")
+        if not email:
+            logger.error("email is required for searchUserByEmail")
+            return utl.response(400, {"err": "email is required"})
+        return handle_search_user_by_email(email)
+
     # Extract instance_id from arguments
     instance_id = (event["arguments"].get("instanceId") or 
                  event["arguments"].get("id") or
@@ -402,8 +448,6 @@ def handler(event, context):
         logger.error("%s is not authorized for instance %s", user_attributes["email"], instance_id)
         return utl.response(401, {"err": "User not authorized"})
 
-    # Field name determines the action to perform
-    field_name = event["info"]["fieldName"]
     logger.info("Received field name: %s for user %s", field_name, user_attributes["email"])
     
     # Read-only operations processed immediately
