@@ -377,24 +377,23 @@ def process_server_action(message_body):
         logger.info(f"Routing action to handler: action={action}, instance={instance_id}")
         
         try:
-            if action in ['start', 'startserver']:
+            if action == 'start' or action == 'startserver':
                 logger.info(f"Routing to handle_server_action(start): instance={instance_id}")
                 result = handle_server_action('start', instance_id)
                 error_message = "Failed to start server" if not result else None
-            elif action in ['stop', 'stopserver']:
+            elif action == 'stop' or action == 'stopserver':
                 logger.info(f"Routing to handle_server_action(stop): instance={instance_id}")
                 result = handle_server_action('stop', instance_id)
                 error_message = "Failed to stop server" if not result else None
-            elif action in ['restart', 'restartserver']:
+            elif action == 'restart' or action == 'restartserver':
                 logger.info(f"Routing to handle_server_action(restart): instance={instance_id}")
                 result = handle_server_action('restart', instance_id)
                 error_message = "Failed to restart server" if not result else None
-
-            elif action in ['putserverconfig', 'updateserverconfig']:
+            elif action == 'putserverconfig' or action == 'updateserverconfig':
                 logger.info(f"Routing to handle_update_server_config: instance={instance_id}")
                 result = handle_update_server_config(instance_id, arguments)
                 error_message = "Failed to update server configuration" if not result else None
-            elif action in ['updateservername']:
+            elif action == 'updateservername':
                 logger.info(f"Routing to handle_update_server_name: instance={instance_id}")
                 result = handle_update_server_name(instance_id, arguments)
                 error_message = "Failed to update server name" if not result else None
