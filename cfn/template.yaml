@@ -12,6 +12,7 @@ Parameters:
     Type: String
     Description: Value of the application
 
+
 Resources:
 
   DynamoDBStack:
@@ -53,21 +54,11 @@ Resources:
         AppValue: !Ref AppValue
         SupportBucket: !GetAtt EC2Stack.Outputs.SupportBucket
 
-  SESStack:
-    Type: AWS::Serverless::Application
-    Properties:
-      Location: ./templates/ses.yaml
-      Parameters:
-        ProjectName: !Ref ProjectName
-        EnvironmentName: !Ref EnvironmentName
-        AppValue: !Ref AppValue
-
   LambdasStack:
     Type: AWS::Serverless::Application
     DependsOn: 
       - CognitoStack
       - DynamoDBStack
-      - SESStack
     Properties:
       Location: ./templates/lambdas.yaml
       Parameters:
