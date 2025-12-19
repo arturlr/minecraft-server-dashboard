@@ -51,7 +51,7 @@
               variant="outlined"
               hide-details
               autofocus
-              @blur="cancelEditName"
+              @blur="handleNameBlur(item.id, item.name || item.id)"
               @keyup.enter="saveServerName(item.id)"
               @keyup.escape="cancelEditName"
               class="edit-name-field"
@@ -273,6 +273,23 @@ const startEditName = (serverId, currentName) => {
 const cancelEditName = () => {
   editingName.value = null
   editNameValue.value = ''
+}
+
+/**
+ * Handle blur event on name field - save if changed, cancel if not
+ * @param {string} serverId - The EC2 instance ID
+ * @param {string} originalName - The original server name
+ */
+const handleNameBlur = (serverId, originalName) => {
+  const trimmedValue = editNameValue.value.trim()
+  
+  // If the name has changed and is not empty, save it
+  if (trimmedValue && trimmedValue !== originalName) {
+    saveServerName(serverId)
+  } else {
+    // Otherwise, cancel the edit
+    cancelEditName()
+  }
 }
 
 /**
