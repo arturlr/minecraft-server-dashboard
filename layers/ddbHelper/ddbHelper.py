@@ -303,3 +303,111 @@ class Dyn:
             raise
 
 
+    def get_server_info(self, instance_id):
+        """
+        Get server information from DynamoDB.
+        
+        Args:
+            instance_id (str): EC2 instance ID
+            
+        Returns:
+            dict: Server information or None if not found
+        """
+        try:
+            logger.info(f"Getting server info for {instance_id}")
+            
+            response = self.table.get_item(
+                Key={'id': instance_id}
+            )
+            
+            if 'Item' not in response:
+                logger.warning(f"No server info found for {instance_id}")
+                return None
+            
+            item = response['Item']
+            
+            # Convert DynamoDB item to standard format
+            server_info = {
+                'id': item.get('id'),
+                'name': item.get('name'),
+                'userEmail': item.get('userEmail'),
+                'state': item.get('state'),
+                'vCpus': self._safe_int(item.get('vCpus')),
+                'memSize': self._safe_int(item.get('memSize')),
+                'diskSize': self._safe_int(item.get('diskSize')),
+                'launchTime': item.get('launchTime'),
+                'publicIp': item.get('publicIp'),
+                'initStatus': item.get('initStatus'),
+                'iamStatus': item.get('iamStatus'),
+                'runningMinutes': item.get('runningMinutes'),
+                'runningMinutesCacheTimestamp': item.get('runningMinutesCacheTimestamp'),
+                'configStatus': item.get('configStatus'),
+                'configValid': item.get('configValid'),
+                'configWarnings': item.get('configWarnings', []),
+                'configErrors': item.get('configErrors', []),
+                'autoConfigured': item.get('autoConfigured', False)
+            }
+            
+            logger.info(f"Server info retrieved for {instance_id}")
+            return server_info
+            
+        except ClientError as e:
+            logger.error(f"Error getting server info for {instance_id}: {e.response['Error']['Message']}")
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected error getting server info for {instance_id}: {str(e)}")
+            raise
+
+    def put_server_info(self, server_info):
+        """
+        Save server information to DynamoDB.
+        
+        Args:
+            server_info (dict): Server information to save
+            
+        Returns:
+            dict: DynamoDB response
+        """
+        try:
+            instance_id = server_info.get('id')
+            if not instance_id:
+                raise ValueError("Server info must include 'id' field")
+            
+            logger.info(f"Saving server info for {instance_id}")
+            
+            # Prepare item for DynamoDB, converting numeric values to Decimal
+            item = {
+                'id': instance_id,
+                'name': server_info.get('name'),
+                'userEmail': server_info.get('userEmail'),
+                'state': server_info.get('state'),
+                'vCpus': self._to_decimal(server_info.get('vCpus')),
+                'memSize': self._to_decimal(server_info.get('memSize')),
+                'diskSize': self._to_decimal(server_info.get('diskSize')),
+                'launchTime': server_info.get('launchTime'),
+                'publicIp': server_info.get('publicIp'),
+                'initStatus': server_info.get('initStatus'),
+                'iamStatus': server_info.get('iamStatus'),
+                'runningMinutes': server_info.get('runningMinutes'),
+                'runningMinutesCacheTimestamp': server_info.get('runningMinutesCacheTimestamp'),
+                'configStatus': server_info.get('configStatus'),
+                'configValid': server_info.get('configValid'),
+                'configWarnings': server_info.get('configWarnings', []),
+                'configErrors': server_info.get('configErrors', []),
+                'autoConfigured': server_info.get('autoConfigured', False)
+            }
+            
+            # Remove None values to avoid storing them in DynamoDB
+            item = {k: v for k, v in item.items() if v is not None}
+            
+            response = self.table.put_item(Item=item)
+            
+            logger.info(f"Server info saved for {instance_id}")
+            return response
+            
+        except ClientError as e:
+            logger.error(f"Error saving server info for {instance_id}: {e.response['Error']['Message']}")
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected error saving server info for {instance_id}: {str(e)}")
+            raise

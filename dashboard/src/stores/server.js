@@ -117,6 +117,24 @@ export const useServerStore = defineStore("server", {
                 //console.log('After update:', this.serversDict[server.id]);
             }
         },
+
+        updateServerName(serverId, newName) {
+            if (serverId && this.serversDict[serverId]) {
+                // Update serversDict
+                this.serversDict[serverId] = {
+                    ...this.serversDict[serverId],
+                    name: newName
+                };
+                
+                // Update serversList
+                const index = this.serversList.findIndex(s => s.id === serverId);
+                if (index !== -1) {
+                    this.serversList[index] = this.serversDict[serverId];
+                }
+                
+                console.log(`Server name updated: ${serverId} -> ${newName}`);
+            }
+        },
                 
         setSelectedServerId(id) {
             console.log("setSelectedServerId", id);

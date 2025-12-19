@@ -41,7 +41,77 @@
               </v-btn>
             </template>
           </v-tooltip>
-          <span class="font-weight-bold">{{ item.name || item.id }}</span>
+          
+          <!-- Editable Server Name -->
+          <div class="d-flex align-center ga-1 flex-grow-1">
+            <v-text-field
+              v-if="editingName === item.id"
+              v-model="editNameValue"
+              density="compact"
+              variant="outlined"
+              hide-details
+              autofocus
+              @blur="cancelEditName"
+              @keyup.enter="saveServerName(item.id)"
+              @keyup.escape="cancelEditName"
+              class="edit-name-field"
+            ></v-text-field>
+            
+            <span 
+              v-else 
+              class="font-weight-bold server-name-text"
+              @click="startEditName(item.id, item.name || item.id)"
+            >
+              {{ item.name || item.id }}
+            </span>
+            
+            <v-tooltip v-if="editingName !== item.id" text="Click to edit server name" location="top">
+              <template v-slot:activator="{ props }">
+                <v-btn 
+                  icon 
+                  size="x-small" 
+                  variant="text"
+                  v-bind="props"
+                  @click.stop="startEditName(item.id, item.name || item.id)"
+                >
+                  <v-icon size="small" color="grey-lighten-1">mdi-pencil</v-icon>
+                </v-btn>
+              </template>
+            </v-tooltip>
+            
+            <div v-if="editingName === item.id" class="d-flex ga-1">
+              <v-tooltip text="Save" location="top">
+                <template v-slot:activator="{ props }">
+                  <v-btn 
+                    icon 
+                    size="x-small" 
+                    variant="text"
+                    color="success"
+                    v-bind="props"
+                    @click.stop="saveServerName(item.id)"
+                    :loading="savingName"
+                  >
+                    <v-icon size="small">mdi-check</v-icon>
+                  </v-btn>
+                </template>
+              </v-tooltip>
+              
+              <v-tooltip text="Cancel" location="top">
+                <template v-slot:activator="{ props }">
+                  <v-btn 
+                    icon 
+                    size="x-small" 
+                    variant="text"
+                    color="error"
+                    v-bind="props"
+                    @click.stop="cancelEditName"
+                  >
+                    <v-icon size="small">mdi-close</v-icon>
+                  </v-btn>
+                </template>
+              </v-tooltip>
+            </div>
+          </div>
         </div>
       </template>
 
@@ -142,8 +212,10 @@
 
 <script setup>
 import { ref, computed, watch } from 'vue'
+import { generateClient } from 'aws-amplify/api'
 import ServerActionsMenu from './ServerActionsMenu.vue'
 import UserManagementDialog from './UserManagementDialog.vue'
+import { updateServerName } from '@/graphql/mutations'
 
 const props = defineProps({
   servers: {
@@ -157,12 +229,20 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['open-config', 'open-stats', 'open-power', 'copy-ip'])
+const emit = defineEmits(['open-config', 'open-stats', 'open-power', 'copy-ip', 'server-name-updated'])
 
 // User management dialog state
 const userManagementDialog = ref(false)
 const selectedServerId = ref('')
 const selectedServerName = ref('')
+
+// Server name editing state
+const editingName = ref(null)
+const editNameValue = ref('')
+const savingName = ref(false)
+
+// Amplify GraphQL client
+const client = generateClient()
 
 /**
  * Open user management dialog for a specific server
@@ -175,6 +255,79 @@ const openUserManagement = (serverId, serverName) => {
   selectedServerId.value = serverId
   selectedServerName.value = serverName
   userManagementDialog.value = true
+}
+
+/**
+ * Start editing server name
+ * @param {string} serverId - The EC2 instance ID
+ * @param {string} currentName - The current server name
+ */
+const startEditName = (serverId, currentName) => {
+  editingName.value = serverId
+  editNameValue.value = currentName
+}
+
+/**
+ * Cancel editing server name
+ */
+const cancelEditName = () => {
+  editingName.value = null
+  editNameValue.value = ''
+}
+
+/**
+ * Save the new server name
+ * @param {string} serverId - The EC2 instance ID
+ */
+const saveServerName = async (serverId) => {
+  if (!editNameValue.value.trim()) {
+    // Don't save empty names
+    cancelEditName()
+    return
+  }
+
+  if (editNameValue.value.trim().length > 255) {
+    // Show error for names that are too long
+    // You could add a snackbar notification here
+    return
+  }
+
+  savingName.value = true
+  
+  try {
+    console.log('Updating server name:', { serverId, newName: editNameValue.value.trim() })
+    
+    const result = await client.graphql({
+      query: updateServerName,
+      variables: {
+        instanceId: serverId,
+        newName: editNameValue.value.trim()
+      }
+    })
+    
+    console.log('Server name update result:', result)
+    
+    // Emit event to parent to refresh server list
+    emit('server-name-updated', serverId, editNameValue.value.trim())
+    
+    // Reset editing state
+    cancelEditName()
+    
+  } catch (error) {
+    console.error('Failed to update server name:', error)
+    console.error('Error details:', {
+      message: error.message,
+      errors: error.errors,
+      data: error.data,
+      extensions: error.extensions
+    })
+    
+    // Show user-friendly error message
+    // You could emit an error event here or show a notification
+    alert(`Failed to update server name: ${error.message || 'Unknown error'}`)
+  } finally {
+    savingName.value = false
+  }
 }
 
 // Status chip helpers (merged from ServerStatusChip.vue)
@@ -474,5 +627,29 @@ function formatCacheTimestamp(timestamp) {
   .server-table-container :deep(.v-text-field) {
     font-size: 16px; /* Prevents zoom on iOS */
   }
+}
+
+/* Server name editing styles */
+.server-name-text {
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+.server-name-text:hover {
+  color: rgb(var(--v-theme-primary));
+}
+
+.edit-name-field {
+  max-width: 200px;
+  min-width: 150px;
+}
+
+.edit-name-field :deep(.v-field) {
+  font-size: 0.875rem;
+}
+
+.edit-name-field :deep(.v-field__input) {
+  padding: 4px 8px;
+  min-height: 32px;
 }
 </style>

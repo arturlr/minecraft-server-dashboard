@@ -5,6 +5,7 @@ import os
 import time
 import ec2Helper
 import ddbHelper
+import utilHelper
 import httpx
 from httpx_aws_auth import AwsSigV4Auth, AwsCredentials
 from botocore.exceptions import ClientError
@@ -15,6 +16,7 @@ logger.setLevel(logging.INFO)
 ec2_client = boto3.client('ec2')
 eventbridge_client = boto3.client('events')
 ec2_utils = ec2Helper.Ec2Utils()
+utils = utilHelper.Utils()
 boto3_session = boto3.Session()
 
 # Environment variables
@@ -392,6 +394,10 @@ def process_server_action(message_body):
                 logger.info(f"Routing to handle_update_server_config: instance={instance_id}")
                 result = handle_update_server_config(instance_id, arguments)
                 error_message = "Failed to update server configuration" if not result else None
+            elif action in ['updateservername']:
+                logger.info(f"Routing to handle_update_server_name: instance={instance_id}")
+                result = handle_update_server_name(instance_id, arguments)
+                error_message = "Failed to update server name" if not result else None
             else:
                 logger.error(f"Action routing FAILED: Unknown action type - action={action}, instance={instance_id}")
                 send_to_appsync(action, instance_id, "FAILED", f"Unknown action: {action}", user_email)
@@ -450,17 +456,28 @@ def handle_server_action(action, instance_id):
     logger.info(f"Server action handler started: action={action}, instance={instance_id}")
     
     try:
-        # Retrieve instance information
-        logger.info(f"Retrieving instance information: instance={instance_id}")
+        # Get server info from DynamoDB
+        dyn = ddbHelper.Dyn()
+        server_info = dyn.get_server_info(instance_id)
+        
+        if not server_info:
+            logger.error(f"Server action FAILED: Server info not found in DynamoDB - instance={instance_id}")
+            return False
+        
+        user_email = server_info.get('userEmail')
+        server_name = server_info.get('name', instance_id)
+        
+        # Retrieve EC2 instance information
+        logger.info(f"Retrieving EC2 instance information: instance={instance_id}")
         instance = ec2_utils.list_server_by_id(instance_id)
         if not instance.get('Instances'):
-            logger.error(f"Server action FAILED: Instance not found - instance={instance_id}")
+            logger.error(f"Server action FAILED: EC2 instance not found - instance={instance_id}")
             return False
             
         instance_info = instance['Instances'][0]        
         state = instance_info["State"]["Name"]
         
-        logger.info(f"Instance state retrieved: instance={instance_id}, state={state}")
+        logger.info(f"Instance state retrieved: instance={instance_id}, state={state}, name={server_name}, user={user_email}")
         
         # Handle start action
         if action == "start":
@@ -469,6 +486,13 @@ def handle_server_action(action, instance_id):
                     logger.info(f"Executing EC2 start_instances: instance={instance_id}")
                     ec2_client.start_instances(InstanceIds=[instance_id])
                     logger.info(f"Server action SUCCESS: Start initiated for instance {instance_id}")
+                    
+                    # Send email notification
+                    if user_email:
+                        utils.send_server_notification_email(user_email, server_name, 'start', instance_id)
+                    else:
+                        logger.warning(f"No userEmail found for instance {instance_id}, skipping email notification")
+                    
                     return True
                 except Exception as e:
                     logger.error(f"Server action FAILED: Start failed for instance {instance_id}, error={str(e)}", exc_info=True)
@@ -484,6 +508,13 @@ def handle_server_action(action, instance_id):
                     logger.info(f"Executing EC2 stop_instances: instance={instance_id}")
                     ec2_client.stop_instances(InstanceIds=[instance_id])
                     logger.info(f"Server action SUCCESS: Stop initiated for instance {instance_id}")
+                    
+                    # Send email notification
+                    if user_email:
+                        utils.send_server_notification_email(user_email, server_name, 'stop', instance_id)
+                    else:
+                        logger.warning(f"No userEmail found for instance {instance_id}, skipping email notification")
+                    
                     return True
                 except Exception as e:
                     logger.error(f"Server action FAILED: Stop failed for instance {instance_id}, error={str(e)}", exc_info=True)
@@ -499,6 +530,13 @@ def handle_server_action(action, instance_id):
                     logger.info(f"Executing EC2 reboot_instances: instance={instance_id}")
                     ec2_client.reboot_instances(InstanceIds=[instance_id])
                     logger.info(f"Server action SUCCESS: Restart initiated for instance {instance_id}")
+                    
+                    # Send email notification
+                    if user_email:
+                        utils.send_server_notification_email(user_email, server_name, 'restart', instance_id)
+                    else:
+                        logger.warning(f"No userEmail found for instance {instance_id}, skipping email notification")
+                    
                     return True
                 except Exception as e:
                     logger.error(f"Server action FAILED: Restart failed for instance {instance_id}, error={str(e)}", exc_info=True)
@@ -621,6 +659,66 @@ def handle_update_server_config(instance_id, arguments):
         
     except Exception as e:
         logger.error(f"Config update handler FAILED with exception: instance={instance_id}, error={str(e)}", exc_info=True)
+        return False
+
+def handle_update_server_name(instance_id, arguments):
+    """Handle server name updates"""
+    logger.info(f"Server name update handler started: instance={instance_id}, has_arguments={arguments is not None}")
+    
+    try:
+        if not arguments:
+            logger.error(f"Server name update FAILED: Missing arguments - instance={instance_id}")
+            return False
+        
+        new_name = arguments.get('newName')
+        if not new_name:
+            logger.error(f"Server name update FAILED: Missing newName in arguments - instance={instance_id}")
+            return False
+        
+        logger.info(f"Server name update: Processing name change - instance={instance_id}, newName={new_name}")
+        
+        # Update the EC2 instance Name tag
+        try:
+            logger.info(f"Updating EC2 instance Name tag: instance={instance_id}, newName={new_name}")
+            success = ec2_utils.update_instance_name_tag(instance_id, new_name)
+            
+            if not success:
+                logger.error(f"Server name update FAILED: Failed to update EC2 Name tag - instance={instance_id}")
+                return False
+                
+            logger.info(f"EC2 Name tag updated successfully: instance={instance_id}, newName={new_name}")
+            
+        except Exception as e:
+            logger.error(f"Server name update FAILED: Error updating EC2 Name tag - instance={instance_id}, error={str(e)}", exc_info=True)
+            return False
+        
+        # Update the server info in DynamoDB
+        try:
+            logger.info(f"Updating server info in DynamoDB: instance={instance_id}, newName={new_name}")
+            dyn = ddbHelper.Dyn()
+            
+            # Get current server info
+            server_info = dyn.get_server_info(instance_id)
+            if not server_info:
+                logger.error(f"Server name update FAILED: Server info not found in DynamoDB - instance={instance_id}")
+                return False
+            
+            # Update the name field
+            server_info['name'] = new_name
+            
+            # Save updated server info
+            response = dyn.put_server_info(server_info)
+            logger.info(f"Server info updated successfully in DynamoDB: instance={instance_id}, response={response}")
+            
+        except Exception as e:
+            logger.error(f"Server name update FAILED: Error updating DynamoDB - instance={instance_id}, error={str(e)}", exc_info=True)
+            return False
+        
+        logger.info(f"Server name update SUCCESS: Name updated successfully - instance={instance_id}, newName={new_name}")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Server name update handler FAILED with exception: instance={instance_id}, error={str(e)}", exc_info=True)
         return False
 
 def handler(event, context):

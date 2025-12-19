@@ -110,7 +110,8 @@ def validate_queue_message(action, instance_id, arguments=None, user_email=None)
         'start', 'stop', 'restart',
         'startServer', 'stopServer', 'restartServer',
         'putServerConfig', 'putserverconfig',
-        'updateServerConfig', 'updateserverconfig'
+        'updateServerConfig', 'updateserverconfig',
+        'updateServerName', 'updateservername'
     ]
     if action.lower() not in [a.lower() for a in allowed_actions]:
         return False, f"Invalid action: {action}. Must be one of {allowed_actions}"
@@ -459,6 +460,25 @@ def handler(event, context):
             logger.error("userEmail is required for addUserToServer")
             return utl.response(400, {"err": "userEmail is required"})
         return handle_add_user_to_server(instance_id, user_email)
+    
+    # Handle updateServerName - queue for async processing
+    if field_name.lower() == "updateservername":
+        new_name = event["arguments"].get("newName")
+        if not new_name:
+            logger.error("newName is required for updateServerName")
+            return utl.response(400, {"err": "newName is required"})
+        
+        # Validate server name (basic validation)
+        if not new_name.strip():
+            logger.error("Server name cannot be empty")
+            return utl.response(400, {"err": "Server name cannot be empty"})
+        
+        if len(new_name.strip()) > 255:
+            logger.error("Server name too long")
+            return utl.response(400, {"err": "Server name cannot exceed 255 characters"})
+        
+        # Queue the action for async processing
+        return send_to_queue("updateServerName", instance_id, {"newName": new_name.strip()}, user_attributes["email"])
     
     # Config mutations need to return the config data after queuing
     if field_name.lower() in ["putserverconfig", "updateserverconfig"]:

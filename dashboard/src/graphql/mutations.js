@@ -121,3 +121,8 @@ export const addUserToServer = /* GraphQL */ `
     addUserToServer(instanceId: $instanceId, userEmail: $userEmail)
   }
 `;
+export const updateServerName = /* GraphQL */ `
+  mutation UpdateServerName($instanceId: String!, $newName: String!) {
+    updateServerName(instanceId: $instanceId, newName: $newName)
+  }
+`;
