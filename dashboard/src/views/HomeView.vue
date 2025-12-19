@@ -141,6 +141,22 @@ function handleActionComplete(message, success) {
   };
 }
 
+/**
+ * Handle server name update event from ServerTable
+ * @param {string} serverId - The EC2 instance ID
+ * @param {string} newName - The new server name
+ */
+function handleServerNameUpdated(serverId, newName) {
+  // Update the server name in the store
+  serverStore.updateServerName(serverId, newName);
+  
+  // Show success message
+  handleActionComplete(`Server name updated to "${newName}"`, true);
+  
+  // Optionally refresh the server list to ensure consistency
+  // serverStore.loadServers();
+}
+
 // Handle component errors from ErrorBoundary
 function handleComponentError({ error, instance, info }) {
   console.error('Component error caught by boundary:', error);
@@ -248,6 +264,7 @@ onUnmounted(() => {
             @open-stats="openStatsDialog"
             @open-power="openPowerDialog"
             @copy-ip="copyToClipboard"
+            @server-name-updated="handleServerNameUpdated"
           />
         </v-container>
       </ErrorBoundary>

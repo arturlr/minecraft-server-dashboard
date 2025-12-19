@@ -85,19 +85,18 @@
                 </span>
               </v-alert>
               
-              <!-- Email Input with Auto-Search -->
+              <!-- Email Input with Manual Search -->
               <v-text-field
                 v-model="newUserEmail"
-                label="Search User by Email"
-                placeholder="Enter email address to search..."
+                label="User Email Address"
+                placeholder="Enter email address..."
                 :rules="emailRules"
-                :disabled="addingUser"
+                :disabled="addingUser || searching"
                 variant="outlined"
                 density="comfortable"
-                prepend-inner-icon="mdi-account-search"
-                @input="onEmailInput"
-                @keyup.enter="searchResults ? addUser() : null"
-                aria-label="Enter user email address to search"
+                prepend-inner-icon="mdi-email"
+                @keyup.enter="searchResults ? addUser() : searchUser()"
+                aria-label="Enter user email address"
                 aria-required="true"
                 aria-describedby="email-search-help"
               >
@@ -111,21 +110,30 @@
                     aria-label="Clear search"
                     class="mr-1"
                   ></v-btn>
-                  <v-progress-circular
-                    v-if="searching"
-                    indeterminate
-                    size="20"
-                    width="2"
-                    color="primary"
-                  ></v-progress-circular>
                 </template>
               </v-text-field>
               <span id="email-search-help" class="sr-only">
-                Enter an email address to automatically search for the user
+                Enter an email address and click search to find the user
               </span>
               
+              <!-- Search Button -->
+              <v-btn
+                color="primary"
+                variant="outlined"
+                :loading="searching"
+                :disabled="!isEmailValid || searching || addingUser"
+                @click="searchUser"
+                block
+                class="mb-3"
+                :min-height="touchTargetSize"
+                aria-label="Search for user by email"
+              >
+                <v-icon start>mdi-magnify</v-icon>
+                Search User
+              </v-btn>
+              
               <!-- Search Results -->
-              <div v-if="searchMessage || searchResults || (newUserEmail && !searching && !searchResults)">
+              <div v-if="searchMessage || searchResults">
                 <!-- User Found -->
                 <v-card
                   v-if="searchResults"
@@ -159,7 +167,7 @@
                 
                 <!-- User Not Found -->
                 <v-alert
-                  v-else-if="newUserEmail && !searching && !searchResults && isEmailValid"
+                  v-else-if="searchMessage"
                   type="warning"
                   variant="tonal"
                   density="compact"
@@ -169,7 +177,7 @@
                 >
                   <div class="d-flex align-center">
                     <v-icon class="mr-2">mdi-account-off</v-icon>
-                    <span>User not found. They must log in to the dashboard at least once before being added.</span>
+                    <span>{{ searchMessage }}</span>
                   </div>
                 </v-alert>
               </div>
@@ -177,7 +185,7 @@
               <!-- Helper Text -->
               <div class="text-caption text-medium-emphasis">
                 <v-icon size="small" class="mr-1">mdi-information-outline</v-icon>
-                Type an email address to automatically search for users in the system.
+                Enter an email address and click "Search User" to verify they exist before adding them to the server.
               </div>
             </v-card-text>
           </v-card>
@@ -286,7 +294,6 @@ const successMessage = ref('')
 const searchResults = ref(null)
 const searching = ref(false)
 const searchMessage = ref('')
-const searchTimeout = ref(null)
 
 // Responsive design: Check if device is mobile
 // Requirements: 4.4
@@ -475,31 +482,7 @@ const fetchUsers = async () => {
   }
 }
 
-/**
- * Handle email input with debounced auto-search
- * Requirements: 3.1, 3.2, 3.7, 5.4
- */
-const onEmailInput = () => {
-  // Clear previous timeout
-  if (searchTimeout.value) {
-    clearTimeout(searchTimeout.value)
-  }
-  
-  // Clear previous results
-  searchResults.value = null
-  searchMessage.value = ''
-  errorMessage.value = ''
-  
-  // Don't search if email is empty or invalid
-  if (!newUserEmail.value || !isEmailValid.value) {
-    return
-  }
-  
-  // Debounce search by 800ms
-  searchTimeout.value = setTimeout(() => {
-    searchUser()
-  }, 800)
-}
+
 
 /**
  * Search for a user by email address
@@ -565,12 +548,15 @@ const clearSearch = () => {
   searchResults.value = null
   searchMessage.value = ''
   errorMessage.value = ''
-  
-  // Clear any pending search timeout
-  if (searchTimeout.value) {
-    clearTimeout(searchTimeout.value)
-    searchTimeout.value = null
-  }
+}
+
+/**
+ * Clear only search results (keep email field)
+ */
+const clearSearchResults = () => {
+  searchResults.value = null
+  searchMessage.value = ''
+  errorMessage.value = ''
 }
 
 /**
@@ -614,9 +600,7 @@ const addUser = async () => {
     }, 3500)
     
     // Clear form state
-    newUserEmail.value = ''
-    searchResults.value = null
-    searchMessage.value = ''
+    clearSearch()
     
     // Refresh user list to show the newly added user
     await fetchUsers()
@@ -649,12 +633,6 @@ watch(() => props.modelValue, (newValue) => {
         dialogTitle.focus()
       }
     }, 100)
-  } else {
-    // Clear timeout when dialog closes
-    if (searchTimeout.value) {
-      clearTimeout(searchTimeout.value)
-      searchTimeout.value = null
-    }
   }
 })
 
@@ -674,9 +652,6 @@ onMounted(() => {
   // Cleanup on unmount
   onUnmounted(() => {
     window.removeEventListener('keydown', handleEscape)
-    if (searchTimeout.value) {
-      clearTimeout(searchTimeout.value)
-    }
   })
 })
 </script>

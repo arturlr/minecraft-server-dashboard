@@ -16,6 +16,7 @@ class Utils:
     def __init__(self):
         logger.info("------- Utils Class Initialization")
         self.ssm = boto3.client('ssm')
+        self.ses = boto3.client('ses')
         self.admin_group_name = os.getenv('ADMIN_GROUP_NAME', 'admin')  # Default to 'admin' if not set
     
     def capitalize_first_letter(self, text):
@@ -212,3 +213,128 @@ class Utils:
         except Exception as e:
             print(f"Unexpected error occurred: {str(e)}")
             return None
+
+    def send_server_notification_email(self, recipient_email: str, server_name: str, action: str, 
+                                     instance_id: str, sender_email: str = None) -> bool:
+        """
+        Sends email notification when a server is started or stopped.
+        
+        Args:
+            recipient_email (str): Email address to send notification to
+            server_name (str): Name of the Minecraft server
+            action (str): Action performed ('started', 'stopped', 'restarted')
+            instance_id (str): EC2 instance ID
+            sender_email (str, optional): Sender email address. If None, uses SSM parameter
+            
+        Returns:
+            bool: True if email sent successfully, False otherwise
+        """
+        try:
+            # Get sender email from SSM parameter if not provided
+            if not sender_email:
+                sender_email = self.get_ssm_param('/minecraft-dashboard/notification-sender-email')
+                if not sender_email:
+                    logger.error("No sender email configured in SSM parameter '/minecraft-dashboard/notification-sender-email'")
+                    return False
+            
+            # Prepare email content based on action
+            action_past_tense = {
+                'start': 'started',
+                'stop': 'stopped', 
+                'restart': 'restarted'
+            }.get(action.lower(), action)
+            
+            subject = f"Minecraft Server {action_past_tense.title()}: {server_name}"
+            
+            # HTML email body
+            html_body = f"""
+            <html>
+            <head></head>
+            <body>
+                <h2>Minecraft Server Notification</h2>
+                <p>Your Minecraft server has been <strong>{action_past_tense}</strong>.</p>
+                
+                <table style="border-collapse: collapse; margin: 20px 0;">
+                    <tr>
+                        <td style="padding: 8px; font-weight: bold;">Server Name:</td>
+                        <td style="padding: 8px;">{server_name}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 8px; font-weight: bold;">Action:</td>
+                        <td style="padding: 8px;">{action_past_tense.title()}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 8px; font-weight: bold;">Instance ID:</td>
+                        <td style="padding: 8px;">{instance_id}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 8px; font-weight: bold;">Time:</td>
+                        <td style="padding: 8px;">{time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime())}</td>
+                    </tr>
+                </table>
+                
+                <p>You can manage your server through the <a href="{os.getenv('DASHBOARD_URL', 'https://your-dashboard-url.com')}">Minecraft Server Dashboard</a>.</p>
+                
+                <hr style="margin: 20px 0;">
+                <p style="font-size: 12px; color: #666;">
+                    This is an automated notification from your Minecraft Server Dashboard.
+                </p>
+            </body>
+            </html>
+            """
+            
+            # Plain text version
+            text_body = f"""
+Minecraft Server Notification
+
+Your Minecraft server has been {action_past_tense}.
+
+Server Name: {server_name}
+Action: {action_past_tense.title()}
+Instance ID: {instance_id}
+Time: {time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime())}
+
+You can manage your server through the Minecraft Server Dashboard: {os.getenv('DASHBOARD_URL', 'https://your-dashboard-url.com')}
+
+This is an automated notification from your Minecraft Server Dashboard.
+            """
+            
+            # Send email using SES
+            response = self.ses.send_email(
+                Source=sender_email,
+                Destination={
+                    'ToAddresses': [recipient_email]
+                },
+                Message={
+                    'Subject': {
+                        'Data': subject,
+                        'Charset': 'UTF-8'
+                    },
+                    'Body': {
+                        'Text': {
+                            'Data': text_body,
+                            'Charset': 'UTF-8'
+                        },
+                        'Html': {
+                            'Data': html_body,
+                            'Charset': 'UTF-8'
+                        }
+                    }
+                }
+            )
+            
+            if response['ResponseMetadata']['HTTPStatusCode'] == 200:
+                logger.info(f"Email notification sent successfully to {recipient_email} for server {server_name} ({action_past_tense})")
+                return True
+            else:
+                logger.error(f"Failed to send email notification. SES response: {response}")
+                return False
+                
+        except ClientError as e:
+            error_code = e.response['Error']['Code']
+            error_message = e.response['Error']['Message']
+            logger.error(f"SES ClientError: {error_code} - {error_message}")
+            return False
+        except Exception as e:
+            logger.error(f"Unexpected error sending email notification: {str(e)}")
+            return False

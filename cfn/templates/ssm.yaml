@@ -569,6 +569,14 @@ Resources:
                     exit 1
                   fi
 
+  NotificationSenderEmailParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /minecraft-dashboard/notification-sender-email
+      Type: String
+      Value: !Sub "noreply@${ProjectName}-${EnvironmentName}.com"
+      Description: Email address used to send server notifications
+
 Outputs:
   BootstrapSSMDoc:
     Description: Bootstrap SSM Document Name

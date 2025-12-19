@@ -199,6 +199,12 @@ Resources:
               Version: "1.0.0"
             Pipeline:
               - serverActionFunction
+          updateServerName:
+            Runtime:
+              Name: APPSYNC_JS
+              Version: "1.0.0"
+            Pipeline:
+              - serverActionFunction
           putLogAudit:
             Runtime:
               Name: APPSYNC_JS
@@ -640,6 +646,19 @@ Resources:
                 - appsync:GetGraphqlApi
                 - appsync:GraphQL
               Resource: "*"
+        - Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Action:
+                - ses:SendEmail
+                - ses:SendRawEmail
+              Resource: "*"
+        - Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Action:
+                - ssm:GetParameter
+              Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/minecraft-dashboard/notification-sender-email"
       Environment:
         Variables:
           APPSYNC_URL: !GetAtt GraphQLAPI.GraphQLUrl

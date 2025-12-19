@@ -204,6 +204,8 @@ type Mutation {
 		@aws_cognito_user_pools
 	updateServerConfig(input: ServerConfigInput!): ServerConfig
 		@aws_cognito_user_pools 
+	updateServerName(instanceId: String!, newName: String!): AWSJSON
+		@aws_cognito_user_pools
 	putLogAudit(input: LogAuditInput!): LogAudit
 		@aws_iam @aws_cognito_user_pools
 }

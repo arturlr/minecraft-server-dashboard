@@ -558,3 +558,36 @@ class Ec2Utils:
         )
 
    
+    def update_instance_name_tag(self, instance_id, new_name):
+        """
+        Update the Name tag of an EC2 instance
+        
+        Args:
+            instance_id (str): The EC2 instance ID
+            new_name (str): The new name for the instance
+            
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        logger.info(f"------- update_instance_name_tag: {instance_id} -> {new_name}")
+        
+        try:
+            # Update the Name tag
+            self.ec2_client.create_tags(
+                Resources=[instance_id],
+                Tags=[
+                    {
+                        'Key': 'Name',
+                        'Value': new_name
+                    }
+                ]
+            )
+            logger.info(f"Successfully updated Name tag for instance {instance_id} to '{new_name}'")
+            return True
+            
+        except ClientError as e:
+            logger.error(f"Failed to update Name tag for instance {instance_id}: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"Unexpected error updating Name tag for instance {instance_id}: {e}")
+            return False
