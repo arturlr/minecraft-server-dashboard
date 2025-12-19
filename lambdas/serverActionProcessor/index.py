@@ -691,23 +691,14 @@ def handle_update_server_name(instance_id, arguments):
             logger.error(f"Server name update FAILED: Error updating EC2 Name tag - instance={instance_id}, error={str(e)}", exc_info=True)
             return False
         
-        # Update the server info in DynamoDB
+        # Update the server name in DynamoDB
         try:
-            logger.info(f"Updating server info in DynamoDB: instance={instance_id}, newName={new_name}")
+            logger.info(f"Updating server name in DynamoDB: instance={instance_id}, newName={new_name}")
             dyn = ddbHelper.Dyn()
             
-            # Get current server info
-            server_info = dyn.get_server_info(instance_id)
-            if not server_info:
-                logger.error(f"Server name update FAILED: Server info not found in DynamoDB - instance={instance_id}")
-                return False
-            
-            # Update the name field
-            server_info['name'] = new_name
-            
-            # Save updated server info
-            response = dyn.put_server_info(server_info)
-            logger.info(f"Server info updated successfully in DynamoDB: instance={instance_id}, response={response}")
+            # Update just the server name
+            response = dyn.update_server_name(instance_id, new_name)
+            logger.info(f"Server name updated successfully in DynamoDB: instance={instance_id}")
             
         except Exception as e:
             logger.error(f"Server name update FAILED: Error updating DynamoDB - instance={instance_id}, error={str(e)}", exc_info=True)
