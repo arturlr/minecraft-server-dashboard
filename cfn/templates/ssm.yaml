@@ -574,7 +574,7 @@ Resources:
     Properties:
       Name: /minecraft-dashboard/notification-sender-email
       Type: String
-      Value: !Sub "noreply@${ProjectName}-${EnvironmentName}.com"
+      Value: !Sub "noreply@$geckobyte.ca"
       Description: Email address used to send server notifications
 
 Outputs:
