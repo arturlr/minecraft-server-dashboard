@@ -358,6 +358,43 @@ class Dyn:
             logger.error(f"Unexpected error getting server info for {instance_id}: {str(e)}")
             raise
 
+    def update_server_name(self, instance_id, new_name):
+        """
+        Update only the server name in DynamoDB.
+        
+        Args:
+            instance_id (str): EC2 instance ID
+            new_name (str): New server name
+            
+        Returns:
+            dict: DynamoDB response
+        """
+        try:
+            if not instance_id:
+                raise ValueError("Instance ID is required")
+            if not new_name:
+                raise ValueError("New name is required")
+                
+            logger.info(f"Updating server name for {instance_id} to '{new_name}'")
+            
+            response = self.table.update_item(
+                Key={'id': instance_id},
+                UpdateExpression="SET #name = :name",
+                ExpressionAttributeNames={'#name': 'name'},
+                ExpressionAttributeValues={':name': new_name},
+                ReturnValues="ALL_NEW"
+            )
+            
+            logger.info(f"Server name updated for {instance_id}")
+            return response
+            
+        except ClientError as e:
+            logger.error(f"Error updating server name for {instance_id}: {e.response['Error']['Message']}")
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected error updating server name for {instance_id}: {str(e)}")
+            raise
+
     def put_server_info(self, server_info):
         """
         Save server information to DynamoDB.
