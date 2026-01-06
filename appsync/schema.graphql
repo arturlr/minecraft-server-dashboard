@@ -3,6 +3,16 @@ input AddUserToServerInput {
 	userEmail: AWSEmail!
 }
 
+input CreateServerInput {
+	serverName: String!
+	instanceType: String!
+	shutdownMethod: String!
+	alarmThreshold: Float
+	alarmEvaluationPeriod: Int
+	startScheduleExpression: String
+	stopScheduleExpression: String
+}
+
 type LogAudit @aws_iam
 @aws_cognito_user_pools {
 	id: ID!
@@ -188,6 +198,9 @@ type Mutation {
 		@aws_iam @aws_cognito_user_pools
 	changeServerState(input: ServerInfoInput!): ServerInfo
 		@aws_iam
+	
+	putServerActionStatus(input: ServerActionStatusInput!): ServerActionStatus
+		@aws_iam @aws_cognito_user_pools
 	startServer(instanceId: String!): AWSJSON
 		@aws_cognito_user_pools
 	restartServer(instanceId: String!): AWSJSON
@@ -205,6 +218,8 @@ type Mutation {
 	updateServerConfig(input: ServerConfigInput!): ServerConfig
 		@aws_cognito_user_pools 
 	updateServerName(instanceId: String!, newName: String!): AWSJSON
+		@aws_cognito_user_pools
+	createServer(input: CreateServerInput!): AWSJSON
 		@aws_cognito_user_pools
 	putLogAudit(input: LogAuditInput!): LogAudit
 		@aws_iam @aws_cognito_user_pools
@@ -236,6 +251,11 @@ type Subscription {
 
 	onChangeState: ServerInfo
 		@aws_subscribe(mutations: ["changeServerState"])  
+@aws_cognito_user_pools
+@aws_iam
+
+	onPutServerActionStatus(id: String!): ServerActionStatus
+		@aws_subscribe(mutations: ["putServerActionStatus"])
 @aws_cognito_user_pools
 @aws_iam
 

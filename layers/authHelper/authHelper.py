@@ -15,6 +15,29 @@ logger.setLevel(logging.INFO)
 
 session = boto3.session.Session()
 aws_region = session.region_name
+
+def extract_auth_token(event):
+    """Extract authorization token from Lambda event."""
+    try:
+        return event['request']['headers']['authorization']
+    except KeyError:
+        if 'request' not in event:
+            raise ValueError("Local invocation detected")
+        elif 'headers' not in event['request']:
+            raise ValueError("No headers found in request")
+        else:
+            raise ValueError("No Authorization header found")
+
+def validate_user_token(token, auth_instance):
+    """Validate user token and return user attributes."""
+    try:
+        user_attributes = auth_instance.process_token(token)
+        if user_attributes is None:
+            raise ValueError("Invalid token")
+        return user_attributes
+    except Exception as e:
+        logger.error(f"Token processing FAILED: error={str(e)}", exc_info=True)
+        raise ValueError("Invalid token")
              
 class Auth:
     def __init__(self,cognito_pool_id):

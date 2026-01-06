@@ -126,3 +126,21 @@ export const updateServerName = /* GraphQL */ `
     updateServerName(instanceId: $instanceId, newName: $newName)
   }
 `;
+export const createServer = /* GraphQL */ `
+  mutation CreateServer($input: CreateServerInput!) {
+    createServer(input: $input)
+  }
+`;
+
+export const putServerActionStatus = /* GraphQL */ `
+  mutation PutServerActionStatus($input: ServerActionStatusInput!) {
+    putServerActionStatus(input: $input) {
+      id
+      action
+      status
+      timestamp
+      message
+      userEmail
+    }
+  }
+`;

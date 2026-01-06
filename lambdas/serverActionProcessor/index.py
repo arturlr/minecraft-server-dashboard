@@ -7,7 +7,7 @@ import ec2Helper
 import ddbHelper
 import utilHelper
 import httpx
-from httpx_aws_auth import AwsSigV4Auth, AwsCredentials
+from httpx_aws_auth import AWSSigV4Auth
 from botocore.exceptions import ClientError
 
 logger = logging.getLogger()
@@ -351,12 +351,15 @@ def process_server_action(message_body):
         if 'action' not in message:
             logger.error(f"Action processing FAILED: Missing 'action' field in message - message={message}")
             return False
-        if 'instanceId' not in message:
+        
+        action = message['action'].lower().strip()
+        
+        # For createServer action, instanceId is not required in the message (it will be created)
+        if action != 'createserver' and 'instanceId' not in message:
             logger.error(f"Action processing FAILED: Missing 'instanceId' field in message - message={message}")
             return False
             
-        action = message['action'].lower().strip()
-        instance_id = message['instanceId']
+        instance_id = message.get('instanceId', 'pending')  # Use 'pending' for createServer
         arguments = message.get('arguments')
         user_email = message.get('userEmail')
         
@@ -364,11 +367,15 @@ def process_server_action(message_body):
         
         # Send initial PROCESSING status to AppSync
         logger.info(f"Sending initial PROCESSING status: action={action}, instance={instance_id}")
-        status_sent = send_to_appsync(action, instance_id, "PROCESSING", f"Processing {action}", user_email)
-        if status_sent:
-            logger.info(f"Initial PROCESSING status sent successfully: action={action}, instance={instance_id}")
+        # For createServer, don't send initial PROCESSING status here since serverAction already sent it
+        if action != 'createserver':
+            status_sent = send_to_appsync(action, instance_id, "PROCESSING", f"Processing {action}", user_email)
+            if status_sent:
+                logger.info(f"Initial PROCESSING status sent successfully: action={action}, instance={instance_id}")
+            else:
+                logger.warning(f"Initial PROCESSING status failed to send: action={action}, instance={instance_id}")
         else:
-            logger.warning(f"Initial PROCESSING status failed to send: action={action}, instance={instance_id}")
+            logger.info(f"Skipping initial PROCESSING status for createServer (already sent by serverAction)")
         
         # Route to appropriate handler based on action type
         result = False
@@ -397,6 +404,10 @@ def process_server_action(message_body):
                 logger.info(f"Routing to handle_update_server_name: instance={instance_id}")
                 result = handle_update_server_name(instance_id, arguments)
                 error_message = "Failed to update server name" if not result else None
+            elif action == 'createserver':
+                logger.info(f"Routing to process_create_server: arguments={arguments}")
+                result = process_create_server(message)
+                error_message = "Failed to create server" if not result else None
             else:
                 logger.error(f"Action routing FAILED: Unknown action type - action={action}, instance={instance_id}")
                 send_to_appsync(action, instance_id, "FAILED", f"Unknown action: {action}", user_email)
@@ -410,11 +421,16 @@ def process_server_action(message_body):
         logger.info(f"Sending final status: action={action}, instance={instance_id}, result={result}")
         if result:
             logger.info(f"Action completed successfully: action={action}, instance={instance_id}")
-            final_status_sent = send_to_appsync(action, instance_id, "COMPLETED", f"Successfully completed {action}", user_email)
-            if final_status_sent:
-                logger.info(f"Final COMPLETED status sent successfully: action={action}, instance={instance_id}")
+            # For createServer, the actual instance_id is returned by the handler
+            if action == 'createserver' and result:
+                # The process_create_server function handles its own status updates
+                logger.info(f"CreateServer action completed, status updates handled by process_create_server")
             else:
-                logger.warning(f"Final COMPLETED status failed to send: action={action}, instance={instance_id}")
+                final_status_sent = send_to_appsync(action, instance_id, "COMPLETED", f"Successfully completed {action}", user_email)
+                if final_status_sent:
+                    logger.info(f"Final COMPLETED status sent successfully: action={action}, instance={instance_id}")
+                else:
+                    logger.warning(f"Final COMPLETED status failed to send: action={action}, instance={instance_id}")
         else:
             final_message = error_message or f"Failed to complete {action}"
             logger.error(f"Action failed: action={action}, instance={instance_id}, error={final_message}")
@@ -658,6 +674,117 @@ def handle_update_server_config(instance_id, arguments):
         
     except Exception as e:
         logger.error(f"Config update handler FAILED with exception: instance={instance_id}, error={str(e)}", exc_info=True)
+        return False
+
+def process_create_server(message):
+    """Process server creation request from SQS message"""
+    logger.info(f"Server creation handler started: message={message}")
+    
+    try:
+        # Extract parameters directly from message (not from arguments field)
+        server_name = message.get('serverName')
+        instance_type = message.get('instanceType', 't3.micro')
+        shutdown_method = message.get('shutdownMethod', 'CPUUtilization')
+        user_email = message.get('userEmail')
+        
+        if not server_name:
+            logger.error("Server creation FAILED: Missing serverName in message")
+            return False
+        
+        logger.info(f"Server creation: Processing request - name={server_name}, type={instance_type}, shutdown={shutdown_method}, user={user_email}")
+        
+        # Create EC2 instance using ec2Helper
+        logger.info(f"Creating EC2 instance: name={server_name}, type={instance_type}")
+        instance_id = ec2_utils.create_ec2_instance(
+            instance_name=server_name,
+            instance_type=instance_type,
+            subnet_id=None,  # Use default
+            security_group_id=None  # Use default
+        )
+        
+        if not instance_id:
+            logger.error(f"Server creation FAILED: EC2 instance creation failed for {server_name}")
+            return False
+        
+        logger.info(f"EC2 instance created successfully: instance_id={instance_id}, name={server_name}")
+        
+        # Configure shutdown mechanism based on the specified method
+        try:
+            if shutdown_method == 'CPUUtilization':
+                alarm_threshold = message.get('alarmThreshold', 5.0)
+                alarm_period = message.get('alarmEvaluationPeriod', 30)
+                logger.info(f"Configuring CPU-based shutdown: instance={instance_id}, threshold={alarm_threshold}, period={alarm_period}")
+                ec2_utils.update_alarm(instance_id, 'CPUUtilization', alarm_threshold, alarm_period)
+                logger.info(f"CPU alarm configured successfully: instance={instance_id}")
+                
+            elif shutdown_method == 'Connections':
+                alarm_threshold = message.get('alarmThreshold', 0)
+                alarm_period = message.get('alarmEvaluationPeriod', 30)
+                logger.info(f"Configuring connection-based shutdown: instance={instance_id}, threshold={alarm_threshold}, period={alarm_period}")
+                ec2_utils.update_alarm(instance_id, 'Connections', alarm_threshold, alarm_period)
+                logger.info(f"Connection alarm configured successfully: instance={instance_id}")
+                
+            elif shutdown_method == 'Schedule':
+                start_schedule = message.get('startScheduleExpression', '')
+                stop_schedule = message.get('stopScheduleExpression', '')
+                timezone = message.get('timezone', 'UTC')
+                
+                if stop_schedule:
+                    logger.info(f"Configuring scheduled shutdown: instance={instance_id}, schedule={stop_schedule}, timezone={timezone}")
+                    configure_scheduled_shutdown_event(instance_id, stop_schedule, timezone)
+                    logger.info(f"Shutdown schedule configured successfully: instance={instance_id}")
+                
+                if start_schedule:
+                    logger.info(f"Configuring scheduled start: instance={instance_id}, schedule={start_schedule}, timezone={timezone}")
+                    configure_start_event(instance_id, start_schedule, timezone)
+                    logger.info(f"Start schedule configured successfully: instance={instance_id}")
+                    
+        except Exception as e:
+            logger.error(f"Server creation WARNING: Failed to configure shutdown mechanism - instance={instance_id}, error={str(e)}", exc_info=True)
+            # Continue with creation even if shutdown configuration fails
+        
+        # Store initial configuration in DynamoDB
+        try:
+            logger.info(f"Storing server configuration in DynamoDB: instance={instance_id}")
+            dyn = ddbHelper.Dyn()
+            
+            config = {
+                'id': instance_id,
+                'shutdownMethod': shutdown_method,
+                'alarmThreshold': message.get('alarmThreshold', 0.0),
+                'alarmEvaluationPeriod': message.get('alarmEvaluationPeriod', 0),
+                'startScheduleExpression': message.get('startScheduleExpression', ''),
+                'stopScheduleExpression': message.get('stopScheduleExpression', ''),
+                'runCommand': '/opt/minecraft/start.sh',  # Default Minecraft command
+                'workDir': '/opt/minecraft',  # Default working directory
+                'timezone': message.get('timezone', 'UTC'),
+                'autoConfigured': False,  # User-configured server
+                'isBootstrapComplete': False,  # Will be set to true after bootstrap
+                'minecraftVersion': '',
+                'latestPatchUpdate': ''
+            }
+            
+            dyn.put_server_config(config)
+            logger.info(f"Server configuration stored successfully: instance={instance_id}")
+            
+        except Exception as e:
+            logger.error(f"Server creation WARNING: Failed to store configuration in DynamoDB - instance={instance_id}, error={str(e)}", exc_info=True)
+            # Continue with creation even if DynamoDB storage fails
+        
+        # Send status update to AppSync with the actual instance ID
+        try:
+            logger.info(f"Sending completion status to AppSync: instance={instance_id}")
+            send_to_appsync('createServer', instance_id, 'COMPLETED', 
+                          f"Server {server_name} created successfully", user_email)
+            logger.info(f"Completion status sent successfully: instance={instance_id}")
+        except Exception as e:
+            logger.error(f"Server creation WARNING: Failed to send status to AppSync - instance={instance_id}, error={str(e)}", exc_info=True)
+        
+        logger.info(f"Server creation SUCCESS: Server {server_name} created successfully with instance ID {instance_id}")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Server creation handler FAILED with exception: error={str(e)}", exc_info=True)
         return False
 
 def handle_update_server_name(instance_id, arguments):

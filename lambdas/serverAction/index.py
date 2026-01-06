@@ -3,6 +3,7 @@ import logging
 import os
 import json
 import time
+import re
 import authHelper
 import ec2Helper
 import utilHelper
@@ -85,6 +86,80 @@ def send_status_to_appsync(action, instance_id, status, message=None, user_email
     
     return True
             
+def _is_valid_cron(cron_expression):
+    """
+    Basic validation for cron expressions (5-field format)
+    
+    Args:
+        cron_expression: String containing cron expression
+        
+    Returns:
+        bool: True if valid format, False otherwise
+    """
+    if not cron_expression or not isinstance(cron_expression, str):
+        return False
+    
+    parts = cron_expression.strip().split()
+    if len(parts) != 5:
+        return False
+    
+    # Basic pattern check - allows numbers, ranges, wildcards, lists
+    cron_pattern = r'^[0-9*,/-]+$'
+    return all(re.match(cron_pattern, part) for part in parts)
+
+def validate_create_server_input(input_data):
+    """
+    Validate server creation parameters
+    
+    Args:
+        input_data: Dictionary containing server creation parameters
+        
+    Returns:
+        tuple: (is_valid, error_message)
+    """
+    # Server name validation
+    server_name = input_data.get('serverName', '').strip()
+    if not server_name or len(server_name) < 3 or len(server_name) > 50:
+        return False, "Server name must be 3-50 characters"
+    
+    if not re.match(r'^[a-zA-Z0-9_-]+$', server_name):
+        return False, "Server name can only contain alphanumeric characters, hyphens, and underscores"
+    
+    # Instance type validation
+    instance_type = input_data.get('instanceType')
+    allowed_types = ['t3.micro', 't3.small', 't3.medium', 't3.large', 't3.xlarge', 't3.2xlarge']
+    if instance_type not in allowed_types:
+        return False, f"Instance type must be one of {allowed_types}"
+    
+    # Shutdown method validation
+    shutdown_method = input_data.get('shutdownMethod')
+    if shutdown_method not in ['CPUUtilization', 'Connections', 'Schedule']:
+        return False, "Invalid shutdown method"
+    
+    # Threshold validation for CPU and Connection based shutdown
+    if shutdown_method in ['CPUUtilization', 'Connections']:
+        threshold = input_data.get('alarmThreshold')
+        if threshold is None or threshold < 0 or threshold > 100:
+            return False, "Threshold must be between 0 and 100"
+        
+        eval_period = input_data.get('alarmEvaluationPeriod')
+        if eval_period is None or eval_period < 1 or eval_period > 60:
+            return False, "Evaluation period must be between 1 and 60 minutes"
+    
+    # Schedule validation
+    if shutdown_method == 'Schedule':
+        start_schedule = input_data.get('startScheduleExpression', '').strip()
+        stop_schedule = input_data.get('stopScheduleExpression', '').strip()
+        
+        if not start_schedule or not stop_schedule:
+            return False, "Both start and stop schedules required for scheduled shutdown"
+        
+        # Validate cron format (basic check)
+        if not _is_valid_cron(start_schedule) or not _is_valid_cron(stop_schedule):
+            return False, "Invalid cron expression format"
+    
+    return True, None
+
 def validate_queue_message(action, instance_id, arguments=None, user_email=None):
     """
     Validate message before sending to queue
@@ -111,7 +186,8 @@ def validate_queue_message(action, instance_id, arguments=None, user_email=None)
         'startServer', 'stopServer', 'restartServer',
         'putServerConfig', 'putserverconfig',
         'updateServerConfig', 'updateserverconfig',
-        'updateServerName', 'updateservername'
+        'updateServerName', 'updateservername',
+        'createServer', 'createserver'
     ]
     if action.lower() not in [a.lower() for a in allowed_actions]:
         return False, f"Invalid action: {action}. Must be one of {allowed_actions}"
@@ -255,6 +331,95 @@ def handle_search_user_by_email(email):
             "message": f"An error occurred while searching for user: {str(e)}"
         })
 
+def handle_create_server(input_data, user_attributes):
+    """
+    Handle server creation request
+    
+    Args:
+        input_data: Dictionary containing server creation parameters
+        user_attributes: User information from JWT token
+        
+    Returns:
+        dict: Response with appropriate status code and body
+    """
+    try:
+        logger.info(f"Server creation request: user={user_attributes.get('email', 'unknown')}, data={input_data}")
+        
+        # Check if user is admin
+        cognito_groups = user_attributes.get('cognito:groups', [])
+        admin_group_name = os.getenv('ADMIN_GROUP_NAME', 'admin')
+        
+        if admin_group_name not in cognito_groups:
+            logger.warning(f"Non-admin user attempted server creation: user={user_attributes.get('email', 'unknown')}, groups={cognito_groups}")
+            return utl.response(403, {"err": "Only admin users can create servers"})
+        
+        logger.info(f"Admin authorization confirmed: user={user_attributes.get('email', 'unknown')}")
+        
+        # Validate input parameters
+        is_valid, error_message = validate_create_server_input(input_data)
+        if not is_valid:
+            logger.error(f"Server creation validation failed: user={user_attributes.get('email', 'unknown')}, error={error_message}")
+            return utl.response(400, {"err": error_message})
+        
+        logger.info(f"Server creation validation passed: user={user_attributes.get('email', 'unknown')}")
+        
+        # Prepare SQS message with all required parameters
+        message_data = {
+            'action': 'createServer',
+            'serverName': input_data['serverName'],
+            'instanceType': input_data['instanceType'],
+            'shutdownMethod': input_data['shutdownMethod'],
+            'userEmail': user_attributes.get('email'),
+            'timestamp': int(time.time())
+        }
+        
+        # Add optional parameters if provided
+        if 'alarmThreshold' in input_data:
+            message_data['alarmThreshold'] = input_data['alarmThreshold']
+        
+        if 'alarmEvaluationPeriod' in input_data:
+            message_data['alarmEvaluationPeriod'] = input_data['alarmEvaluationPeriod']
+        
+        if 'startScheduleExpression' in input_data:
+            message_data['startScheduleExpression'] = input_data['startScheduleExpression']
+        
+        if 'stopScheduleExpression' in input_data:
+            message_data['stopScheduleExpression'] = input_data['stopScheduleExpression']
+        
+        logger.info(f"Queuing server creation: user={user_attributes.get('email', 'unknown')}, server={input_data['serverName']}")
+        
+        # Send to SQS queue
+        if not server_action_queue_url:
+            logger.error(f"Server creation FAILED: No queue URL configured")
+            return utl.response(500, {"err": "Queue not configured"})
+        
+        try:
+            response = sqs_client.send_message(
+                QueueUrl=server_action_queue_url,
+                MessageBody=json.dumps(message_data)
+            )
+            message_id = response.get('MessageId', 'unknown')
+            logger.info(f"Server creation queued successfully: messageId={message_id}, server={input_data['serverName']}")
+            
+            # Send initial PROCESSING status
+            send_status_to_appsync(
+                action='createServer',
+                instance_id='pending',  # No instance ID yet
+                status='PROCESSING',
+                message=f"Server creation request queued for processing",
+                user_email=user_attributes.get('email')
+            )
+            
+            return utl.response(202, {"msg": f"Server creation request queued for processing"})
+            
+        except Exception as e:
+            logger.error(f"Server creation queue FAILED: user={user_attributes.get('email', 'unknown')}, error={str(e)}", exc_info=True)
+            return utl.response(500, {"err": "Failed to queue server creation request"})
+    
+    except Exception as e:
+        logger.error(f"Server creation FAILED with exception: user={user_attributes.get('email', 'unknown')}, error={str(e)}", exc_info=True)
+        return utl.response(500, {"err": "Server creation request failed"})
+
 def handle_add_user_to_server(instance_id, user_email):
     """
     Helper function to add a user to a server's Cognito group
@@ -360,140 +525,125 @@ def handle_local_invocation(event, context):
     # Handle local invocations here
     return action_process_sync(event["action"], event["instanceId"])
 
-def handler(event, context):
-    """
-    Main handler for ServerAction Lambda
-    Validates authorization and routes requests to appropriate handlers
+def handle_search_user_by_email_operation(event):
+    """Handle searchUserByEmail operation."""
+    email = event["arguments"].get("email")
+    if not email:
+        return utl.response(400, {"err": "email is required"})
+    return handle_search_user_by_email(email)
+
+def handle_create_server_operation(event, user_attributes):
+    """Handle createServer operation."""
+    input_data = event["arguments"].get("input")
+    if not input_data:
+        return utl.response(400, {"err": "input is required for createServer"})
+    return handle_create_server(input_data, user_attributes)
+
+def route_instance_operation(event, instance_id, user_attributes):
+    """Route operations that require instance authorization."""
+    field_name = event["info"]["fieldName"].lower()
     
-    Args:
-        event: Lambda event from AppSync
-        context: Lambda context
-        
-    Returns:
-        dict: Response with appropriate status code and body
-    """
-    try:
-        # Check for authorization header
-        if 'request' in event:
-            if 'headers' in event['request']:
-                if 'authorization' in event['request']['headers']:
-                    # Get JWT token from header
-                    token = event['request']['headers']['authorization']
-                else:
-                    logger.error("No Authorization header found")
-                    return utl.response(401, {"err": "No Authorization header found"})
-            else:
-                logger.error("No headers found in request")
-                return utl.response(401, {"err": "No headers found in request"})
-        else:
-            # Local invocation
-            return handle_local_invocation(event, context)
-
-    except Exception as e:
-        logger.error("Error processing request headers: %s", e)
-        return utl.response(401, {"err": str(e)})
-
-    # Get user info from JWT token
-    try:
-        user_attributes = auth.process_token(token)
-    except Exception as e:
-        logger.error(f"Token processing FAILED: error={str(e)}", exc_info=True)
-        return utl.response(401, {"err": "Invalid token"})
-
-    # Check if claims are valid
-    if user_attributes is None:
-        logger.error("Invalid Token")
-        return utl.response(401, {"err": "Invalid token"})
-
-    # Validate arguments exist
-    if not event.get("arguments"):
-        logger.error("No arguments found in the event")
-        return utl.response(400, {"err": "No arguments found in the event"})
-
-    # Handle searchUserByEmail - doesn't require instance authorization
-    field_name = event["info"]["fieldName"]
-    if field_name.lower() == "searchuserbyemail":
-        email = event["arguments"].get("email")
-        if not email:
-            logger.error("email is required for searchUserByEmail")
-            return utl.response(400, {"err": "email is required"})
-        return handle_search_user_by_email(email)
-
-    # Extract instance_id from arguments
-    instance_id = (event["arguments"].get("instanceId") or 
-                 event["arguments"].get("id") or
-                 event["arguments"].get("input", {}).get("id"))
-
-    if not instance_id:
-        logger.error("Instance id is not present in the event") 
-        return utl.response(400, {"err": "Instance id is not present in the event"})
-
-    # Extract input arguments if present
+    # Prepare input data
     input_data = None
     if input_args := event["arguments"].get("input"):
-        # Pass through all input fields, ensuring id is set
         input_data = {**input_args, 'id': instance_id}
     
-    logger.info("Received instanceId: %s", instance_id)
-
     # Check authorization
     try:
         is_authorized = check_authorization(event, instance_id, user_attributes)
+        if not is_authorized:
+            logger.error("%s is not authorized for instance %s", user_attributes["email"], instance_id)
+            return utl.response(401, {"err": "User not authorized"})
     except Exception as e:
-        logger.error(f"Authorization check FAILED with exception: user={user_attributes.get('email', 'unknown')}, instance={instance_id}, error={str(e)}", exc_info=True)
+        logger.error(f"Authorization check FAILED: user={user_attributes.get('email', 'unknown')}, instance={instance_id}, error={str(e)}", exc_info=True)
         return utl.response(500, {"err": "Authorization check failed"})
-
-    if not is_authorized:
-        logger.error("%s is not authorized for instance %s", user_attributes["email"], instance_id)
-        return utl.response(401, {"err": "User not authorized"})
-
-    logger.info("Received field name: %s for user %s", field_name, user_attributes["email"])
     
-    # Read-only operations processed immediately
-    if field_name.lower() in ["getserverconfig", "getserverusers"]:
+    # Read-only operations
+    if field_name in ["getserverconfig", "getserverusers"]:
         return action_process_sync(field_name, instance_id, input_data)
     
-    # Handle addUserToServer synchronously
-    if field_name.lower() == "addusertoserver":
+    # Add user operation
+    if field_name == "addusertoserver":
         user_email = event["arguments"].get("userEmail")
         if not user_email:
-            logger.error("userEmail is required for addUserToServer")
             return utl.response(400, {"err": "userEmail is required"})
         return handle_add_user_to_server(instance_id, user_email)
     
-    # Handle updateServerName - queue for async processing
-    if field_name.lower() == "updateservername":
+    # Update server name
+    if field_name == "updateservername":
         new_name = event["arguments"].get("newName")
         if not new_name:
-            logger.error("newName is required for updateServerName")
             return utl.response(400, {"err": "newName is required"})
         
-        # Validate server name (basic validation)
-        if not new_name.strip():
-            logger.error("Server name cannot be empty")
+        new_name = new_name.strip()
+        if not new_name:
             return utl.response(400, {"err": "Server name cannot be empty"})
-        
-        if len(new_name.strip()) > 255:
-            logger.error("Server name too long")
+        if len(new_name) > 255:
             return utl.response(400, {"err": "Server name cannot exceed 255 characters"})
         
-        # Queue the action for async processing
-        return send_to_queue("updateServerName", instance_id, {"newName": new_name.strip()}, user_attributes["email"])
+        return send_to_queue("updateServerName", instance_id, {"newName": new_name}, user_attributes["email"])
     
-    # Config mutations need to return the config data after queuing
-    if field_name.lower() in ["putserverconfig", "updateserverconfig"]:
-        # Queue the action for async processing
+    # Config operations
+    if field_name in ["putserverconfig", "updateserverconfig"]:
         queue_response = send_to_queue(field_name, instance_id, input_data, user_attributes["email"])
         
-        # If queuing succeeded, return the input data as the response
-        # (the actual processing happens async, but we return the expected config immediately)
         if queue_response.get('statusCode') == 202:
             logger.info(f"Config queued successfully, returning config data: instance={instance_id}")
             return input_data
         else:
-            # If queuing failed, return the error
             logger.error(f"Config queuing failed: instance={instance_id}, response={queue_response}")
             return queue_response
     
-    # Queue all other write operations (start/stop/restart)
+    # All other write operations
     return send_to_queue(field_name, instance_id, input_data, user_attributes["email"])
+
+def handler(event, context):
+    """
+    Main handler for ServerAction Lambda
+    Validates authorization and routes requests to appropriate handlers
+    """
+    try:
+        # Handle local invocation or extract token
+        try:
+            token = authHelper.extract_auth_token(event)
+        except ValueError as e:
+            if str(e) == "Local invocation detected":
+                return handle_local_invocation(event, context)
+            logger.error(str(e))
+            return utl.response(401, {"err": str(e)})
+        
+        # Validate token and get user
+        try:
+            user_attributes = authHelper.validate_user_token(token, auth)
+        except ValueError as e:
+            return utl.response(401, {"err": str(e)})
+        
+        # Validate arguments exist
+        if not event.get("arguments"):
+            logger.error("No arguments found in the event")
+            return utl.response(400, {"err": "No arguments found in the event"})
+        
+        # Handle special operations (no instance ID required)
+        field_name = event["info"]["fieldName"].lower()
+        
+        if field_name == "searchuserbyemail":
+            return handle_search_user_by_email_operation(event)
+        
+        if field_name == "createserver":
+            return handle_create_server_operation(event, user_attributes)
+        
+        # Extract instance ID for regular operations
+        instance_id = ec2Helper.extract_instance_id(event)
+        if not instance_id:
+            logger.error("Instance id is not present in the event")
+            return utl.response(400, {"err": "Instance id is not present in the event"})
+        
+        logger.info("Received instanceId: %s", instance_id)
+        logger.info("Received field name: %s for user %s", event["info"]["fieldName"], user_attributes["email"])
+        
+        # Route instance operations
+        return route_instance_operation(event, instance_id, user_attributes)
+        
+    except Exception as e:
+        logger.error("Unexpected error in handler: %s", e, exc_info=True)
+        return utl.response(500, {"err": "Internal server error"})

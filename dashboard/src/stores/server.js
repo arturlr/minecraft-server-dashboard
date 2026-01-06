@@ -135,6 +135,24 @@ export const useServerStore = defineStore("server", {
                 console.log(`Server name updated: ${serverId} -> ${newName}`);
             }
         },
+
+        addNewServer(server) {
+            if (server && server.id) {
+                // Add to serversDict
+                this.serversDict[server.id] = server;
+                
+                // Add to serversList if not already present
+                const existingIndex = this.serversList.findIndex(s => s.id === server.id);
+                if (existingIndex === -1) {
+                    this.serversList.push(server);
+                    console.log(`New server added: ${server.id} (${server.name || server.id})`);
+                } else {
+                    // Update existing server
+                    this.serversList[existingIndex] = server;
+                    console.log(`Existing server updated: ${server.id} (${server.name || server.id})`);
+                }
+            }
+        },
                 
         setSelectedServerId(id) {
             console.log("setSelectedServerId", id);
