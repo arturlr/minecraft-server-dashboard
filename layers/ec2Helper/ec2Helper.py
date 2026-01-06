@@ -17,6 +17,12 @@ logger.setLevel(logging.INFO)
 
 session = boto3.session.Session()
 aws_region = session.region_name
+
+def extract_instance_id(event):
+    """Extract instance ID from Lambda event arguments."""
+    return (event["arguments"].get("instanceId") or 
+            event["arguments"].get("id") or
+            event["arguments"].get("input", {}).get("id"))
                
 class Ec2Utils:
     def __init__(self):
@@ -49,26 +55,54 @@ class Ec2Utils:
     def create_ec2_instance(self, instance_name, instance_type='t3.micro', 
                        subnet_id=None,
                        security_group_id=None):
-        # None for subnet_id and security_group_id means the default one
+        """
+        Create a new EC2 instance with specified configuration
+        
+        Args:
+            instance_name (str): Name tag for the instance
+            instance_type (str): EC2 instance type (default: t3.micro)
+            subnet_id (str): Subnet ID (None for default)
+            security_group_id (list): Security group IDs (None for default)
+            
+        Returns:
+            str: Instance ID if successful, None if failed
+        """
+        logger.info(f"------- create_ec2_instance: {instance_name} ({instance_type})")
+        
+        # Validate instance type
+        supported_instance_types = [
+            't3.micro', 't3.small', 't3.medium', 
+            't3.large', 't3.xlarge', 't3.2xlarge'
+        ]
+        
+        if instance_type not in supported_instance_types:
+            logger.error(f"Unsupported instance type: {instance_type}. Supported types: {supported_instance_types}")
+            return None
+        
         try:
             # Get the latest Ubuntu 22.04 AMI
             ami_id = self.get_latest_ubuntu_ami()
-            print(f"Using Ubuntu 22.04 AMI: {ami_id}")
+            if not ami_id:
+                logger.error("Failed to retrieve Ubuntu 22.04 AMI ID")
+                return None
+                
+            logger.info(f"Using Ubuntu 22.04 AMI: {ami_id}")
+            logger.info(f"Creating instance with type: {instance_type}")
             
             # Define block device mappings for two EBS volumes
             block_device_mappings = [
                 {
-                    # Root volume (OS) - size depends on AMI default
+                    # Root volume (OS) - 16GB for OS
                     'DeviceName': '/dev/sda1',
                     'Ebs': {
-                        'VolumeSize': 16,  # 8 GB for OS
+                        'VolumeSize': 16,  # 16 GB for OS
                         'VolumeType': 'gp3',
                         'DeleteOnTermination': True,
                         'Encrypted': False
                     }
                 },
                 {
-                    # Second volume for game data and logs
+                    # Second volume for game data and logs - 50GB for game
                     'DeviceName': '/dev/sdf',
                     'Ebs': {
                         'VolumeSize': 50,  # 50 GB for game and logs
@@ -78,21 +112,24 @@ class Ec2Utils:
                     }
                 }
             ]
-                        
-            response = self.ec2_client.run_instances(
-                ImageId=ami_id,
-                InstanceType=instance_type,
-                MinCount=1,
-                MaxCount=1,
-                #KeyName=KEY_NAME,
-                SubnetId=subnet_id,
-                SecurityGroupIds=security_group_id,
-                IamInstanceProfile={'Arn': self.ec2InstanceProfileArn},
-                BlockDeviceMappings=block_device_mappings,
-                TagSpecifications=[
+            
+            logger.info("Configured two EBS volumes: 16GB root (/dev/sda1), 50GB data (/dev/sdf)")
+            
+            # Prepare run_instances parameters
+            run_params = {
+                'ImageId': ami_id,
+                'InstanceType': instance_type,
+                'MinCount': 1,
+                'MaxCount': 1,
+                'IamInstanceProfile': {'Arn': self.ec2InstanceProfileArn},
+                'BlockDeviceMappings': block_device_mappings,
+                'TagSpecifications': [
                     {
                         'ResourceType': 'instance',
-                        'Tags': [{'Key': 'Name', 'Value': instance_name}]
+                        'Tags': [
+                            {'Key': 'Name', 'Value': instance_name},
+                            {'Key': 'App', 'Value': self.appValue}
+                        ]
                     },
                     {
                         'ResourceType': 'volume',
@@ -102,17 +139,48 @@ class Ec2Utils:
                         ]
                     }
                 ]
-            )
+            }
+            
+            # Add optional parameters if provided
+            if subnet_id:
+                run_params['SubnetId'] = subnet_id
+                logger.info(f"Using subnet: {subnet_id}")
+            else:
+                logger.info("Using default subnet")
+                
+            if security_group_id:
+                run_params['SecurityGroupIds'] = security_group_id
+                logger.info(f"Using security groups: {security_group_id}")
+            else:
+                logger.info("Using default security group")
+                        
+            response = self.ec2_client.run_instances(**run_params)
             
             instance_id = response['Instances'][0]['InstanceId']
-            print(f"EC2 instance created: {instance_id}")
-            print(f"Root volume (OS) on /dev/sda1")
-            print(f"Data volume (game/logs) on /dev/sdf")
+            logger.info(f"✓ EC2 instance created successfully: {instance_id}")
+            logger.info(f"✓ Instance type: {instance_type}")
+            logger.info(f"✓ Root volume (OS): 16GB on /dev/sda1")
+            logger.info(f"✓ Data volume (game/logs): 50GB on /dev/sdf")
+            logger.info(f"✓ Tags applied: Name={instance_name}, App={self.appValue}")
             
             return instance_id
         
         except ClientError as e:
-            print(f"✗ Error: {e}")
+            error_code = e.response.get('Error', {}).get('Code', 'Unknown')
+            error_message = e.response.get('Error', {}).get('Message', str(e))
+            logger.error(f"✗ AWS ClientError creating instance: {error_code} - {error_message}")
+            
+            # Log specific common errors with helpful context
+            if error_code == 'InvalidParameterValue':
+                logger.error("Check if the instance type is available in the current region")
+            elif error_code == 'InsufficientInstanceCapacity':
+                logger.error("AWS does not have sufficient capacity for the requested instance type")
+            elif error_code == 'UnauthorizedOperation':
+                logger.error("Check IAM permissions for ec2:RunInstances and iam:PassRole")
+            
+            return None
+        except Exception as e:
+            logger.error(f"✗ Unexpected error creating instance: {str(e)}", exc_info=True)
             return None
 
 

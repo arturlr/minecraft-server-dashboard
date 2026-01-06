@@ -1,8 +1,9 @@
 <script setup>
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { useUserStore } from '../stores/user';
 import { signOut } from 'aws-amplify/auth';
 import { useRouter } from 'vue-router';
+import CreateServerDialog from './CreateServerDialog.vue';
 
 const userStore = useUserStore();
 const router = useRouter();
@@ -11,6 +12,8 @@ const fullname = computed(() => userStore.fullname);
 const email = computed(() => userStore.email);
 const isAdmin = computed(() => userStore.isAdmin);
 
+const showCreateDialog = ref(false);
+
 async function userSignOut() {
   try {
     await signOut();
@@ -18,6 +21,14 @@ async function userSignOut() {
   } catch (error) {
     console.error('Error signing out:', error);
   }
+}
+
+const emit = defineEmits(['server-created']);
+
+function handleServerCreated() {
+  // Emit event to parent to refresh server list
+  emit('server-created');
+  console.log('Server created successfully');
 }
 </script>
 
@@ -29,6 +40,18 @@ async function userSignOut() {
     </v-app-bar-title>
 
     <v-spacer></v-spacer>
+
+    <!-- Add Server Button (Admin Only) -->
+    <v-btn
+      v-if="isAdmin"
+      @click="showCreateDialog = true"
+      color="accent"
+      variant="elevated"
+      class="mr-4"
+    >
+      <v-icon class="mr-2">mdi-plus</v-icon>
+      Add Server
+    </v-btn>
 
     <div class="d-flex align-center mr-4 user-info">
       <v-icon class="mr-2">mdi-account-circle</v-icon>
@@ -48,6 +71,12 @@ async function userSignOut() {
         </template>
       </v-tooltip>
     </v-btn>
+
+    <!-- Create Server Dialog -->
+    <CreateServerDialog
+      v-model:visible="showCreateDialog"
+      @server-created="handleServerCreated"
+    />
   </v-app-bar>
 </template>
 

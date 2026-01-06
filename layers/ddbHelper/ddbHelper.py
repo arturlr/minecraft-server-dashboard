@@ -252,7 +252,7 @@ class Dyn:
             expression_values = {}
             expression_names = {}
             
-            for field_name in self.ALLOWED_UPDATE_FIELDS:
+            for field_name in ALLOWED_UPDATE_FIELDS:
                 if field_name in config and config[field_name] is not None:
                     placeholder = f":{field_name}"
                     name_placeholder = f"#{field_name}"

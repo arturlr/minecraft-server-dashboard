@@ -187,6 +187,12 @@ Resources:
               Version: "1.0.0"
             Pipeline:
               - serverActionFunction
+          createServer:
+            Runtime:
+              Name: APPSYNC_JS
+              Version: "1.0.0"
+            Pipeline:
+              - serverActionFunction
           fixServerRole:
             Runtime:
               Name: APPSYNC_JS
@@ -723,6 +729,7 @@ Resources:
           APPSYNC_URL: !GetAtt GraphQLAPI.GraphQLUrl
           COGNITO_USER_POOL_ID:  
             Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-UserPoolId"
+          ADMIN_GROUP_NAME: admin
 
   PermissionForScheduledEventsToInvokeServerAction:
     Type: AWS::Lambda::Permission

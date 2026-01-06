@@ -343,55 +343,75 @@ def queue_bootstrap_server(instance_id):
         logger.error(f"Error in bootstrap_server for {instance_id}: {str(e)}", exc_info=True)
         # Don't raise - allow the event handler to continue
 
-def handler(event, context):     
+def handle_instance_state_change(event):
+    """Handle EC2 Instance State-change Notification events."""
+    if not scheduled_event_bridge_rule:
+        logger.error("Scheduled Event Name not registered")
+        return "No Scheduled Event"
     
-    # Event Brigde
-    if 'detail-type' in event:
-        logger.info(event['detail-type'])
-        if event['detail-type'] == "EC2 Instance State-change Notification":   
-            logger.info("Found InstanceId: " + event['detail']['instance-id'] + ' at ' + event['detail']['state'] + ' state')            
-            if not scheduled_event_bridge_rule:
-                logger.error("Scheduled Event Name not registered")
-                return "No Scheduled Event"
-            
-            instance_id = event['detail']['instance-id']
-                                
-            if event['detail']['state'] == "running":                
-                enable_scheduled_rule()
-                
-                # Ensure server exists in DynamoDB
-                config = dyn.get_server_config(instance_id)
-                if not config or not config.get('shutdownMethod'):
-                    logger.warning(f"Server {instance_id} has not record. Creating one")    
-                    ensure_server_in_dynamodb(instance_id)
-                    config = dyn.get_server_config(instance_id)
-                
-                # Ensure Cognito group exists for the server (only if config exists)
-                if config and not config.get('hasCognitoGroup'):
-                    ensure_server_has_cognito_group(instance_id)
-                
-                # Check if server needs bootstrapping
-                if config and not config.get('isBootstrapComplete'):
-                    logger.warning(f"Server {instance_id} is not bootstrapped, queueing bootstrap command")            
-                    queue_bootstrap_server(instance_id)
+    instance_id = event['detail']['instance-id']
+    state = event['detail']['state']
+    
+    logger.info("Found InstanceId: " + instance_id + ' at ' + state + ' state')
+    
+    if state == "running":
+        handle_instance_running(instance_id)
+    elif state == "stopped":
+        handle_instance_stopped()
+    
+    # Send state change notification
+    input_data = state_change_response(instance_id)
+    payload = {"query": changeServerState, 'variables': {"input": input_data}}
+    send_to_appsync(payload)
 
-            elif event['detail']['state'] == "stopped":
-                disable_scheduled_rule()
+def handle_instance_running(instance_id):
+    """Handle instance running state setup."""
+    enable_scheduled_rule()
+    
+    # Ensure server exists in DynamoDB
+    config = dyn.get_server_config(instance_id)
+    if not config or not config.get('shutdownMethod'):
+        logger.warning(f"Server {instance_id} has no record. Creating one")
+        ensure_server_in_dynamodb(instance_id)
+        config = dyn.get_server_config(instance_id)
+    
+    # Ensure Cognito group exists for the server
+    if config and not config.get('hasCognitoGroup'):
+        ensure_server_has_cognito_group(instance_id)
+    
+    # Check if server needs bootstrapping
+    if config and not config.get('isBootstrapComplete'):
+        logger.warning(f"Server {instance_id} is not bootstrapped, queueing bootstrap command")
+        queue_bootstrap_server(instance_id)
 
-            input = state_change_response(instance_id)
-            payload={"query": changeServerState, 'variables': { "input": input }}
+def handle_instance_stopped():
+    """Handle instance stopped state cleanup."""
+    disable_scheduled_rule()
 
-            send_to_appsync(payload)
+def handle_scheduled_event():
+    """Handle Scheduled Event notifications."""
+    input_data = schedule_event_response()
+    
+    for metrics in input_data:
+        payload = {"query": putServerMetric, 'variables': {"input": metrics}}
+        send_to_appsync(payload)
 
-        elif event['detail-type'] == "Scheduled Event":
-            input = schedule_event_response()
-            
-            for metrics in input:
-                payload={"query": putServerMetric, 'variables': { "input": metrics }}
-                send_to_appsync(payload)
-                   
-        else:
-            logger.error("No Event Found")
-            return "No Event Found"
-
-    return "Event Successful processed"
+def handler(event, context):
+    """Main handler for EventResponse Lambda."""
+    # Check if this is an EventBridge event
+    if 'detail-type' not in event:
+        logger.error("No detail-type found in event")
+        return "No Event Found"
+    
+    detail_type = event['detail-type']
+    logger.info(detail_type)
+    
+    if detail_type == "EC2 Instance State-change Notification":
+        handle_instance_state_change(event)
+    elif detail_type == "Scheduled Event":
+        handle_scheduled_event()
+    else:
+        logger.error("Unknown event type: " + detail_type)
+        return "No Event Found"
+    
+    return "Event Successfully processed"

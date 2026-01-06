@@ -34,7 +34,7 @@ const snackbar = ref({
   timeout: 3500
 });
 
-// Subscription reference
+// Subscription references
 let stateChangeSubscription = null;
 
 // Computed properties for selected server details with proper memoization
@@ -157,6 +157,21 @@ function handleServerNameUpdated(serverId, newName) {
   // serverStore.loadServers();
 }
 
+function handleServerCreated() {
+  // Show immediate feedback
+  handleActionComplete('Server creation completed! Refreshing server list...', true);
+  
+  // Refresh server list when a new server is created
+  serverStore.listServers().then(() => {
+    // Additional success feedback after refresh
+    console.log('Server list refreshed after creation');
+  }).catch((error) => {
+    console.error('Error refreshing server list after creation:', error);
+    const errorMessage = parseGraphQLError(error);
+    handleActionComplete(`Server created, but failed to refresh list: ${errorMessage}. Please refresh manually.`, false);
+  });
+}
+
 // Handle component errors from ErrorBoundary
 function handleComponentError({ error, instance, info }) {
   console.error('Component error caught by boundary:', error);
@@ -227,7 +242,7 @@ onUnmounted(() => {
 
 <template>
   <v-layout class="rounded rounded-md">
-    <AppToolbar />
+    <AppToolbar @server-created="handleServerCreated" />
     <v-main>
       <ErrorBoundary @error="handleComponentError">
         <v-container fluid class="pa-4">

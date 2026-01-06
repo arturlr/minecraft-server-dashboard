@@ -1,6 +1,6 @@
 # Implementation Plan
 
-- [ ] 1. Update GraphQL schema and backend infrastructure
+- [x] 1. Update GraphQL schema and backend infrastructure
   - Add CreateServerInput type and createServer mutation to GraphQL schema
   - Update AppSync resolvers to handle new mutation
   - _Requirements: 1.3, 5.1-5.5, 6.1-6.4_
@@ -9,7 +9,7 @@
   - **Property 9: Shutdown parameter validation**
   - **Validates: Requirements 3.5**
 
-- [ ] 2. Extend serverAction Lambda for server creation
+- [x] 2. Extend serverAction Lambda for server creation
   - Add handle_create_server() function with admin authorization check
   - Implement input validation for server name, instance type, and shutdown configuration
   - Add SQS message queuing for createServer action
@@ -27,7 +27,7 @@
   - **Property 2: Admin-only access**
   - **Validates: Requirements 1.1**
 
-- [ ] 3. Enhance serverActionProcessor Lambda for instance creation
+- [x] 3. Enhance serverActionProcessor Lambda for instance creation
   - Add process_create_server() function to handle SQS messages
   - Integrate with existing ec2Helper.create_ec2_instance() method
   - Add CloudWatch alarm and EventBridge rule creation logic
@@ -51,7 +51,7 @@
   - **Property 15: CloudWatch alarm creation**
   - **Validates: Requirements 6.1**
 
-- [ ] 4. Update ec2Helper.py for configurable instance types
+- [x] 4. Update ec2Helper.py for configurable instance types
   - Modify create_ec2_instance() method to accept instance_type parameter
   - Ensure proper error handling and logging
   - Maintain existing two-volume EBS configuration (16GB root for OS, 50GB data for game)
@@ -65,7 +65,7 @@
   - **Property 14: Network placement**
   - **Validates: Requirements 5.5**
 
-- [ ] 5. Create CreateServerDialog Vue component
+- [x] 5. Create CreateServerDialog Vue component
   - Build modal dialog with form fields for server name, instance type, and shutdown configuration
   - Implement client-side validation for all input fields
   - Add instance type dropdown with specifications and cost display
@@ -97,13 +97,13 @@
   - **Property 8: Form submission prevention**
   - **Validates: Requirements 4.5**
 
-- [ ] 6. Update AppToolbar component
+- [x] 6. Update AppToolbar component
   - Add "Add Server" button visible only to admin users
   - Integrate with CreateServerDialog component
   - Handle dialog open/close state management
   - _Requirements: 1.1_
 
-- [ ] 7. Add GraphQL mutations and queries to frontend
+- [x] 7. Add GraphQL mutations and queries to frontend
   - Add createServer mutation to mutations.js
   - Update existing queries if needed for server list refresh
   - Add error handling for creation failures
@@ -117,7 +117,7 @@
   - **Property 19: UI refresh after creation**
   - **Validates: Requirements 1.4, 6.5**
 
-- [ ] 8. Integrate server creation with existing dashboard functionality
+- [x] 8. Integrate server creation with existing dashboard functionality
   - Ensure new servers appear in server list after creation
   - Add real-time status updates via AppSync subscriptions
   - Test integration with existing server management features
