@@ -167,92 +167,69 @@ def check_authorization(event, instance_id, user_attributes):
         raise
 
 
-def handler(event, context):
-    """
-    Main handler for fixServerRole Lambda
-    Validates authorization and fixes IAM profile for EC2 instance
-    
-    Args:
-        event: Lambda event from AppSync
-        context: Lambda context
-        
-    Returns:
-        dict: Response with appropriate status code and body
-    """
-    logger.info(f"fixServerRole Lambda invoked")
-    
+def _extract_token(event):
+    """Extract authorization token from event"""
     try:
-        # Check for authorization header
-        if 'request' not in event:
-            logger.error("No request found in event")
-            return utl.response(400, {"err": "Invalid request format"})
-            
-        if 'headers' not in event['request']:
-            logger.error("No headers found in request")
-            return utl.response(401, {"err": "No headers found in request"})
-            
-        if 'authorization' not in event['request']['headers']:
-            logger.error("No Authorization header found")
-            return utl.response(401, {"err": "No Authorization header found"})
-        
-        token = event['request']['headers']['authorization']
-        
-    except Exception as e:
-        logger.error(f"Error processing request headers: {str(e)}")
-        return utl.response(401, {"err": str(e)})
+        return event['request']['headers']['authorization']
+    except KeyError as e:
+        missing_key = str(e).strip("'")
+        raise ValueError(f"Missing {missing_key} in request")
 
-    # Get user info from JWT token
-    try:
-        user_attributes = auth.process_token(token)
-    except Exception as e:
-        logger.error(f"Token processing FAILED: error={str(e)}", exc_info=True)
-        return utl.response(401, {"err": "Invalid token"})
-
-    if user_attributes is None:
-        logger.error("Invalid Token")
-        return utl.response(401, {"err": "Invalid token"})
-
-    # Validate arguments exist
-    if not event.get("arguments"):
-        logger.error("No arguments found in the event")
-        return utl.response(400, {"err": "No arguments found in the event"})
-
-    # Extract instance_id from arguments
-    instance_id = event["arguments"].get("instanceId")
-
+def _validate_arguments(event):
+    """Validate and extract instance_id from arguments"""
+    arguments = event.get("arguments")
+    if not arguments:
+        raise ValueError("No arguments found in the event")
+    
+    instance_id = arguments.get("instanceId")
     if not instance_id:
-        logger.error("Instance id is not present in the event") 
-        return utl.response(400, {"err": "Instance id is not present in the event"})
+        raise ValueError("Instance id is not present in the event")
+    
+    return instance_id
 
-    logger.info(f"Processing fixServerRole for instance: {instance_id}, user: {user_attributes['email']}")
+def _authenticate_user(token):
+    """Authenticate user and return user attributes"""
+    user_attributes = auth.process_token(token)
+    if not user_attributes:
+        raise ValueError("Invalid token")
+    return user_attributes
 
-    # Check authorization
+def _fix_iam_role(instance_id):
+    """Fix IAM role for instance"""
+    iam_profile = IamProfile(instance_id)
+    result = iam_profile.manage_iam_profile()
+    
+    if result.get("status") != "success":
+        error_msg = result.get("message", "Unknown error")
+        raise Exception(error_msg)
+    
+    return result.get("message")
+
+def handler(event, context):
+    """Main handler for fixServerRole Lambda"""
+    logger.info("fixServerRole Lambda invoked")
+    
     try:
-        is_authorized = check_authorization(event, instance_id, user_attributes)
-    except Exception as e:
-        logger.error(f"Authorization check FAILED: user={user_attributes.get('email', 'unknown')}, instance={instance_id}, error={str(e)}", exc_info=True)
-        return utl.response(500, {"err": "Authorization check failed"})
-
-    if not is_authorized:
-        logger.error(f"{user_attributes['email']} is not authorized for instance {instance_id}")
-        return utl.response(401, {"err": "User not authorized"})
-
-    # Fix IAM role
-    try:
-        logger.info(f"Creating IamProfile manager for instance: {instance_id}")
-        iam_profile = IamProfile(instance_id)
+        # Extract and validate inputs
+        token = _extract_token(event)
+        instance_id = _validate_arguments(event)
+        user_attributes = _authenticate_user(token)
         
-        logger.info(f"Executing IAM profile management for instance: {instance_id}")
-        result = iam_profile.manage_iam_profile()
+        logger.info(f"Processing fixServerRole: instance={instance_id}, user={user_attributes['email']}")
         
-        if result.get("status") == "success":
-            logger.info(f"IAM role fix SUCCESS: {result.get('message')} - instance={instance_id}")
-            return utl.response(200, {"msg": result.get("message"), "success": True})
-        else:
-            error_msg = result.get("message", "Unknown error")
-            logger.error(f"IAM role fix FAILED: {error_msg} - instance={instance_id}")
-            return utl.response(500, {"err": error_msg, "success": False})
-            
+        # Check authorization
+        if not check_authorization(event, instance_id, user_attributes):
+            logger.error(f"User {user_attributes['email']} not authorized for {instance_id}")
+            return utl.response(401, {"err": "User not authorized"})
+        
+        # Fix IAM role
+        message = _fix_iam_role(instance_id)
+        logger.info(f"IAM role fix SUCCESS: {message}")
+        return utl.response(200, {"msg": message, "success": True})
+        
+    except ValueError as e:
+        logger.error(f"Validation error: {str(e)}")
+        return utl.response(400, {"err": str(e)})
     except Exception as e:
-        logger.error(f"IAM role fix FAILED with exception: instance={instance_id}, error={str(e)}", exc_info=True)
+        logger.error(f"IAM role fix FAILED: {str(e)}", exc_info=True)
         return utl.response(500, {"err": f"Failed to fix IAM role: {str(e)}", "success": False})

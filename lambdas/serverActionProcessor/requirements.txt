@@ -1,4 +1,3 @@
 httpx
-httpx-aws-auth
 boto3
 pytz
