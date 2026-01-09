@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Detailed Server Settings</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#13ec5b",
+                        "background-light": "#f6f8f6",
+                        "background-dark": "#102216",
+                        "surface-dark": "#1c2e21",
+                        "surface-darker": "#15261d",
+                        "border-green": "#2d4535"
+                    },
+                    fontFamily: {
+                        "display": ["Space Grotesk", "sans-serif"]
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                },
+            },
+        }
+    </script>
+<style>input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 16px;
+            width: 16px;
+            border-radius: 50%;
+            background: #13ec5b;
+            cursor: pointer;
+            margin-top: -6px;
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            cursor: pointer;
+            background: #2d4535;
+            border-radius: 2px;
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-white font-display overflow-hidden">
+<div class="flex h-screen w-full flex-row overflow-hidden">
+<div class="hidden lg:flex flex-col w-72 border-r border-border-green bg-background-dark flex-shrink-0">
+<div class="p-6">
+<div class="flex items-center gap-4 mb-8">
+<div class="bg-center bg-no-repeat bg-cover rounded-xl size-12 shadow-lg shadow-primary/10" data-alt="Abstract pixelated green block texture representing a server logo" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuBtwjNyniuB9PdU_bq6uL0iPqI3hVVOYrqLpY27fRzE66FYL7kzai6eYFUiJK7qw13qrSnbu9NPdB6pdYU0Tg1kFxPDPlCC35E4YMVLadugzikscxcyep9KWzlnkjp9Xu6eQvfOJs11MiKSI5I9iVLR0j_Hs2I0PF8Lv4bzIB4opXder5TMRszLjdRC3-p1OYni40gYYkxg5ah30TUJD-H4WBeci9nU2EDhvEwmO3jjRzZyxLHBmJMhF1QmouHEvWcOmmQRyYuYIkg");'></div>
+<div class="flex flex-col">
+<h1 class="text-white text-lg font-bold leading-tight">Minecraft Server</h1>
+<p class="text-[#9db9a6] text-xs font-medium uppercase tracking-wider">Dashboard</p>
+</div>
+</div>
+<div class="flex flex-col gap-2">
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg bg-primary/20 border border-primary/20 text-primary" href="#">
+<span class="material-symbols-outlined text-[20px]">settings</span>
+<p class="text-sm font-bold">General Settings</p>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-surface-dark text-[#9db9a6] transition-colors group" href="#">
+<span class="material-symbols-outlined text-[20px] group-hover:text-white transition-colors">schedule</span>
+<p class="text-sm font-medium group-hover:text-white transition-colors">Automation</p>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-surface-dark text-[#9db9a6] transition-colors group" href="#">
+<span class="material-symbols-outlined text-[20px] group-hover:text-white transition-colors">group</span>
+<p class="text-sm font-medium group-hover:text-white transition-colors">Members</p>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-surface-dark text-[#9db9a6] transition-colors group" href="#">
+<span class="material-symbols-outlined text-[20px] group-hover:text-white transition-colors">backup</span>
+<p class="text-sm font-medium group-hover:text-white transition-colors">Backups</p>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-surface-dark text-[#9db9a6] transition-colors group" href="#">
+<span class="material-symbols-outlined text-[20px] group-hover:text-white transition-colors">terminal</span>
+<p class="text-sm font-medium group-hover:text-white transition-colors">Console</p>
+</a>
+</div>
+</div>
+<div class="mt-auto p-6 border-t border-border-green">
+<div class="flex items-center gap-3 px-2 py-2 text-[#9db9a6]">
+<span class="material-symbols-outlined">logout</span>
+<p class="text-sm font-medium">Log Out</p>
+</div>
+</div>
+</div>
+<div class="flex-1 flex flex-col h-full overflow-hidden bg-background-light dark:bg-background-dark relative">
+<header class="flex-shrink-0 px-8 py-6 border-b border-border-green bg-background-dark/95 backdrop-blur z-10">
+<div class="flex flex-wrap items-center justify-between gap-4 max-w-6xl mx-auto w-full">
+<div class="flex flex-col gap-1">
+<div class="flex items-center gap-3">
+<h2 class="text-3xl font-black tracking-tight text-white">Survival Server 01</h2>
+<span class="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-bold text-primary border border-primary/20">
+<span class="h-1.5 w-1.5 rounded-full bg-primary animate-pulse"></span>
+                            Online
+                        </span>
+</div>
+<p class="text-[#9db9a6] text-sm">Last restarted 2 hours ago • version 1.20.4</p>
+</div>
+<div class="flex items-center gap-3">
+<button class="flex items-center justify-center gap-2 h-10 px-4 rounded-lg bg-surface-dark border border-border-green text-white text-sm font-bold hover:bg-[#25382b] transition-colors">
+<span class="material-symbols-outlined text-[18px]">restart_alt</span>
+                        Restart
+                    </button>
+<button class="flex items-center justify-center gap-2 h-10 px-6 rounded-lg bg-primary text-background-dark text-sm font-bold hover:bg-[#0fd650] transition-colors shadow-[0_0_15px_rgba(19,236,91,0.3)]">
+<span class="material-symbols-outlined text-[18px]">save</span>
+                        Save Changes
+                    </button>
+</div>
+</div>
+</header>
+<main class="flex-1 overflow-y-auto p-8">
+<div class="max-w-6xl mx-auto flex flex-col gap-10 pb-20">
+<section>
+<div class="flex items-center gap-2 mb-5 border-b border-border-green pb-3">
+<span class="material-symbols-outlined text-primary">tune</span>
+<h3 class="text-xl font-bold text-white">General Properties</h3>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+<div class="flex flex-col gap-2">
+<label class="text-[#9db9a6] text-sm font-medium">Server Name</label>
+<input class="w-full bg-surface-dark border border-border-green rounded-lg h-12 px-4 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all placeholder-[#5c7062]" type="text" value="Survival Server 01"/>
+</div>
+<div class="flex flex-col gap-2">
+<label class="text-[#9db9a6] text-sm font-medium">Game Version</label>
+<div class="relative">
+<select class="w-full appearance-none bg-surface-dark border border-border-green rounded-lg h-12 px-4 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all cursor-pointer">
+<option selected="" value="1.20.4">Java Edition 1.20.4</option>
+<option value="1.20.2">Java Edition 1.20.2</option>
+<option value="1.19.4">Java Edition 1.19.4</option>
+</select>
+<div class="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-[#9db9a6]">
+<span class="material-symbols-outlined">expand_more</span>
+</div>
+</div>
+</div>
+<div class="flex flex-col gap-2">
+<label class="text-[#9db9a6] text-sm font-medium">Difficulty</label>
+<div class="flex bg-surface-dark p-1 rounded-lg border border-border-green">
+<button class="flex-1 py-2 text-sm font-medium text-[#9db9a6] hover:text-white rounded-md transition-colors">Peaceful</button>
+<button class="flex-1 py-2 text-sm font-medium text-[#9db9a6] hover:text-white rounded-md transition-colors">Easy</button>
+<button class="flex-1 py-2 text-sm font-bold bg-primary text-background-dark rounded-md shadow-sm">Normal</button>
+<button class="flex-1 py-2 text-sm font-medium text-[#9db9a6] hover:text-white rounded-md transition-colors">Hard</button>
+</div>
+</div>
+<div class="flex flex-col gap-2">
+<label class="text-[#9db9a6] text-sm font-medium">Max Players</label>
+<input class="w-full bg-surface-dark border border-border-green rounded-lg h-12 px-4 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all placeholder-[#5c7062]" type="number" value="20"/>
+</div>
+</div>
+</section>
+<section>
+<div class="flex items-center gap-2 mb-5 border-b border-border-green pb-3">
+<span class="material-symbols-outlined text-primary">bolt</span>
+<h3 class="text-xl font-bold text-white">Automation &amp; Performance</h3>
+</div>
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+<div class="bg-surface-darker border border-border-green rounded-xl p-6 relative overflow-hidden group h-full">
+<div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+<span class="material-symbols-outlined text-6xl text-primary">memory</span>
+</div>
+<div class="flex justify-between items-start mb-6">
+<div>
+<h4 class="text-white font-bold text-lg">Resource Watchdog</h4>
+<p class="text-[#9db9a6] text-sm">Auto-shutdown when idle to save resources.</p>
+</div>
+<label class="relative inline-flex items-center cursor-pointer">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="w-11 h-6 bg-[#2d4535] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+</label>
+</div>
+<div class="space-y-6">
+<div class="space-y-3">
+<div class="flex justify-between text-sm">
+<span class="text-white">CPU Idle Threshold</span>
+<span class="text-primary font-mono">15%</span>
+</div>
+<input class="w-full h-1 bg-surface-dark rounded-lg appearance-none cursor-pointer" max="100" min="0" type="range" value="15"/>
+</div>
+<div class="space-y-2">
+<label class="text-[#9db9a6] text-sm">Idle Duration (minutes)</label>
+<input class="w-full bg-surface-dark border border-border-green rounded-lg h-10 px-3 text-white text-sm focus:outline-none focus:border-primary" type="number" value="10"/>
+</div>
+</div>
+</div>
+<div class="bg-surface-darker border border-border-green rounded-xl p-6 flex flex-col h-full">
+<div class="flex justify-between items-center mb-4">
+<div>
+<h4 class="text-white font-bold text-lg">Task Scheduler</h4>
+<p class="text-[#9db9a6] text-sm">Manage recurring and scheduled tasks.</p>
+</div>
+<button class="text-primary hover:bg-primary/10 p-2 rounded-lg transition-colors">
+<span class="material-symbols-outlined">calendar_month</span>
+</button>
+</div>
+<div class="flex flex-col gap-3 mb-6">
+<div class="flex items-center justify-between p-3 rounded-lg bg-surface-dark border border-border-green/50">
+<div class="flex items-center gap-3">
+<div class="p-2 rounded bg-blue-500/20 text-blue-400">
+<span class="material-symbols-outlined text-[18px]">restart_alt</span>
+</div>
+<div>
+<p class="text-white text-sm font-bold">Daily Restart</p>
+<p class="text-[#9db9a6] text-xs">Every day at 04:00 AM UTC</p>
+</div>
+</div>
+<label class="relative inline-flex items-center cursor-pointer">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="w-9 h-5 bg-[#2d4535] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
+</label>
+</div>
+<div class="flex items-center justify-between p-3 rounded-lg bg-surface-dark border border-border-green/50">
+<div class="flex items-center gap-3">
+<div class="p-2 rounded bg-purple-500/20 text-purple-400">
+<span class="material-symbols-outlined text-[18px]">backup</span>
+</div>
+<div>
+<p class="text-white text-sm font-bold">World Backup</p>
+<p class="text-[#9db9a6] text-xs">Every 6 hours</p>
+</div>
+</div>
+<label class="relative inline-flex items-center cursor-pointer">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="w-9 h-5 bg-[#2d4535] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
+</label>
+</div>
+</div>
+<div class="mt-auto border-t border-border-green pt-5">
+<h5 class="text-white font-bold text-sm mb-4 flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[18px]">event</span>
+                                    Schedule New Event
+                                </h5>
+<div class="flex flex-col gap-4">
+<div>
+<label class="text-[#9db9a6] text-xs font-bold uppercase tracking-wider mb-1.5 block">Action</label>
+<div class="relative">
+<select class="w-full appearance-none bg-surface-dark border border-border-green rounded-lg h-10 px-3 text-white text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all cursor-pointer">
+<option>Start Server</option>
+<option>Stop Server</option>
+<option>Restart Server</option>
+</select>
+<div class="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-[#9db9a6]">
+<span class="material-symbols-outlined text-[20px]">expand_more</span>
+</div>
+</div>
+</div>
+<div class="grid grid-cols-2 gap-3">
+<div>
+<label class="text-[#9db9a6] text-xs font-bold uppercase tracking-wider mb-1.5 block">Date</label>
+<div class="relative">
+<input class="w-full bg-surface-dark border border-border-green rounded-lg h-10 px-3 text-white text-sm focus:outline-none focus:border-primary [color-scheme:dark] placeholder-[#5c7062]" type="date"/>
+</div>
+</div>
+<div>
+<label class="text-[#9db9a6] text-xs font-bold uppercase tracking-wider mb-1.5 block">Time</label>
+<div class="relative">
+<input class="w-full bg-surface-dark border border-border-green rounded-lg h-10 px-3 text-white text-sm focus:outline-none focus:border-primary [color-scheme:dark]" type="time"/>
+</div>
+</div>
+</div>
+<button class="w-full h-10 rounded-lg bg-primary text-background-dark text-sm font-bold hover:bg-[#0fd650] transition-colors shadow-lg shadow-primary/20 flex items-center justify-center gap-2">
+<span class="material-symbols-outlined text-[18px]">add_circle</span>
+                                        Add to Schedule
+                                    </button>
+</div>
+</div>
+</div>
+</div>
+</section>
+<section>
+<div class="flex flex-col md:flex-row md:items-center justify-between mb-5 gap-4 border-b border-border-green pb-3">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">security</span>
+<h3 class="text-xl font-bold text-white">Access Control</h3>
+</div>
+<div class="flex gap-3">
+<div class="relative">
+<span class="absolute left-3 top-1/2 -translate-y-1/2 material-symbols-outlined text-[#9db9a6] text-[20px]">search</span>
+<input class="bg-surface-dark border border-border-green rounded-lg h-10 pl-10 pr-4 text-white text-sm focus:outline-none focus:border-primary w-full md:w-64" placeholder="Search members..." type="text"/>
+</div>
+<button class="flex items-center gap-2 px-4 h-10 bg-primary/20 text-primary border border-primary/20 rounded-lg text-sm font-bold hover:bg-primary/30 transition-colors">
+<span class="material-symbols-outlined text-[18px]">person_add</span>
+                                Invite
+                            </button>
+</div>
+</div>
+<div class="w-full overflow-hidden rounded-xl border border-border-green bg-surface-darker">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-surface-dark border-b border-border-green">
+<th class="p-4 text-xs font-bold text-[#9db9a6] uppercase tracking-wider">User</th>
+<th class="p-4 text-xs font-bold text-[#9db9a6] uppercase tracking-wider">Role</th>
+<th class="p-4 text-xs font-bold text-[#9db9a6] uppercase tracking-wider hidden md:table-cell">Last Active</th>
+<th class="p-4 text-xs font-bold text-[#9db9a6] uppercase tracking-wider text-right">Actions</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-border-green">
+<tr class="group hover:bg-surface-dark transition-colors">
+<td class="p-4">
+<div class="flex items-center gap-3">
+<div class="size-9 rounded-full bg-cover bg-center" data-alt="Avatar of user alex_steve" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuDafiOVyo2pihzWq1D2ZI2qvEnHPvS6SJsSAqJVJAhhEhKa--Ws6jVbr66rxExSinp7DXxRhxxsaGb4C7l3PhfhiPAfsmGqoGNiLIGPs5JCvWGEljyVP1AaqxzlZW_irjsg5-vpKNVLI9YmhLoq5qROfqv8rY33dOhSLTfXl_rRY8KbJls1xsNdQg83yc9wsi21_c_l5sMkAP8_0saTJ0mC3SnJps6g7TykjLLB_RnJKLoHuB3otrngtMwoTgFwccBOUXTX_-tOV0Q");'></div>
+<div>
+<p class="text-white text-sm font-bold">alex_steve</p>
+<p class="text-[#9db9a6] text-xs">alex@example.com</p>
+</div>
+</div>
+</td>
+<td class="p-4">
+<select class="bg-[#2d4535] text-white text-xs font-medium rounded px-2 py-1 border-none focus:ring-1 focus:ring-primary cursor-pointer">
+<option selected="" value="admin">Admin</option>
+<option value="mod">Moderator</option>
+<option value="member">Member</option>
+</select>
+</td>
+<td class="p-4 hidden md:table-cell">
+<span class="inline-flex items-center gap-1.5 text-xs text-primary">
+<span class="size-1.5 rounded-full bg-primary"></span>
+                                            Online Now
+                                        </span>
+</td>
+<td class="p-4 text-right">
+<button class="text-[#9db9a6] hover:text-white p-1 rounded hover:bg-[#2d4535] transition-colors">
+<span class="material-symbols-outlined text-[20px]">more_vert</span>
+</button>
+</td>
+</tr>
+<tr class="group hover:bg-surface-dark transition-colors">
+<td class="p-4">
+<div class="flex items-center gap-3">
+<div class="size-9 rounded-full bg-cover bg-center" data-alt="Avatar of user miner_99" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuBPBL_KqCpxNQbc-7x4PKE1uErCC3vfDO1LkJ8YhW_VUt5hZCu0jC8xblCxsRCYz24hzZFIfe1FM-Rhlp8Cc2MRpdA5EXC6dBiEVnJM5-rYS2o4jhpPe6ln_IaYoAEwgw-zD2f8Skd9bQoSvZbGRZwsXwt775zxHJ6h1p3A61-zWAps4n2xkvppznFAS2sXfP4-OEhHBOIdBzzHb0I9eX9SEFDvZVOkeTa79fxbfBqCHnGCJYEyfQPGJHD-YMWhKMgzeExfPzd71ys");'></div>
+<div>
+<p class="text-white text-sm font-bold">miner_99</p>
+<p class="text-[#9db9a6] text-xs">miner@example.com</p>
+</div>
+</div>
+</td>
+<td class="p-4">
+<select class="bg-surface-dark text-white text-xs font-medium rounded px-2 py-1 border border-border-green focus:ring-1 focus:ring-primary cursor-pointer">
+<option value="admin">Admin</option>
+<option selected="" value="mod">Moderator</option>
+<option value="member">Member</option>
+</select>
+</td>
+<td class="p-4 hidden md:table-cell">
+<span class="text-xs text-[#9db9a6]">2 days ago</span>
+</td>
+<td class="p-4 text-right">
+<button class="text-[#9db9a6] hover:text-white p-1 rounded hover:bg-[#2d4535] transition-colors">
+<span class="material-symbols-outlined text-[20px]">more_vert</span>
+</button>
+</td>
+</tr>
+<tr class="group hover:bg-surface-dark transition-colors">
+<td class="p-4">
+<div class="flex items-center gap-3">
+<div class="size-9 rounded-full bg-cover bg-center" data-alt="Avatar of user builder_bob" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuBQDJAOzXrZFaqCWW_vzUXVciYwfAV7Z1WBW6oS6znkj02IkzQZrl28x4ZeZJnEtPt1xOJNrjbOWsZeWoySEaTfwFsNamAct3X4FkmQZZBkpc5y6lWfFKLHcVBouuSTM4wJa63aCvD-Wiq4ipI2TxDgRTIZB-XpwcG_FySZOXqYImRT1OJaWrj7i4UdJ5kEzqCUzLYZ-cEF1qi4lA74J1ToO_MzxPBs5ftIcQhnfdSvTo9p1pRVaeC8DEtd5vOLw4QUDnclT4z614M");'></div>
+<div>
+<p class="text-white text-sm font-bold">builder_bob</p>
+<p class="text-[#9db9a6] text-xs">bob@example.com</p>
+</div>
+</div>
+</td>
+<td class="p-4">
+<select class="bg-surface-dark text-white text-xs font-medium rounded px-2 py-1 border border-border-green focus:ring-1 focus:ring-primary cursor-pointer">
+<option value="admin">Admin</option>
+<option value="mod">Moderator</option>
+<option selected="" value="member">Member</option>
+</select>
+</td>
+<td class="p-4 hidden md:table-cell">
+<span class="text-xs text-[#9db9a6]">1 week ago</span>
+</td>
+<td class="p-4 text-right">
+<button class="text-[#9db9a6] hover:text-white p-1 rounded hover:bg-[#2d4535] transition-colors">
+<span class="material-symbols-outlined text-[20px]">more_vert</span>
+</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+</div>
+</main>
+</div>
+</div>
+
+</body></html>

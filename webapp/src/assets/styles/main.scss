@@ -1,0 +1,45 @@
+$border-green: #28392e;
+$text-muted: #9db9a6;
+$primary: #13ec5b;
+$bg-dark: #102216;
+$surface-dark: #1c2e24;
+
+* {
+  font-family: 'Space Grotesk', sans-serif;
+}
+
+html, body, #app {
+  height: 100%;
+  margin: 0;
+  background: $bg-dark;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: $bg-dark;
+}
+::-webkit-scrollbar-thumb {
+  background: $border-green;
+  border-radius: 4px;
+  &:hover { background: $primary; }
+}
+
+.material-symbols-outlined {
+  font-variation-settings: 'wght' 400;
+}
+
+.text-muted { color: $text-muted; }
+.border-green { border-color: $border-green !important; }
+.bg-surface { background: $surface-dark !important; }
+.glow-primary { box-shadow: 0 0 15px rgba(19, 236, 91, 0.3); }
+
+.pulse {
+  animation: pulse 2s infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}

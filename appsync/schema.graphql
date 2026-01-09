@@ -234,6 +234,8 @@ type Query {
 		@aws_cognito_user_pools
 	getServerUsers(instanceId: String!): [ServerUsers]
 		@aws_cognito_user_pools
+	getAdminUsers: [ServerUsers]
+		@aws_cognito_user_pools
 	searchUserByEmail(email: AWSEmail!): ServerUsers
 		@aws_cognito_user_pools
 	getLogAudit(id: String!): [LogAudit]

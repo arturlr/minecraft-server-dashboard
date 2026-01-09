@@ -42,7 +42,7 @@
             </template>
           </v-tooltip>
           
-          <!-- Editable Server Name -->
+          <!-- Editable Server Name with Instance ID Tooltip -->
           <div class="d-flex align-center ga-1 flex-grow-1">
             <v-text-field
               v-if="editingName === item.id"
@@ -57,13 +57,17 @@
               class="edit-name-field"
             ></v-text-field>
             
-            <span 
-              v-else 
-              class="font-weight-bold server-name-text"
-              @click="startEditName(item.id, item.name || item.id)"
-            >
-              {{ item.name || item.id }}
-            </span>
+            <v-tooltip v-else :text="`Instance ID: ${item.id}`" location="top">
+              <template v-slot:activator="{ props }">
+                <span 
+                  v-bind="props"
+                  class="font-weight-bold server-name-text"
+                  @click="startEditName(item.id, item.name || item.id)"
+                >
+                  {{ item.name || item.id }}
+                </span>
+              </template>
+            </v-tooltip>
             
             <v-tooltip v-if="editingName !== item.id" text="Click to edit server name" location="top">
               <template v-slot:activator="{ props }">
@@ -147,9 +151,30 @@
         </div>
       </template>
 
-      <!-- RAM Column Slot (convert to GB) -->
-      <template v-slot:item.memSize="{ item }">
-        {{ formatRamSize(item.memSize) }}
+      <!-- Specs Column Slot (CPU, RAM, Disk) -->
+      <template v-slot:item.specs="{ item }">
+        <v-list density="compact" class="pa-0">
+          <v-list-item class="pa-0 specs-item">
+            <template v-slot:prepend>
+              <v-icon size="small" color="primary">mdi-cpu-64-bit</v-icon>
+            </template>
+            <v-list-item-title class="specs-text">{{ item.vCpus }} vCPU{{ item.vCpus !== 1 ? 's' : '' }}</v-list-item-title>
+          </v-list-item>
+          
+          <v-list-item class="pa-0 specs-item">
+            <template v-slot:prepend>
+              <v-icon size="small" color="success">mdi-memory</v-icon>
+            </template>
+            <v-list-item-title class="specs-text">{{ formatRamSize(item.memSize) }}</v-list-item-title>
+          </v-list-item>
+          
+          <v-list-item class="pa-0 specs-item">
+            <template v-slot:prepend>
+              <v-icon size="small" color="warning">mdi-harddisk</v-icon>
+            </template>
+            <v-list-item-title class="specs-text">{{ item.diskSize }} GB</v-list-item-title>
+          </v-list-item>
+        </v-list>
       </template>
 
       <!-- Running Time Column Slot -->
@@ -168,14 +193,28 @@
 
       <!-- Actions Column Slot -->
       <template v-slot:item.actions="{ item }">
-        <ServerActionsMenu
-          :server-id="item.id"
-          :server-state="item.state"
-          :iam-status="item.iamStatus"
-          @open-config="$emit('open-config', item.id)"
-          @open-stats="$emit('open-stats', item.id)"
-          @open-users="openUserManagement(item.id, item.name || item.id)"
-        />
+        <v-list density="compact" class="pa-0">
+          <v-list-item class="pa-0 action-item" @click="$emit('open-stats', item.id)">
+            <template v-slot:prepend>
+              <v-icon size="small" color="info">mdi-chart-line</v-icon>
+            </template>
+            <v-list-item-title class="action-text">Stats</v-list-item-title>
+          </v-list-item>
+          
+          <v-list-item class="pa-0 action-item" @click="$emit('open-config', item.id)">
+            <template v-slot:prepend>
+              <v-icon size="small" color="primary">mdi-cog</v-icon>
+            </template>
+            <v-list-item-title class="action-text">Config</v-list-item-title>
+          </v-list-item>
+          
+          <v-list-item class="pa-0 action-item" @click="openUserManagement(item.id, item.name || item.id)">
+            <template v-slot:prepend>
+              <v-icon size="small" color="success">mdi-account-multiple</v-icon>
+            </template>
+            <v-list-item-title class="action-text">Users</v-list-item-title>
+          </v-list-item>
+        </v-list>
       </template>
 
       <!-- Loading Skeleton -->
@@ -213,7 +252,6 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import { generateClient } from 'aws-amplify/api'
-import ServerActionsMenu from './ServerActionsMenu.vue'
 import UserManagementDialog from './UserManagementDialog.vue'
 import { updateServerName } from '@/graphql/mutations'
 
@@ -412,12 +450,6 @@ const headers = ref([
     class: 'font-weight-bold'
   },
   { 
-    title: 'Instance ID', 
-    key: 'id', 
-    sortable: true,
-    class: 'text-no-wrap responsive-hide-mobile'
-  },
-  { 
     title: 'State', 
     key: 'state', 
     sortable: true,
@@ -430,25 +462,12 @@ const headers = ref([
     class: 'text-no-wrap'
   },
   { 
-    title: 'CPU', 
-    key: 'vCpus', 
-    sortable: true,
+    title: 'Specs', 
+    key: 'specs', 
+    sortable: false,
     align: 'center',
-    class: 'responsive-hide-mobile'
-  },
-  { 
-    title: 'RAM', 
-    key: 'memSize', 
-    sortable: true,
-    align: 'center',
-    class: 'responsive-hide-mobile'
-  },
-  { 
-    title: 'Disk (GB)', 
-    key: 'diskSize', 
-    sortable: true,
-    align: 'center',
-    class: 'responsive-hide-mobile'
+    class: 'responsive-hide-mobile',
+    width: '140px'
   },
   { 
     title: 'Running Time', 
@@ -461,8 +480,8 @@ const headers = ref([
     title: 'Actions', 
     key: 'actions', 
     sortable: false,
-    align: 'end',
-    width: '120px'
+    align: 'center',
+    width: '100px'
   }
 ])
 
@@ -668,5 +687,65 @@ function formatCacheTimestamp(timestamp) {
 .edit-name-field :deep(.v-field__input) {
   padding: 4px 8px;
   min-height: 32px;
+}
+
+/* Specs column styles */
+.specs-item {
+  min-height: 24px !important;
+  height: 24px;
+}
+
+.specs-item :deep(.v-list-item__prepend) {
+  width: 20px;
+  margin-inline-end: 8px;
+}
+
+.specs-item :deep(.v-list-item__content) {
+  padding: 0;
+}
+
+.specs-text {
+  font-size: 0.75rem;
+  line-height: 1.2;
+  font-weight: 500;
+}
+
+/* Actions column styles */
+.action-item {
+  min-height: 24px !important;
+  height: 24px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.action-item:hover {
+  background-color: rgba(var(--v-theme-primary), 0.08);
+}
+
+.action-item :deep(.v-list-item__prepend) {
+  width: 20px;
+  margin-inline-end: 8px;
+}
+
+.action-item :deep(.v-list-item__content) {
+  padding: 0;
+}
+
+.action-text {
+  font-size: 0.75rem;
+  line-height: 1.2;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+/* Compact specs and actions lists */
+:deep(.v-list.pa-0) {
+  background: transparent;
+}
+
+:deep(.v-list.pa-0 .v-list-item) {
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  min-height: 24px !important;
 }
 </style>

@@ -39,105 +39,28 @@ aws_region = boto3_session.region_name
 # Schedule Event Management Functions
 # ============================================================================
 
-def _strip_leading_zeros(field):
-    """Strip leading zeros from cron field values."""
-    if not field or field == '*' or field == '?':
-        return field
-
-    if ',' in field:
-        values = field.split(',')
-        return ','.join(_strip_leading_zeros(v.strip()) for v in values)
-    
-    if '-' in field and '/' not in field:
-        try:
-            start, end = field.split('-', 1)
-            return f"{_strip_leading_zeros(start)}-{_strip_leading_zeros(end)}"
-        except ValueError:
-            return field
-    
-    if '/' in field:
-        try:
-            base, step = field.split('/', 1)
-            return f"{_strip_leading_zeros(base)}/{step.lstrip('0') or '0'}"
-        except ValueError:
-            return field
-    
-    if field.isdigit():
-        return field.lstrip('0') or '0'
-    
-    return field
-
-def _convert_day_of_week(day_of_week):
-    """Convert day-of-week from standard cron (0-6) to EventBridge (1-7)."""
-    if day_of_week == '*':
-        return '*'
-    
-    if ',' in day_of_week:
-        values = day_of_week.split(',')
-        converted_values = []
-        for val in values:
-            if val.strip() == '0':
-                converted_values.append('7')
-            elif val.strip().isdigit() and 1 <= int(val.strip()) <= 6:
-                converted_values.append(val.strip())
-        return ','.join(converted_values)
-    
-    if day_of_week == '0':
-        return '7'
-    elif day_of_week.isdigit() and 1 <= int(day_of_week) <= 6:
-        return day_of_week
-    
-    return None
-
-def _convert_timezone_to_utc(hour, minute, timezone):
-    """Convert local time to UTC based on timezone."""
-    from datetime import datetime
-    import pytz
-    
-    if not timezone or timezone == 'UTC':
-        return hour, minute
-    
-    try:
-        # Create a datetime in the specified timezone
-        tz = pytz.timezone(timezone)
-        # Use a fixed date to get consistent offset (mid-January to avoid most DST transitions)
-        local_time = tz.localize(datetime(2024, 1, 15, int(hour), int(minute)))
-        
-        # Convert to UTC
-        utc_time = local_time.astimezone(pytz.UTC)
-        
-        return str(utc_time.hour), str(utc_time.minute)
-    except Exception as e:
-        logger.error(f"Error converting timezone {timezone} to UTC: {e}")
-        # Return original values if conversion fails
-        return hour, minute
+from aws_croniter import AwsCroniter
+from datetime import datetime
+import pytz
 
 def _format_schedule_expression(cron_expression, timezone='UTC'):
-    """Format cron expression for EventBridge, converting from local timezone to UTC."""
+    """Format cron expression for EventBridge using aws-croniter."""
     if not cron_expression:
         return None
     
     cron_expression = cron_expression.strip()
     
-    # If already in EventBridge format, extract and clean it
+    # If already in EventBridge format, validate and return
     if cron_expression.startswith('cron(') and cron_expression.endswith(')'):
         cron_content = cron_expression[5:-1]
-        fields = cron_content.split()
-        if len(fields) == 6:
-            minute, hour, day, month, day_of_week, year = fields
-            
-            # Convert timezone if not UTC
-            if timezone and timezone != 'UTC':
-                hour, minute = _convert_timezone_to_utc(hour, minute, timezone)
-            
-            minute = _strip_leading_zeros(minute)
-            hour = _strip_leading_zeros(hour)
-            day = _strip_leading_zeros(day)
-            month = _strip_leading_zeros(month)
-            return f"cron({minute} {hour} {day} {month} {day_of_week} {year})"
-        return cron_expression
+        try:
+            AwsCroniter(cron_content)
+            return cron_expression
+        except Exception as e:
+            logger.error(f"Invalid EventBridge cron expression: {e}")
+            return None
     
-    # Handle standard 5-field cron expression
+    # Handle standard 5-field cron expression (minute hour day month day_of_week)
     fields = cron_expression.split()
     if len(fields) == 5:
         minute, hour, day, month, day_of_week = fields
@@ -146,30 +69,49 @@ def _format_schedule_expression(cron_expression, timezone='UTC'):
         if timezone and timezone != 'UTC':
             hour, minute = _convert_timezone_to_utc(hour, minute, timezone)
         
-        # Strip leading zeros
-        minute = _strip_leading_zeros(minute)
-        hour = _strip_leading_zeros(hour)
-        day = _strip_leading_zeros(day)
-        month = _strip_leading_zeros(month)
+        # Convert day-of-week from standard (0=Sun) to EventBridge (1=Sun)
+        if day_of_week != '*' and day_of_week != '?':
+            dow_parts = []
+            for part in day_of_week.split(','):
+                part = part.strip()
+                if part.isdigit():
+                    # Standard cron: 0=Sun, 1=Mon...6=Sat
+                    # EventBridge: 1=Sun, 2=Mon...7=Sat
+                    dow_parts.append(str(int(part) + 1))
+                else:
+                    dow_parts.append(part)
+            day_of_week = ','.join(dow_parts)
         
-        # Convert day-of-week
-        converted_dow = _convert_day_of_week(day_of_week)
-        if not converted_dow:
-            return None
-        
-        # Optimize: if all days are specified, use '*'
-        if ',' in converted_dow:
-            dow_values = set(converted_dow.split(','))
-            if dow_values == {'1', '2', '3', '4', '5', '6', '7'}:
-                converted_dow = '*'
-        
-        # EventBridge rule: when day-of-week is specified, day-of-month must be '?'
-        if converted_dow != '?':
+        # EventBridge requires '?' for day when day_of_week is specified
+        if day_of_week != '*' and day_of_week != '?':
             day = '?'
         
-        return f"cron({minute} {hour} {day} {month} {converted_dow} *)"
+        # Build 6-field EventBridge cron (add year)
+        eb_cron = f"{minute} {hour} {day} {month} {day_of_week} *"
+        
+        # Validate with aws-croniter
+        try:
+            AwsCroniter(eb_cron)
+            return f"cron({eb_cron})"
+        except Exception as e:
+            logger.error(f"Invalid cron expression after conversion: {e}")
+            return None
     
     return None
+
+def _convert_timezone_to_utc(hour, minute, timezone):
+    """Convert local time to UTC based on timezone."""
+    if not timezone or timezone == 'UTC':
+        return hour, minute
+    
+    try:
+        tz = pytz.timezone(timezone)
+        local_time = tz.localize(datetime(2024, 1, 15, int(hour), int(minute)))
+        utc_time = local_time.astimezone(pytz.UTC)
+        return str(utc_time.hour), str(utc_time.minute)
+    except Exception as e:
+        logger.error(f"Error converting timezone {timezone} to UTC: {e}")
+        return hour, minute
 
 def configure_scheduled_shutdown_event(instance_id, cron_expression, timezone='UTC'):
     """Configure EventBridge rule to stop EC2 instance on schedule."""
