@@ -25,73 +25,60 @@
         </v-btn>
       </div>
 
-      <!-- CPU Chart -->
-      <div>
-        <div class="d-flex justify-space-between text-caption text-muted mb-2">
-          <div class="d-flex align-center ga-1">
-            <span class="material-symbols-outlined" style="font-size: 14px">memory</span>
-            <span>CPU Load ({{ cpu }}%)</span>
+      <!-- CPU & Memory Charts -->
+      <v-row dense :class="{ 'opacity-50': !server.online }">
+        <v-col cols="6">
+          <div class="metric-card">
+            <div class="d-flex justify-space-between text-caption text-muted mb-2">
+              <div class="d-flex align-center ga-1">
+                <span class="material-symbols-outlined" style="font-size: 14px">memory</span>
+                <span>CPU ({{ cpu.toFixed(1) }}%)</span>
+              </div>
+              <span v-if="lastUpdate" class="text-grey">{{ lastUpdate }}</span>
+            </div>
+            <SparkLine :data="history.cpu" :width="130" :height="36" color="#13ec5b" />
           </div>
-          <span v-if="server.online" class="text-warning">Threshold: >90% (Auto-stop)</span>
-          <span v-else>Auto-Start: 18:00 EST</span>
-        </div>
-        <div v-if="server.online" class="cpu-bars">
-          <div v-for="(h, i) in cpuBars" :key="i" class="cpu-bar" :style="{ height: h + '%' }" />
-        </div>
-        <div v-else class="dormant-box">DORMANT</div>
-      </div>
+        </v-col>
+        <v-col cols="6">
+          <div class="metric-card">
+            <div class="d-flex justify-space-between text-caption text-muted mb-2">
+              <div class="d-flex align-center ga-1">
+                <span class="material-symbols-outlined" style="font-size: 14px">hard_drive</span>
+                <span>Memory ({{ memory.toFixed(1) }}%)</span>
+              </div>
+            </div>
+            <SparkLine :data="history.mem" :width="130" :height="36" color="#a855f7" />
+          </div>
+        </v-col>
+      </v-row>
 
       <!-- Metrics -->
-      <v-row dense>
-        <v-col cols="4">
+      <v-row dense :class="{ 'opacity-50': !server.online }">
+        <v-col cols="6">
           <div class="metric-card">
-            <div class="d-flex justify-space-between align-center text-muted mb-2">
+            <div class="d-flex justify-space-between align-center text-muted mb-1">
               <div class="d-flex align-center ga-1">
                 <span class="material-symbols-outlined" style="font-size: 14px">group</span>
                 <span class="text-uppercase text-caption">Players</span>
               </div>
               <span class="text-white text-caption font-weight-bold">{{ players }}</span>
             </div>
-            <v-progress-linear :model-value="(players / server.maxPlayers) * 100" color="blue" bg-color="white" bg-opacity="0.1" height="6" rounded />
-            <div class="text-right text-caption text-grey mt-1">Max: {{ server.maxPlayers }}</div>
+            <SparkLine :data="history.players || []" :width="110" :height="24" color="#60a5fa" />
           </div>
         </v-col>
-        <v-col cols="4">
+        <v-col cols="6">
           <div class="metric-card">
-            <div class="d-flex justify-space-between align-center text-muted mb-2">
+            <div class="d-flex justify-space-between align-center text-muted mb-1">
               <div class="d-flex align-center ga-1">
-                <span class="material-symbols-outlined" style="font-size: 14px">hard_drive</span>
-                <span class="text-uppercase text-caption">Memory</span>
+                <span class="material-symbols-outlined" style="font-size: 14px">network_check</span>
+                <span class="text-uppercase text-caption">Network</span>
               </div>
-              <span class="text-white text-caption font-weight-bold">{{ memory }} GB</span>
+              <span class="text-white text-caption font-weight-bold">{{ networkRx }}</span>
             </div>
-            <v-progress-linear :model-value="(memory / server.maxMemory) * 100" color="purple" bg-color="white" bg-opacity="0.1" height="6" rounded />
-            <div class="text-right text-caption text-grey mt-1">of {{ server.maxMemory }} GB</div>
-          </div>
-        </v-col>
-        <v-col cols="4">
-          <div class="metric-card">
-            <div class="d-flex align-center ga-1 text-muted mb-2">
-              <span class="material-symbols-outlined" style="font-size: 14px">network_check</span>
-              <span class="text-uppercase text-caption">Network</span>
-            </div>
-            <div class="d-flex justify-space-between text-caption mb-1">
-              <span class="text-grey">↓ RX</span>
-              <span class="text-white font-mono">{{ networkRx }}</span>
-            </div>
-            <div class="d-flex justify-space-between text-caption">
-              <span class="text-grey">↑ TX</span>
-              <span class="text-white font-mono">{{ networkTx }}</span>
-            </div>
+            <SparkLine :data="history.net" :width="110" :height="24" color="#3b82f6" />
           </div>
         </v-col>
       </v-row>
-
-      <!-- Last Update -->
-      <div v-if="lastUpdate" class="text-caption text-muted text-right">
-        <span class="material-symbols-outlined" style="font-size: 12px; vertical-align: middle">update</span>
-        Updated {{ lastUpdate }}
-      </div>
 
       <!-- Actions -->
       <v-divider class="border-green" />
@@ -131,37 +118,28 @@
 
 <script setup>
 import { computed, ref } from 'vue'
+import SparkLine from '../common/SparkLine.vue'
 
 const props = defineProps({
   server: { type: Object, required: true },
-  metrics: { type: Object, default: null }
+  metrics: { type: Object, default: null },
+  history: { type: Object, default: () => ({ cpu: [], mem: [], net: [] }) }
 })
 
 const emit = defineEmits(['start', 'stop', 'settings'])
 
 const actionLoading = ref(false)
 
-const cpuBars = computed(() => {
-  const bars = []
-  for (let i = 0; i < 12; i++) {
-    bars.push(Math.random() * 60 + 20)
-  }
-  return bars
-})
-
 const cpu = computed(() => props.metrics?.cpuStats || props.server.cpu || 0)
-const memory = computed(() => {
-  if (props.metrics?.memStats) return (props.metrics.memStats / 1024).toFixed(1)
-  return props.server.memory || 0
-})
+const memory = computed(() => props.metrics?.memStats || 0)
 const players = computed(() => props.metrics?.activeUsers ?? props.server.players ?? 0)
 const networkRx = computed(() => {
-  if (props.metrics?.networkStats) return `${(props.metrics.networkStats.rx / 1024 / 1024).toFixed(1)} MB/s`
-  return props.server.rx || '0 KB/s'
-})
-const networkTx = computed(() => {
-  if (props.metrics?.networkStats) return `${(props.metrics.networkStats.tx / 1024 / 1024).toFixed(1)} MB/s`
-  return props.server.tx || '0 KB/s'
+  const net = props.history?.net || []
+  if (net.length === 0) return '0 KB/s'
+  const latest = net[net.length - 1] || 0
+  if (latest > 1024 * 1024) return `${(latest / 1024 / 1024).toFixed(1)} MB/s`
+  if (latest > 1024) return `${(latest / 1024).toFixed(1)} KB/s`
+  return `${latest.toFixed(0)} B/s`
 })
 const lastUpdate = computed(() => {
   if (!props.metrics?.lastUpdate) return null
@@ -216,30 +194,6 @@ const handleStop = async () => {
   background: #13ec5b;
   margin-right: 6px;
   &.offline { background: #6b7280; }
-}
-.cpu-bars {
-  display: flex;
-  align-items: flex-end;
-  gap: 4px;
-  height: 40px;
-}
-.cpu-bar {
-  width: 6px;
-  background: #13ec5b;
-  border-radius: 2px;
-  opacity: 0.7;
-}
-.dormant-box {
-  height: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px dashed rgba(255,255,255,0.1);
-  border-radius: 8px;
-  background: rgba(0,0,0,0.2);
-  color: #6b7280;
-  font-size: 10px;
-  letter-spacing: 2px;
 }
 .metric-card {
   background: rgba(0,0,0,0.2);

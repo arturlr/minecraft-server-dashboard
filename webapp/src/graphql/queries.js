@@ -74,7 +74,6 @@ query GetServerConfig($id: String!) {
     id
     runCommand
     workDir
-    shutdownMethod
     stopScheduleExpression
     startScheduleExpression
     alarmThreshold

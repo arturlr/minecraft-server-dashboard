@@ -14,18 +14,27 @@ export const useServerStore = defineStore("server", {
     servers: [],
     serversById: {},
     serverMetrics: {},
+    metricsHistory: {},
     selectedServerId: null,
     loading: false,
     error: null,
-    subscriptionHandles: {}
+    subscriptionHandles: {},
+    stateSubscription: null
   }),
 
   getters: {
     getServerById: (state) => (id) => state.serversById[id],
     getMetricsById: (state) => (id) => state.serverMetrics[id],
+    getMetricsHistory: (state) => (id) => state.metricsHistory[id] || { cpu: [], mem: [], net: [], players: [] },
     selectedServer: (state) => state.serversById[state.selectedServerId],
     onlineServers: (state) => state.servers.filter(s => s.state === 'running'),
-    totalPlayers: (state) => state.servers.reduce((sum, s) => sum + (state.serverMetrics[s.id]?.activeUsers || 0), 0),
+    totalPlayers: (state) => {
+      return state.servers.reduce((sum, s) => {
+        const metrics = state.serverMetrics[s.id]
+        const players = metrics?.activeUsers
+        return sum + (typeof players === 'number' ? players : 0)
+      }, 0)
+    },
   },
 
   actions: {
@@ -51,8 +60,71 @@ export const useServerStore = defineStore("server", {
       }
     },
 
+    async fetchMetrics(serverId) {
+      try {
+        const result = await client.graphql({
+          query: queries.getServerMetrics,
+          variables: { id: serverId }
+        });
+        const m = result.data.getServerMetrics;
+        if (m) {
+          this.processMetrics(serverId, m);
+        }
+      } catch (e) {
+        console.error('Failed to fetch metrics:', e);
+      }
+    },
+
+    processMetrics(serverId, m) {
+      // Parse stats - they come as arrays of {x, y} or JSON strings
+      const parseStat = (stat) => {
+        if (!stat) return []
+        const arr = typeof stat === 'string' ? JSON.parse(stat) : stat
+        return Array.isArray(arr) ? arr.map(p => p.y ?? p) : []
+      }
+      
+      const cpuValues = parseStat(m.cpuStats)
+      const memValues = parseStat(m.memStats)
+      const netValues = parseStat(m.networkStats)
+      
+      // Get latest value for current metrics
+      const latestCpu = cpuValues.length ? cpuValues[cpuValues.length - 1] : 0
+      const latestMem = memValues.length ? memValues[memValues.length - 1] : 0
+      
+      this.serverMetrics = {
+        ...this.serverMetrics,
+        [serverId]: { 
+          ...m, 
+          cpuStats: latestCpu,
+          memStats: latestMem,
+          activeUsers: typeof m.activeUsers === 'number' ? m.activeUsers : 0,
+          lastUpdate: new Date() 
+        }
+      }
+      
+      // Update history
+      const oldHistory = this.metricsHistory[serverId] || { cpu: [], mem: [], net: [], players: [] }
+      this.metricsHistory = {
+        ...this.metricsHistory,
+        [serverId]: {
+          cpu: [...oldHistory.cpu, ...cpuValues].slice(-10),
+          mem: [...oldHistory.mem, ...memValues].slice(-10),
+          net: [...oldHistory.net, ...netValues].slice(-10),
+          players: [...oldHistory.players, m.activeUsers || 0].slice(-10)
+        }
+      }
+    },
+
     subscribeToMetrics(serverId) {
       if (this.subscriptionHandles[serverId]) return;
+      
+      // Initialize history
+      if (!this.metricsHistory[serverId]) {
+        this.metricsHistory[serverId] = { cpu: [], mem: [], net: [], players: [] }
+      }
+      
+      // Fetch initial metrics
+      this.fetchMetrics(serverId)
       
       try {
         const sub = client.graphql({
@@ -61,10 +133,7 @@ export const useServerStore = defineStore("server", {
         }).subscribe({
           next: ({ data }) => {
             if (data?.onPutServerMetric) {
-              this.serverMetrics[serverId] = {
-                ...data.onPutServerMetric,
-                lastUpdate: new Date()
-              };
+              this.processMetrics(serverId, data.onPutServerMetric)
             }
           },
           error: (err) => console.error('Metrics subscription error:', err)
@@ -87,6 +156,45 @@ export const useServerStore = defineStore("server", {
         this.subscriptionHandles[id].unsubscribe();
       });
       this.subscriptionHandles = {};
+      if (this.stateSubscription) {
+        this.stateSubscription.unsubscribe();
+        this.stateSubscription = null;
+      }
+    },
+
+    subscribeToStateChanges() {
+      if (this.stateSubscription) return;
+      
+      try {
+        this.stateSubscription = client.graphql({
+          query: subscriptions.onChangeState
+        }).subscribe({
+          next: ({ data }) => {
+            if (data?.onChangeState) {
+              const updated = data.onChangeState;
+              // Update server in state
+              if (this.serversById[updated.id]) {
+                this.serversById = {
+                  ...this.serversById,
+                  [updated.id]: { ...this.serversById[updated.id], ...updated }
+                };
+                // Update servers array
+                const idx = this.servers.findIndex(s => s.id === updated.id);
+                if (idx !== -1) {
+                  this.servers = [
+                    ...this.servers.slice(0, idx),
+                    { ...this.servers[idx], ...updated },
+                    ...this.servers.slice(idx + 1)
+                  ];
+                }
+              }
+            }
+          },
+          error: (err) => console.error('State subscription error:', err)
+        });
+      } catch (e) {
+        console.error('Failed to subscribe to state changes:', e);
+      }
     },
 
     async getServerConfig(serverId) {
