@@ -104,6 +104,7 @@ class IamProfile:
                 IamInstanceProfile={"Name": ec2_instance_profile_name},
                 InstanceId=self.instance_id
             )
+            logger.info(response)
         except Exception as e:
             error_msg = str(e)
             if "UnauthorizedOperation" in error_msg:

@@ -8,6 +8,7 @@ import authHelper
 import ec2Helper
 import utilHelper
 import ddbHelper
+from utilHelper.errorHandler import ErrorHandler
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -24,47 +25,8 @@ server_action_queue_url = os.getenv('SERVER_ACTION_QUEUE_URL')
 auth = authHelper.Auth(cognito_pool_id)
 ec2_utils = ec2Helper.Ec2Utils()
 utl = utilHelper.Utils()
+core_dyn = ddbHelper.CoreTableDyn()
 
-def check_authorization(event, instance_id, user_attributes):
-    """
-    Check if user is authorized to perform actions on instance
-    Args:
-        event: Lambda event object containing identity info
-        instance_id: EC2 instance ID
-        user_attributes: Dict containing user info including email
-    Returns:
-        bool: True if authorized, False if not
-    """
-    
-    cognito_groups = event["identity"].get("groups", [])
-    user_email = user_attributes["email"]
-    
-    logger.info(f"Authorization check: user={user_email}, instance={instance_id}, groups={cognito_groups}")
-    
-    # Use the centralized authorization check from utilHelper
-    try:
-        is_authorized, auth_reason = utl.check_user_authorization(
-            cognito_groups, 
-            instance_id, 
-            user_email, 
-            ec2_utils
-        )
-        
-        if is_authorized:
-            if auth_reason == "admin_group":
-                logger.info(f"Authorization SUCCESS: Admin user {user_email} authorized for instance {instance_id}")
-            elif auth_reason == "instance_group":
-                logger.info(f"Authorization SUCCESS: Group member {user_email} authorized for instance {instance_id}")
-            elif auth_reason == "instance_owner":
-                logger.info(f"Authorization SUCCESS: Owner {user_email} authorized for instance {instance_id}")
-        else:
-            logger.warning(f"Authorization DENIED: User {user_email} not authorized for instance {instance_id}")
-        
-        return is_authorized
-        
-    except Exception as e:
-        logger.error(f"Authorization check FAILED with exception: user={user_email}, instance={instance_id}, error={str(e)}", exc_info=True)
-        raise
 
 def send_status_to_appsync(action, instance_id, status, message=None, user_email=None):
     """
@@ -155,7 +117,7 @@ def validate_create_server_input(input_data):
             return False, "Both start and stop schedules required for scheduled shutdown"
         
         # Validate cron format (basic check)
-        if not _is_valid_cron(start_schedule) or not _is_valid_cron(stop_schedule):
+        if not utl.is_valid_cron(start_schedule) or not utl.is_valid_cron(stop_schedule):
             return False, "Invalid cron expression format"
     
     return True, None
@@ -286,11 +248,54 @@ def action_process_sync(action, instance_id, arguments=None):
         return send_to_queue(action, instance_id, arguments)
 
 def handle_get_server_users(instance_id):
-    """Helper function to handle get server users action"""
+    """
+    Helper function to handle get server users action using DynamoDB membership.
+    Retrieves all users with access to a server, including their roles and full names from Cognito.
+    
+    Args:
+        instance_id (str): EC2 instance ID
+        
+    Returns:
+        list: List of ServerUsers objects with id, email, fullName, and role
+        dict: Error response if operation fails
+    """
     try:
-        # Get the list of users for the given instance_id
-        users = auth.list_users_for_group(instance_id)
-        return users
+        
+        # Get all members for this server from DynamoDB
+        members = core_dyn.list_server_members(instance_id)
+        
+        # Handle empty membership lists gracefully
+        if not members:
+            logger.info(f"No users found for server {instance_id}")
+            return []
+        
+        # Convert to the expected ServerUsers format
+        server_users = []
+        for member in members:
+            try:
+                # Get user details from Cognito to get fullName
+                user_info = auth.get_user_by_sub(member['userId'])
+                full_name = user_info.get('fullName', member['email']) if user_info else member['email']
+                
+                server_users.append({
+                    'id': member['userId'],
+                    'email': member['email'],
+                    'fullName': full_name,
+                    'role': member['role']
+                })
+                
+            except Exception as user_error:
+                # If we can't get user details from Cognito, use email as fallback
+                logger.warning(f"Could not get user details from Cognito for {member['userId']}: {str(user_error)}")
+                server_users.append({
+                    'id': member['userId'],
+                    'email': member['email'],
+                    'fullName': member['email'],  # Use email as fallback
+                    'role': member['role']
+                })
+        
+        logger.info(f"Retrieved {len(server_users)} users for server {instance_id} from DynamoDB")
+        return server_users
     
     except Exception as e:
         logger.error("Error retrieving users for instance %s: %s", instance_id, str(e))
@@ -400,7 +405,7 @@ def handle_create_server(input_data, user_attributes):
         
         # Send to SQS queue
         if not server_action_queue_url:
-            logger.error(f"Server creation FAILED: No queue URL configured")
+            logger.error("Server creation FAILED: No queue URL configured")
             return utl.response(500, {"err": "Queue not configured"})
         
         try:
@@ -416,11 +421,11 @@ def handle_create_server(input_data, user_attributes):
                 action='createServer',
                 instance_id='pending',  # No instance ID yet
                 status='PROCESSING',
-                message=f"Server creation request queued for processing",
+                message="Server creation request queued for processing",
                 user_email=user_attributes.get('email')
             )
             
-            return utl.response(202, {"msg": f"Server creation request queued for processing"})
+            return utl.response(202, {"msg": "Server creation request queued for processing"})
             
         except Exception as e:
             logger.error(f"Server creation queue FAILED: user={user_attributes.get('email', 'unknown')}, error={str(e)}", exc_info=True)
@@ -430,13 +435,14 @@ def handle_create_server(input_data, user_attributes):
         logger.error(f"Server creation FAILED with exception: user={user_attributes.get('email', 'unknown')}, error={str(e)}", exc_info=True)
         return utl.response(500, {"err": "Server creation request failed"})
 
-def handle_add_user_to_server(instance_id, user_email):
+def handle_add_user_to_server(instance_id, user_email, user_attributes):
     """
-    Helper function to add a user to a server's Cognito group
+    Helper function to add a user to a server using DynamoDB membership with default viewer role
     
     Args:
-        instance_id: EC2 instance ID (used as Cognito group name)
+        instance_id: EC2 instance ID
         user_email: Email address of the user to add
+        user_attributes: Attributes of the user making the request (for created_by field)
         
     Returns:
         dict: Success response or error response with appropriate status code
@@ -444,68 +450,235 @@ def handle_add_user_to_server(instance_id, user_email):
     try:
         logger.info(f"Adding user to server: email={user_email}, instance={instance_id}")
         
-        # Step 1: Find user by email in Cognito
+        # Step 1: Find user by email in Cognito to get their sub
         user_info = auth.find_user_by_email(user_email)
         
         if user_info is None:
-            logger.warning(f"User not found in Cognito: email={user_email}")
-            return utl.response(404, {
-                "error": "USER_NOT_FOUND",
-                "message": f"No user found with email {user_email}. The user must log in to the dashboard at least once before they can be added to a server."
-            })
+            ErrorHandler.log_error('USER_NOT_FOUND',
+                                 context={'operation': 'add_user_to_server', 'user_email': user_email, 'instance_id': instance_id},
+                                 email=user_email)
+            return ErrorHandler.create_error_response(404, 'USER_NOT_FOUND', email=user_email)
         
-        username = user_info['username']
-        logger.info(f"User found in Cognito: email={user_email}, username={username}")
+        user_sub = user_info['sub']
+        logger.info(f"User found in Cognito: email={user_email}, sub={user_sub}")
         
-        # Step 2: Check if group exists, create if it doesn't
-        if not auth.group_exists(instance_id):
-            logger.info(f"Group does not exist, creating: group={instance_id}")
-            if not auth.create_group(instance_id):
-                logger.error(f"Failed to create group: group={instance_id}")
-                return utl.response(500, {
-                    "error": "GROUP_CREATION_FAILED",
-                    "message": "Failed to create server access group"
-                })
-        
-        # Step 3: Check if user is already in the group
-        user_groups = auth.list_groups_for_user(username)
-        if instance_id in user_groups:
-            logger.info(f"User already has access: email={user_email}, instance={instance_id}")
-            return utl.response(409, {
-                "error": "USER_ALREADY_EXISTS",
-                "message": f"User {user_email} already has access to this server"
-            })
-        
-        # Step 4: Add user to group
-        if auth.add_user_to_group(instance_id, username):
-            logger.info(f"Successfully added user to server: email={user_email}, instance={instance_id}")
+        # Step 2: Create DynamoDB membership record with default viewer role
+        try:            
+            # Create membership with default viewer role
+            core_dyn.create_user_server_membership(
+                user_id=user_sub,
+                server_id=instance_id,
+                role='viewer',  # Default role as per requirements
+                permissions=['read']
+            )
+            
+            logger.info(f"Successfully added user to server: email={user_email}, instance={instance_id}, role=viewer")
             return utl.response(200, {
-                "message": f"Successfully added {user_email} to the server",
+                "message": f"Successfully added {user_email} to the server with viewer role",
                 "user": {
+                    "id": user_sub,
                     "email": user_info['email'],
-                    "fullName": user_info['fullName']
+                    "fullName": user_info['fullName'],
+                    "role": "viewer"
                 }
             })
-        else:
-            logger.error(f"Failed to add user to group: email={user_email}, instance={instance_id}")
-            return utl.response(500, {
-                "error": "ADD_USER_FAILED",
-                "message": "Failed to add user to server group"
-            })
-    
+            
+        except ValueError as e:
+            # Handle membership already exists error
+            if "already exists" in str(e):
+                ErrorHandler.log_error('MEMBERSHIP_ALREADY_EXISTS',
+                                     context={'operation': 'add_user_to_server', 'user_email': user_email, 'instance_id': instance_id})
+                return ErrorHandler.create_error_response(409, 'MEMBERSHIP_ALREADY_EXISTS')
+            else:
+                ErrorHandler.log_error('VALIDATION_ERROR',
+                                     context={'operation': 'add_user_to_server', 'user_email': user_email, 'instance_id': instance_id},
+                                     exception=e, error=str(e))
+                return ErrorHandler.create_error_response(400, 'VALIDATION_ERROR', error=str(e))
+        
     except Exception as e:
-        logger.error(f"Error adding user to server: email={user_email}, instance={instance_id}, error={str(e)}", exc_info=True)
-        return utl.response(500, {
-            "error": "INTERNAL_ERROR",
-            "message": f"An unexpected error occurred: {str(e)}"
-        })    
+        ErrorHandler.log_error('INTERNAL_ERROR',
+                             context={'operation': 'add_user_to_server', 'user_email': user_email, 'instance_id': instance_id},
+                             exception=e, error=str(e))
+        return ErrorHandler.create_error_response(500, 'INTERNAL_ERROR', error=str(e))    
+
+def handle_update_user_role(instance_id, user_id, new_role, requesting_user_attributes):
+    """
+    Helper function to update a user's role for a server
+    
+    Args:
+        instance_id: EC2 instance ID
+        user_id: Cognito user sub of the user whose role to update
+        new_role: New role to assign (admin, moderator, viewer)
+        requesting_user_attributes: Attributes of the user making the request
+        
+    Returns:
+        dict: Success response with updated membership or error response
+    """
+    try:
+        requesting_user_email = requesting_user_attributes.get('email', 'unknown')
+        requesting_user_sub = requesting_user_attributes.get('sub')
+        
+        logger.info(f"Updating user role: user={user_id}, instance={instance_id}, new_role={new_role}, requester={requesting_user_email}")
+                
+        # Step 1: Check if requesting user has admin permissions
+        requesting_user_access = core_dyn.check_user_server_access(requesting_user_sub, instance_id)
+        is_global_admin = core_dyn.check_global_admin(requesting_user_sub)
+        
+        if not (requesting_user_access and requesting_user_access['role'] == 'admin') and not is_global_admin:
+            logger.warning(f"Unauthorized role update attempt: requester={requesting_user_email}")
+            return ErrorHandler.create_error_response(403, 'INSUFFICIENT_PERMISSIONS', 
+                                                    error="Insufficient permissions. Admin role required.")
+        
+        # Step 2: Prevent users from modifying their own admin role (lockout protection)
+        if user_id == requesting_user_sub and requesting_user_access and requesting_user_access['role'] == 'admin' and new_role != 'admin':
+            logger.warning(f"Self-admin-role modification blocked: user={requesting_user_email}")
+            return ErrorHandler.create_error_response(403, 'SELF_ADMIN_ROLE_PROTECTION', 
+                                                    error="Cannot modify your own admin role to prevent lockout")
+        
+        # Step 3: Update the user's role
+        try:
+            # Get current membership to preserve email
+            current_membership = core_dyn.check_user_server_access(user_id, instance_id)
+            if not current_membership:
+                return ErrorHandler.create_error_response(404, 'MEMBERSHIP_NOT_FOUND', 
+                                                        error="User membership not found")
+            
+            # Create new membership with updated role
+            permissions_map = {'admin': ['read', 'write', 'delete', 'manage_users'], 'moderator': ['read', 'write', 'restart'], 'viewer': ['read']}
+            updated_membership = core_dyn.create_user_server_membership(
+                user_id=user_id,
+                server_id=instance_id,
+                role=new_role,
+                permissions=permissions_map.get(new_role, ['read'])
+            )
+            
+            logger.info(f"Successfully updated user role: user={user_id}, instance={instance_id}, new_role={new_role}")
+            
+            # Return UserMembership object directly for GraphQL
+            return {
+                "userId": user_id,
+                "serverId": instance_id,
+                "email": current_membership.get('email', ''),
+                "role": new_role,
+                "createdAt": updated_membership['createdAt'],
+                "updatedAt": updated_membership['updatedAt'],
+                "createdBy": updated_membership['createdBy']
+            }
+            
+        except ValueError as e:
+            if "not found" in str(e):
+                logger.error(f"User membership not found for role update: user={user_id}, instance={instance_id}")
+                return ErrorHandler.create_error_response(404, 'USER_MEMBERSHIP_NOT_FOUND', 
+                                                        error=f"User membership not found for server {instance_id}")
+            else:
+                logger.error(f"Validation error updating role: {str(e)}")
+                return ErrorHandler.create_error_response(400, 'VALIDATION_ERROR', error=str(e))
+        
+    except Exception as e:
+        logger.error(f"Error updating user role: user={user_id}, instance={instance_id}, error={str(e)}", exc_info=True)
+        return ErrorHandler.create_error_response(500, 'INTERNAL_ERROR', error=f"An unexpected error occurred: {str(e)}")
+
+def handle_remove_user_from_server(instance_id, user_id, requesting_user_attributes):
+    """
+    Helper function to remove a user from a server
+    
+    Args:
+        instance_id: EC2 instance ID
+        user_id: Cognito user sub of the user to remove
+        requesting_user_attributes: Attributes of the user making the request
+        
+    Returns:
+        dict: Success response or error response
+    """
+    try:
+        requesting_user_email = requesting_user_attributes.get('email', 'unknown')
+        requesting_user_sub = requesting_user_attributes.get('sub')
+        
+        logger.info(f"Removing user from server: user={user_id}, instance={instance_id}, requester={requesting_user_email}")
+        
+        # Step 1: Check if requesting user has admin permissions
+        requesting_user_access = core_dyn.check_user_server_access(requesting_user_sub, instance_id)
+        is_global_admin = core_dyn.check_global_admin(requesting_user_sub)
+        
+        if not (requesting_user_access and requesting_user_access['role'] == 'admin') and not is_global_admin:
+            logger.warning(f"Unauthorized user removal attempt: requester={requesting_user_email}")
+            return ErrorHandler.create_error_response(403, 'INSUFFICIENT_PERMISSIONS', 
+                                                    error="Insufficient permissions. Admin role required.")
+        
+        # Step 2: Prevent users from removing themselves if they're the only admin (lockout protection)
+        if user_id == requesting_user_sub and requesting_user_access and requesting_user_access['role'] == 'admin':
+            # Check if there are other admins
+            all_members = core_dyn.list_server_members(instance_id)
+            admin_members = [m for m in all_members if m.get('role') == 'admin']
+            if len(admin_members) <= 1:
+                logger.warning(f"Self-removal blocked - only admin: user={requesting_user_email}")
+                return ErrorHandler.create_error_response(403, 'LAST_ADMIN_PROTECTION', 
+                                                        error="Cannot remove yourself as you are the only admin for this server")
+        
+        # Step 3: Remove the user's membership
+        try:
+            deleted_membership = core_dyn.delete_membership(user_id, instance_id)
+            
+            logger.info(f"Successfully removed user from server: user={user_id}, instance={instance_id}")
+            
+            # Return JSON response as expected by GraphQL AWSJSON type
+            return {
+                "message": "Successfully removed user from server",
+                "removedUser": {
+                    "userId": deleted_membership['userId'],
+                    "email": deleted_membership['email'],
+                    "role": deleted_membership['role']
+                }
+            }
+            
+        except ValueError as e:
+            if "not found" in str(e):
+                logger.error(f"User membership not found for removal: user={user_id}, instance={instance_id}")
+                return ErrorHandler.create_error_response(404, 'USER_MEMBERSHIP_NOT_FOUND', 
+                                                        error=f"User membership not found for server {instance_id}")
+            else:
+                logger.error(f"Validation error removing user: {str(e)}")
+                return ErrorHandler.create_error_response(400, 'VALIDATION_ERROR', error=str(e))
+        
+    except Exception as e:
+        logger.error(f"Error removing user from server: user={user_id}, instance={instance_id}, error={str(e)}", exc_info=True)
+        return ErrorHandler.create_error_response(500, 'INTERNAL_ERROR', error=f"An unexpected error occurred: {str(e)}")
+
+def handle_get_server_config_old(instance_id):
+    """Helper function to handle get server config action"""
+    try:
+
+        server_config = core_dyn.get_server_config(instance_id)
+        if server_config is None:
+            logger.warning(f"No config found for instance {instance_id}, returning empty config")
+            # Return empty config structure matching GraphQL schema
+            return {
+                'id': instance_id,
+                'shutdownMethod': '',
+                'stopScheduleExpression': '',
+                'startScheduleExpression': '',
+                'alarmThreshold': 0.0,
+                'alarmEvaluationPeriod': 0,
+                'runCommand': '',
+                'workDir': '',
+                'timezone': 'UTC',
+                'isBootstrapComplete': False,
+                'hasCognitoGroup': False,
+                'minecraftVersion': '',
+                'latestPatchUpdate': '',
+                'runningMinutesCache': None,
+                'runningMinutesCacheTimestamp': ''
+            }
+        return server_config
+    except Exception as e:
+        logger.error(f"Error getting server config for {instance_id}: {str(e)}", exc_info=True)
+        return utl.response(500, {"error": f"Failed to get server config: {str(e)}"})
 
 def handle_get_server_config(instance_id):
     """Helper function to handle get server config action"""
     try:
-        dyn = ddbHelper.Dyn()
         
-        server_config = dyn.get_server_config(instance_id)
+        server_config = core_dyn.get_server_config(instance_id)
         if server_config is None:
             logger.warning(f"No config found for instance {instance_id}, returning empty config")
             # Return empty config structure matching GraphQL schema
@@ -550,7 +723,7 @@ def handle_create_server_operation(event, user_attributes):
     return handle_create_server(input_data, user_attributes)
 
 def route_instance_operation(event, instance_id, user_attributes):
-    """Route operations that require instance authorization."""
+    """Route operations that require instance authorization with role-based permissions."""
     field_name = event["info"]["fieldName"].lower()
     
     # Prepare input data
@@ -558,12 +731,18 @@ def route_instance_operation(event, instance_id, user_attributes):
     if input_args := event["arguments"].get("input"):
         input_data = {**input_args, 'id': instance_id}
     
-    # Check authorization
+    # Determine minimum permission based on server operation
+    required_permission = 'manage_server'  # Default for server operations (stop/start, config and user mngmt)
+        
+    # Check authorization with role-based permissions
     try:
-        is_authorized = check_authorization(event, instance_id, user_attributes)
+        is_authorized, user_role, auth_reason = core_dyn.check_user_authorization(user_attributes['sub'], instance_id, required_permission)
         if not is_authorized:
-            logger.error("%s is not authorized for instance %s", user_attributes["email"], instance_id)
-            return utl.response(401, {"err": "User not authorized"})
+            logger.error(f"User {user_attributes['email']} not authorized for {field_name} on instance {instance_id}: {auth_reason}")
+            return utl.response(403, {"err": f"Insufficient permissions. {auth_reason}"})
+        
+        logger.info(f"Authorization granted: user={user_attributes['email']}, role={user_role}, operation={field_name}")
+        
     except Exception as e:
         logger.error(f"Authorization check FAILED: user={user_attributes.get('email', 'unknown')}, instance={instance_id}, error={str(e)}", exc_info=True)
         return utl.response(500, {"err": "Authorization check failed"})
@@ -572,12 +751,27 @@ def route_instance_operation(event, instance_id, user_attributes):
     if field_name in ["getserverconfig", "getserverusers"]:
         return action_process_sync(field_name, instance_id, input_data)
     
-    # Add user operation
+    # Add user operation - create DynamoDB membership with default viewer role
     if field_name == "addusertoserver":
         user_email = event["arguments"].get("userEmail")
         if not user_email:
             return utl.response(400, {"err": "userEmail is required"})
-        return handle_add_user_to_server(instance_id, user_email)
+        return handle_add_user_to_server(instance_id, user_email, user_attributes)
+    
+    # Update user role operation - new DynamoDB-based role management
+    if field_name == "updateuserrole":
+        user_id = event["arguments"].get("userId")
+        new_role = event["arguments"].get("role")
+        if not user_id or not new_role:
+            return utl.response(400, {"err": "userId and role are required"})
+        return handle_update_user_role(instance_id, user_id, new_role, user_attributes)
+    
+    # Remove user from server operation - new DynamoDB-based user removal
+    if field_name == "removeuserfromserver":
+        user_id = event["arguments"].get("userId")
+        if not user_id:
+            return utl.response(400, {"err": "userId is required"})
+        return handle_remove_user_from_server(instance_id, user_id, user_attributes)
     
     # Update server name
     if field_name == "updateservername":
@@ -615,7 +809,7 @@ def handler(event, context):
     try:
         # Handle local invocation or extract token
         try:
-            token = authHelper.extract_auth_token(event)
+            token = utl.extract_auth_token(event)
         except ValueError as e:
             if str(e) == "Local invocation detected":
                 return handle_local_invocation(event, context)

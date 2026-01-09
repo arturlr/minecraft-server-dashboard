@@ -3,6 +3,38 @@ input AddUserToServerInput {
 	userEmail: AWSEmail!
 }
 
+# New enum for membership roles
+enum MembershipRole {
+	admin
+	moderator
+	viewer
+}
+
+# New type for user membership
+type UserMembership @aws_iam @aws_cognito_user_pools {
+	userId: String!
+	serverId: String!
+	email: AWSEmail!
+	role: MembershipRole!
+	createdAt: AWSDateTime!
+	updatedAt: AWSDateTime!
+	createdBy: AWSEmail!
+}
+
+input UserMembershipInput {
+	userId: String!
+	serverId: String!
+	email: AWSEmail!
+	role: MembershipRole!
+	createdBy: AWSEmail!
+}
+
+input UpdateUserRoleInput {
+	userId: String!
+	serverId: String!
+	role: MembershipRole!
+}
+
 input CreateServerInput {
 	serverName: String!
 	instanceType: String!
@@ -100,12 +132,14 @@ type ServerUsers @aws_iam
 	id: String!
 	email: AWSEmail!
 	fullName: String!
+	role: MembershipRole!
 }
 
 input ServerUsersInput {
 	id: String!
 	email: AWSEmail!
 	fullName: String!
+	role: MembershipRole!
 }
 
 type ServerInfo @aws_iam
@@ -220,6 +254,10 @@ type Mutation {
 		@aws_cognito_user_pools
 	putLogAudit(input: LogAuditInput!): LogAudit
 		@aws_iam @aws_cognito_user_pools
+	updateUserRole(input: UpdateUserRoleInput!): UserMembership
+		@aws_cognito_user_pools
+	removeUserFromServer(userId: String!, serverId: String!): AWSJSON
+		@aws_cognito_user_pools
 }
 
 type Query {

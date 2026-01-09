@@ -10,17 +10,30 @@ Parameters:
     Type: String
 
 Resources:
-  ServersTable:
+  CoreTable:
     Type: AWS::DynamoDB::Table
     Properties:
-      TableName: !Sub "${ProjectName}-${EnvironmentName}-ServersTable"
+      TableName: !Sub "${ProjectName}-${EnvironmentName}-CoreTable"
       BillingMode: PAY_PER_REQUEST
       AttributeDefinitions:
-        - AttributeName: id
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
           AttributeType: S
       KeySchema:
-        - AttributeName: id
+        - AttributeName: PK
           KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: SK-PK-index
+          KeySchema:
+            - AttributeName: SK
+              KeyType: HASH
+            - AttributeName: PK
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
       Tags:
         - Key: app
           Value: !Ref AppValue
@@ -45,15 +58,15 @@ Resources:
           Value: !Ref AppValue
 
 Outputs:
-  ServersTable:
-    Value: !GetAtt ServersTable.Arn
+  CoreTable:
+    Value: !GetAtt CoreTable.Arn
     Export:
-      Name: !Sub "${ProjectName}-${EnvironmentName}-ServersTable"
+      Name: !Sub "${ProjectName}-${EnvironmentName}-CoreTable"
 
-  ServersTableName:
-    Value: !Ref ServersTable
+  CoreTableName:
+    Value: !Ref CoreTable
     Export:
-      Name: !Sub "${ProjectName}-${EnvironmentName}-ServersTableName"
+      Name: !Sub "${ProjectName}-${EnvironmentName}-CoreTableName"
 
   LogAuditTable:
     Value: !GetAtt LogAuditTable.Arn

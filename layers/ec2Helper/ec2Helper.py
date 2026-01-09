@@ -5,7 +5,6 @@ import os
 import json
 from datetime import datetime, timezone
 from botocore.exceptions import ClientError
-from boto3.dynamodb.conditions import Key, Attr
 
 sys.path.insert(0, '/opt/utilHelper')
 import utilHelper
@@ -159,9 +158,6 @@ class Ec2Utils:
             instance_id = response['Instances'][0]['InstanceId']
             logger.info(f"✓ EC2 instance created successfully: {instance_id}")
             logger.info(f"✓ Instance type: {instance_type}")
-            logger.info(f"✓ Root volume (OS): 16GB on /dev/sda1")
-            logger.info(f"✓ Data volume (game/logs): 50GB on /dev/sdf")
-            logger.info(f"✓ Tags applied: Name={instance_name}, App={self.appValue}")
             
             return instance_id
         
@@ -618,13 +614,12 @@ class Ec2Utils:
         
         return { 'instanceId': instance_id, 'initStatus': initStatus, 'iamStatus': iamStatus }
 
-    def describe_instance_attributes(self, instance_id):
+    def describe_instance_attribute(self, instance_id, attribute):
         logger.info(f"------- describe_instance_attributes: {instance_id}")
-        response = self.ec2_client.describe_instance_attribute(
-            Attribute='userData',
+        return self.ec2_client.describe_instance_attribute(
+            Attribute=attribute,
             instanceId=instance_id
         )
-
    
     def update_instance_name_tag(self, instance_id, new_name):
         """

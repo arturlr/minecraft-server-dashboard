@@ -3,7 +3,7 @@ import logging
 import os
 from datetime import datetime, timezone
 from botocore.exceptions import ClientError
-from boto3.dynamodb.conditions import Key, Attr
+from boto3.dynamodb.conditions import Key
 from decimal import Decimal
 
 logger = logging.getLogger()
@@ -12,91 +12,79 @@ logger.setLevel(logging.INFO)
 session = boto3.session.Session()
 aws_region = session.region_name
 
-class Dyn:
+class CoreTableDyn:
+    """
+    DynamoDB helper class for CoreTable operations using PK/SK pattern.
+    Handles Users, Servers, Roles, and UserServer relationships in a single table.
+    """
 
     def __init__(self, table_name=None):
-        logger.info("------- DynamoDb Class Initialization")
         dynamodb = boto3.resource('dynamodb', region_name=aws_region)
-        serversTable = table_name
-        if not serversTable:
-            # fallback to the oldwway
-            serversTable = os.getenv('SERVERS_TABLE_NAME')
-            if not serversTable:
-                raise ValueError("SERVERS_TABLE_NAME environment variable not set")
+        core_table = table_name or os.getenv('CORE_TABLE_NAME')
+        if not core_table:
+            raise ValueError("CORE_TABLE_NAME environment variable not set")
         
-        self.table = dynamodb.Table(serversTable)
+        self.table = dynamodb.Table(core_table)
+        self.VALID_ROLES = {'admin', 'moderator', 'viewer', 'support'}
 
-    @staticmethod
-    def _to_decimal(value):
-        """
-        Convert numeric values to Decimal for DynamoDB storage.
+    # Server Operations
+    def get_server_info(self, instance_id):
+        """Get server information from CoreTable."""
+        response = self.table.get_item(Key={'PK': f'SERVER#{instance_id}', 'SK': 'METADATA'})
         
-        Args:
-            value: Numeric value or None
-            
-        Returns:
-            Decimal: Converted value or None
-        """
-        if value is None:
+        if 'Item' not in response:
             return None
-        if isinstance(value, (int, float)):
-            return Decimal(str(value))
-        return value
-
-    @staticmethod
-    def _safe_float(value, default=0.0):
-        """
-        Safely convert value to float, handling Decimal and None.
         
-        Args:
-            value: Value to convert (can be Decimal, int, float, or None)
-            default: Default value if conversion fails or value is None
-            
-        Returns:
-            float: Converted value or default
-        """
-        if value is None:
-            return None if default is None else default
-        try:
-            return float(value)
-        except (ValueError, TypeError):
-            logger.warning(f"Could not convert {value} to float, using default {default}")
-            return default
-
-    @staticmethod
-    def _safe_int(value, default=0):
-        """
-        Safely convert value to int, handling Decimal and None.
-        
-        Args:
-            value: Value to convert (can be Decimal, int, float, or None)
-            default: Default value if conversion fails or value is None
-            
-        Returns:
-            int: Converted value or default
-        """
-        if value is None:
-            return default
-        try:
-            return int(value)
-        except (ValueError, TypeError):
-            logger.warning(f"Could not convert {value} to int, using default {default}")
-            return default
-
-    def _convert_dynamodb_config_item(self, item, instance_id):
-        """
-        Convert DynamoDB item to ServerConfig format with proper type handling.
-        
-        Args:
-            item (dict): DynamoDB item
-            instance_id (str): EC2 instance ID
-            
-        Returns:
-            dict: Server configuration matching ServerConfig GraphQL type
-        """
+        item = response['Item']
         return {
             'id': instance_id,
-            'shutdownMethod': item.get('shutdownMethod', ''),
+            'name': item.get('name'),
+            'hostname': item.get('hostname'),
+            'region': item.get('region'),
+            'state': item.get('state'),
+            'vCpus': self._safe_int(item.get('vCpus')),
+            'memSize': self._safe_int(item.get('memSize')),
+            'diskSize': self._safe_int(item.get('diskSize')),
+            'launchTime': item.get('launchTime'),
+            'publicIp': item.get('publicIp'),
+            'initStatus': item.get('initStatus'),
+            'iamStatus': item.get('iamStatus'),
+            'runningMinutes': item.get('runningMinutes'),
+            'runningMinutesCacheTimestamp': item.get('runningMinutesCacheTimestamp'),
+            'configStatus': item.get('configStatus'),
+            'configValid': item.get('configValid'),
+            'configWarnings': item.get('configWarnings', []),
+            'configErrors': item.get('configErrors', []),
+            'autoConfigured': item.get('autoConfigured', False)
+        }
+
+    def put_server_info(self, server_info):
+        """Save server information to CoreTable."""
+        instance_id = server_info.get('id')
+        if not instance_id:
+            raise ValueError("Server info must include 'id' field")
+        
+        item = {
+            'PK': f'SERVER#{instance_id}',
+            'SK': 'METADATA',
+            'Type': 'Server',
+            **{k: self._to_decimal(v) if isinstance(v, (int, float)) else v 
+               for k, v in server_info.items() if k != 'id' and v is not None}
+        }
+        
+        self.table.put_item(Item=item)
+        return {'ResponseMetadata': {'HTTPStatusCode': 200}}
+
+    def get_server_config(self, instance_id):
+        """Get server configuration from CoreTable."""
+        response = self.table.get_item(Key={'PK': f'SERVER#{instance_id}', 'SK': 'METADATA'})
+        
+        if 'Item' not in response:
+            return None
+        
+        item = response['Item']
+        return {
+            'id': instance_id,
             'stopScheduleExpression': item.get('stopScheduleExpression', ''),
             'startScheduleExpression': item.get('startScheduleExpression', ''),
             'alarmThreshold': self._safe_float(item.get('alarmThreshold'), 0.0),
@@ -109,342 +97,198 @@ class Dyn:
             'minecraftVersion': item.get('minecraftVersion', ''),
             'latestPatchUpdate': item.get('latestPatchUpdate', ''),
             'runningMinutesCache': self._safe_float(item.get('runningMinutesCache'), None),
-            'runningMinutesCacheTimestamp': item.get('runningMinutesCacheTimestamp', '')
+            'runningMinutesCacheTimestamp': item.get('runningMinutesCacheTimestamp', ''),
+            'createdAt': item.get('createdAt', ''),
+            'updatedAt': item.get('updatedAt', ''),
+            'autoConfigured': item.get('autoConfigured', False)
         }
-
-    def get_server_config(self, instance_id):
-        """
-        Get server configuration from DynamoDB.
-        
-        Args:
-            instance_id (str): The EC2 instance ID
-            
-        Returns:
-            dict: Server configuration matching ServerConfig GraphQL type, or None if not found
-        """
-        if not instance_id:
-            raise ValueError("Instance ID is required")
-            
-        try:
-            logger.info(f"get_server_config: {instance_id}")
-            response = self.table.get_item(Key={'id': instance_id})
-            
-            if 'Item' in response:
-                return self._convert_dynamodb_config_item(response['Item'], instance_id)
-            else:
-                logger.info(f"Server config not found for {instance_id}")
-                return None
-
-        except ClientError as e:
-            logger.error(f"Error getting server config for {instance_id}: {e.response['Error']['Message']}")
-            raise
-        except Exception as e:
-            logger.error(f"Unexpected error getting server config for {instance_id}: {str(e)}")
-            raise
 
     def put_server_config(self, config):
-        """
-        Save complete server configuration to DynamoDB.
-        
-        Args:
-            config (dict): Server configuration matching ServerConfigInput GraphQL type
-            
-        Returns:
-            dict: Saved configuration
-        """
+        """Save server configuration to CoreTable."""
         instance_id = config.get('id')
         if not instance_id:
             raise ValueError("Instance ID is required")
-            
-        try:
-            logger.info(f"put_server_config: {instance_id}")
-
-            # Build item with all fields
-            item = {
-                'id': instance_id,
-                'shutdownMethod': config.get('shutdownMethod', ''),
-                'stopScheduleExpression': config.get('stopScheduleExpression', ''),
-                'startScheduleExpression': config.get('startScheduleExpression', ''),
-                'alarmThreshold': self._to_decimal(config.get('alarmThreshold', 0.0)),
-                'alarmEvaluationPeriod': config.get('alarmEvaluationPeriod', 0),
-                'runCommand': config.get('runCommand', ''),
-                'workDir': config.get('workDir', ''),
-                'timezone': config.get('timezone', 'UTC'),
-                'isBootstrapComplete': config.get('isBootstrapComplete', False),
-                'minecraftVersion': config.get('minecraftVersion', ''),
-                'latestPatchUpdate': config.get('latestPatchUpdate', ''),
-                'updatedAt': datetime.now(timezone.utc).isoformat()
-            }
-            
-            # Preserve createdAt if it exists, otherwise set it
-            item['createdAt'] = config.get('createdAt', datetime.now(timezone.utc).isoformat())
-            
-            # Preserve autoConfigured flag if it exists
-            if 'autoConfigured' in config:
-                item['autoConfigured'] = config['autoConfigured']
-            
-            # Preserve cache fields if they exist
-            if 'runningMinutesCache' in config and config['runningMinutesCache'] is not None:
-                item['runningMinutesCache'] = self._to_decimal(config['runningMinutesCache'])
-            if 'runningMinutesCacheTimestamp' in config:
-                item['runningMinutesCacheTimestamp'] = config['runningMinutesCacheTimestamp']
-            
-            # Remove empty strings to keep table clean (but keep timestamps and booleans)
-            item = {k: v for k, v in item.items() 
-                   if v != '' or k in ['createdAt', 'updatedAt', 'isBootstrapComplete', 'autoConfigured']}
-            
-            self.table.put_item(Item=item)
-            logger.info(f"Server config saved for {instance_id}")
-            
-            # Return the saved config by fetching it back
-            return self.get_server_config(instance_id)
-
-        except ClientError as e:
-            logger.error(f"Error saving server config for {instance_id}: {e.response['Error']['Message']}")
-            raise
-        except Exception as e:
-            logger.error(f"Unexpected error saving server config for {instance_id}: {str(e)}")
-            raise
+        
+        now = datetime.now(timezone.utc).isoformat()
+        existing = self.table.get_item(Key={'PK': f'SERVER#{instance_id}', 'SK': 'METADATA'}).get('Item', {})
+        
+        existing.update({
+            'PK': f'SERVER#{instance_id}',
+            'SK': 'METADATA',
+            'Type': 'Server',
+            'stopScheduleExpression': config.get('stopScheduleExpression', ''),
+            'startScheduleExpression': config.get('startScheduleExpression', ''),
+            'alarmThreshold': self._to_decimal(config.get('alarmThreshold', 0.0)),
+            'alarmEvaluationPeriod': config.get('alarmEvaluationPeriod', 0),
+            'runCommand': config.get('runCommand', ''),
+            'workDir': config.get('workDir', ''),
+            'timezone': config.get('timezone', 'UTC'),
+            'isBootstrapComplete': config.get('isBootstrapComplete', False),
+            'minecraftVersion': config.get('minecraftVersion', ''),
+            'latestPatchUpdate': config.get('latestPatchUpdate', ''),
+            'updatedAt': now,
+            'createdAt': existing.get('createdAt', config.get('createdAt', now))
+        })
+        
+        if 'autoConfigured' in config:
+            existing['autoConfigured'] = config['autoConfigured']
+        
+        if config.get('runningMinutesCache') is not None:
+            existing['runningMinutesCache'] = self._to_decimal(config['runningMinutesCache'])
+        if config.get('runningMinutesCacheTimestamp'):
+            existing['runningMinutesCacheTimestamp'] = config['runningMinutesCacheTimestamp']
+        
+        self.table.put_item(Item=existing)
+        return self.get_server_config(instance_id)
 
     def update_server_config(self, config):
-        """
-        Update specific fields in server configuration.
-        
-        Args:
-            config (dict): Partial server configuration with id and fields to update
-            
-        Returns:
-            dict: Updated configuration
-        """
-        instance_id = config.get('id')
-        if not instance_id:
-            raise ValueError("Instance ID is required")
-
-        # Allowed fields for update operations (whitelist)
-        # Potentially create a script to create it from the
-        # GraphQL variables
-        ALLOWED_UPDATE_FIELDS = {
-            'shutdownMethod',
-            'stopScheduleExpression',
-            'startScheduleExpression',
-            'alarmThreshold',
-            'alarmEvaluationPeriod',
-            'runCommand',
-            'workDir',
-            'timezone',
-            'isBootstrapComplete',
-            'hasCognitoGroup',
-            'minecraftVersion',
-            'latestPatchUpdate',
-            'autoConfigured',
-            'runningMinutesCache',
-            'runningMinutesCacheTimestamp'
-        }
-        
-        # Fields that need Decimal conversion for DynamoDB
-        NUMERIC_FIELDS = {'alarmThreshold', 'runningMinutesCache'}
-
-        try:
-            logger.info(f"update_server_config: {instance_id}")
-            
-            # Build update expression dynamically
-            update_parts = []
-            expression_values = {}
-            expression_names = {}
-            
-            for field_name in ALLOWED_UPDATE_FIELDS:
-                if field_name in config and config[field_name] is not None:
-                    placeholder = f":{field_name}"
-                    name_placeholder = f"#{field_name}"
-                    update_parts.append(f"{name_placeholder} = {placeholder}")
-                    
-                    # Convert numeric fields to Decimal
-                    value = config[field_name]
-                    if field_name in self.NUMERIC_FIELDS:
-                        value = self._to_decimal(value)
-                    
-                    expression_values[placeholder] = value
-                    expression_names[name_placeholder] = field_name
-            
-            if not update_parts:
-                logger.warning(f"No fields to update for {instance_id}")
-                return self.get_server_config(instance_id)
-            
-            # Always update timestamp
-            update_parts.append("#updatedAt = :updatedAt")
-            expression_values[':updatedAt'] = datetime.now(timezone.utc).isoformat()
-            expression_names['#updatedAt'] = 'updatedAt'
-            
-            # Set createdAt if it doesn't exist (for legacy records)
-            update_parts.append("#createdAt = if_not_exists(#createdAt, :createdAt)")
-            expression_values[':createdAt'] = datetime.now(timezone.utc).isoformat()
-            expression_names['#createdAt'] = 'createdAt'
-            
-            update_expression = "SET " + ", ".join(update_parts)
-            
-            response = self.table.update_item(
-                Key={'id': instance_id},
-                UpdateExpression=update_expression,
-                ExpressionAttributeValues=expression_values,
-                ExpressionAttributeNames=expression_names,
-                ReturnValues="ALL_NEW"
-            )
-            
-            logger.info(f"Server config updated for {instance_id}")
-            
-            # Convert the returned item to proper format
-            return self._convert_dynamodb_config_item(response['Attributes'], instance_id)
-
-        except ClientError as e:
-            logger.error(f"Error updating server config for {instance_id}: {e.response['Error']['Message']}")
-            raise
-        except Exception as e:
-            logger.error(f"Unexpected error updating server config for {instance_id}: {str(e)}")
-            raise
-
-
-    def get_server_info(self, instance_id):
-        """
-        Get server information from DynamoDB.
-        
-        Args:
-            instance_id (str): EC2 instance ID
-            
-        Returns:
-            dict: Server information or None if not found
-        """
-        try:
-            logger.info(f"Getting server info for {instance_id}")
-            
-            response = self.table.get_item(
-                Key={'id': instance_id}
-            )
-            
-            if 'Item' not in response:
-                logger.warning(f"No server info found for {instance_id}")
-                return None
-            
-            item = response['Item']
-            
-            # Convert DynamoDB item to standard format
-            server_info = {
-                'id': item.get('id'),
-                'name': item.get('name'),
-                'userEmail': item.get('userEmail'),
-                'state': item.get('state'),
-                'vCpus': self._safe_int(item.get('vCpus')),
-                'memSize': self._safe_int(item.get('memSize')),
-                'diskSize': self._safe_int(item.get('diskSize')),
-                'launchTime': item.get('launchTime'),
-                'publicIp': item.get('publicIp'),
-                'initStatus': item.get('initStatus'),
-                'iamStatus': item.get('iamStatus'),
-                'runningMinutes': item.get('runningMinutes'),
-                'runningMinutesCacheTimestamp': item.get('runningMinutesCacheTimestamp'),
-                'configStatus': item.get('configStatus'),
-                'configValid': item.get('configValid'),
-                'configWarnings': item.get('configWarnings', []),
-                'configErrors': item.get('configErrors', []),
-                'autoConfigured': item.get('autoConfigured', False)
-            }
-            
-            logger.info(f"Server info retrieved for {instance_id}")
-            return server_info
-            
-        except ClientError as e:
-            logger.error(f"Error getting server info for {instance_id}: {e.response['Error']['Message']}")
-            raise
-        except Exception as e:
-            logger.error(f"Unexpected error getting server info for {instance_id}: {str(e)}")
-            raise
+        """Update server configuration."""
+        return self.put_server_config(config)
 
     def update_server_name(self, instance_id, new_name):
-        """
-        Update only the server name in DynamoDB.
+        """Update server name."""
+        return self.table.update_item(
+            Key={'PK': f'SERVER#{instance_id}', 'SK': 'METADATA'},
+            UpdateExpression="SET #name = :name",
+            ExpressionAttributeNames={'#name': 'name'},
+            ExpressionAttributeValues={':name': new_name},
+            ReturnValues="ALL_NEW"
+        )
+
+    # User Operations
+    def check_user_server_access(self, user_id, server_id):
+        """Check if user has access to specific server."""
+        response = self.table.get_item(Key={'PK': f'USER#{user_id}', 'SK': f'SERVER#{server_id}'})
         
-        Args:
-            instance_id (str): EC2 instance ID
-            new_name (str): New server name
-            
-        Returns:
-            dict: DynamoDB response
-        """
+        if 'Item' in response:
+            item = response['Item']
+            return {
+                'userId': user_id,
+                'serverId': server_id,
+                'role': item.get('role'),
+                'permissions': item.get('permissions', [])
+            }
+        return None
+
+    def check_global_admin(self, user_id):
+        """Check if user has global admin role."""
+        response = self.table.get_item(Key={'PK': f'USER#{user_id}', 'SK': 'ADMIN'})
+        return 'Item' in response
+
+    def list_server_members(self, server_id):
+        """List all members of a server using GSI."""
+        response = self.table.query(
+            IndexName='SK-PK-index',
+            KeyConditionExpression=Key('SK').eq(f'SERVER#{server_id}')
+        )
+        
+        members = []
+        for item in response.get('Items', []):
+            if item['PK'].startswith('USER#'):
+                user_id = item['PK'].replace('USER#', '')
+                members.append({
+                    'userId': user_id,
+                    'serverId': server_id,
+                    'role': item.get('role'),
+                    'permissions': item.get('permissions', [])
+                })
+        
+        return members
+
+    def create_user_server_membership(self, user_id, server_id, role, permissions=None):
+        """Create user-server membership."""
+        if role not in self.VALID_ROLES:
+            raise ValueError(f"Invalid role '{role}'. Must be one of: {', '.join(self.VALID_ROLES)}")
+        
+        item = {
+            'PK': f'USER#{user_id}',
+            'SK': f'SERVER#{server_id}',
+            'Type': 'UserServer',
+            'role': role,
+            'permissions': permissions or []
+        }
+        
         try:
-            if not instance_id:
-                raise ValueError("Instance ID is required")
-            if not new_name:
-                raise ValueError("New name is required")
-                
-            logger.info(f"Updating server name for {instance_id} to '{new_name}'")
-            
-            response = self.table.update_item(
-                Key={'id': instance_id},
-                UpdateExpression="SET #name = :name",
-                ExpressionAttributeNames={'#name': 'name'},
-                ExpressionAttributeValues={':name': new_name},
-                ReturnValues="ALL_NEW"
+            self.table.put_item(
+                Item=item,
+                ConditionExpression='attribute_not_exists(PK) AND attribute_not_exists(SK)'
             )
-            
-            logger.info(f"Server name updated for {instance_id}")
-            return response
-            
+            return True
         except ClientError as e:
-            logger.error(f"Error updating server name for {instance_id}: {e.response['Error']['Message']}")
-            raise
-        except Exception as e:
-            logger.error(f"Unexpected error updating server name for {instance_id}: {str(e)}")
+            if e.response['Error']['Code'] == 'ConditionalCheckFailedException':
+                raise ValueError("Membership already exists")
             raise
 
-    def put_server_info(self, server_info):
+    def check_user_authorization(self, user_sub, server_id, required_permission='read_server'):
         """
-        Save server information to DynamoDB.
+        Check if user is authorized to perform actions on server using CoreTable.
         
         Args:
-            server_info (dict): Server information to save
+            user_sub (str): Cognito user sub
+            server_id (str): EC2 instance ID
+            required_permission (str): Permission level required
             
         Returns:
-            dict: DynamoDB response
+            tuple: (bool, str, str) - (is_authorized, user_role, auth_reason)
         """
         try:
-            instance_id = server_info.get('id')
-            if not instance_id:
-                raise ValueError("Server info must include 'id' field")
+            # Check if user has global admin role
+            if self.check_global_admin(user_sub):
+                return True, 'admin', "User has global admin privileges"
             
-            logger.info(f"Saving server info for {instance_id}")
+            # Check server-specific access
+            server_access = self.check_user_server_access(user_sub, server_id)
+            if server_access:
+                role = server_access['role']
+                
+                # Simple permission check based on role
+                permission_levels = {'viewer': 1, 'moderator': 2, 'support':3, 'admin': 4}
+                required_levels = {
+                    'read_server': 1, 'read_metrics': 1, 'read_config': 1,
+                    'manage_server': 3, 'manage_users': 4
+                }
+                
+                user_level = permission_levels.get(role, 0)
+                required_level = required_levels.get(required_permission, 1)
+                
+                if user_level >= required_level:
+                    return True, role, f"User has {role} role with sufficient permissions"
+                else:
+                    return False, role, f"Insufficient permissions. Required: {required_permission}, Role: {role}"
             
-            # Prepare item for DynamoDB, converting numeric values to Decimal
-            item = {
-                'id': instance_id,
-                'name': server_info.get('name'),
-                'userEmail': server_info.get('userEmail'),
-                'state': server_info.get('state'),
-                'vCpus': self._to_decimal(server_info.get('vCpus')),
-                'memSize': self._to_decimal(server_info.get('memSize')),
-                'diskSize': self._to_decimal(server_info.get('diskSize')),
-                'launchTime': server_info.get('launchTime'),
-                'publicIp': server_info.get('publicIp'),
-                'initStatus': server_info.get('initStatus'),
-                'iamStatus': server_info.get('iamStatus'),
-                'runningMinutes': server_info.get('runningMinutes'),
-                'runningMinutesCacheTimestamp': server_info.get('runningMinutesCacheTimestamp'),
-                'configStatus': server_info.get('configStatus'),
-                'configValid': server_info.get('configValid'),
-                'configWarnings': server_info.get('configWarnings', []),
-                'configErrors': server_info.get('configErrors', []),
-                'autoConfigured': server_info.get('autoConfigured', False)
-            }
+            return False, None, f"User does not have access to server {server_id}"
             
-            # Remove None values to avoid storing them in DynamoDB
-            item = {k: v for k, v in item.items() if v is not None}
-            
-            response = self.table.put_item(Item=item)
-            
-            logger.info(f"Server info saved for {instance_id}")
-            return response
-            
-        except ClientError as e:
-            logger.error(f"Error saving server info for {instance_id}: {e.response['Error']['Message']}")
-            raise
         except Exception as e:
-            logger.error(f"Unexpected error saving server info for {instance_id}: {str(e)}")
-            raise
+            logger.error(f"Error checking user authorization: {str(e)}")
+            return False, None, f"Error checking permissions: {str(e)}"
+
+    # Utility methods
+    @staticmethod
+    def _to_decimal(value):
+        if value is None:
+            return None
+        if isinstance(value, (int, float)):
+            return Decimal(str(value))
+        return value
+
+    @staticmethod
+    def _safe_float(value, default=0.0):
+        if value is None:
+            return None if default is None else default
+        try:
+            return float(value)
+        except (ValueError, TypeError):
+            return default
+
+    @staticmethod
+    def _safe_int(value, default=0):
+        if value is None:
+            return default
+        try:
+            return int(value)
+        except (ValueError, TypeError):
+            return default
+
+# Backward compatibility aliases
+Dyn = CoreTableDyn
+UserMembershipDyn = CoreTableDyn

@@ -3,10 +3,13 @@ import logging
 import os
 import json
 import time
-from datetime import datetime, timezone
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
+
+appValue = os.getenv('TAG_APP_VALUE')
+appName = os.getenv('APP_NAME') 
+envName = os.getenv('ENVIRONMENT_NAME')
 
 ssm = boto3.client('ssm')
 ec2_client = boto3.client('ec2')
