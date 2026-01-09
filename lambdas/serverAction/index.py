@@ -296,6 +296,16 @@ def handle_get_server_users(instance_id):
         logger.error("Error retrieving users for instance %s: %s", instance_id, str(e))
         return utl.response(500, {"error": f"Failed to retrieve users: {str(e)}"})
 
+def handle_get_admin_users():
+    """Helper function to get admin group members"""
+    try:
+        admin_group = os.getenv('ADMIN_GROUP_NAME', 'admin')
+        users = auth.list_users_for_group(admin_group)
+        return users
+    except Exception as e:
+        logger.error("Error retrieving admin users: %s", str(e))
+        return []
+
 def handle_search_user_by_email(email):
     """
     Helper function to search for a user by email address
@@ -628,6 +638,9 @@ def handler(event, context):
         
         if field_name == "searchuserbyemail":
             return handle_search_user_by_email_operation(event)
+        
+        if field_name == "getadminusers":
+            return handle_get_admin_users()
         
         if field_name == "createserver":
             return handle_create_server_operation(event, user_attributes)
