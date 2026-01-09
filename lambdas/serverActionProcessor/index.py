@@ -106,7 +106,9 @@ def _convert_timezone_to_utc(hour, minute, timezone):
     
     try:
         tz = pytz.timezone(timezone)
-        local_time = tz.localize(datetime(2024, 1, 15, int(hour), int(minute)))
+        # Use current date to properly handle DST
+        now = datetime.now()
+        local_time = tz.localize(datetime(now.year, now.month, now.day, int(hour), int(minute)))
         utc_time = local_time.astimezone(pytz.UTC)
         return str(utc_time.hour), str(utc_time.minute)
     except Exception as e:
@@ -498,34 +500,30 @@ def _save_config_to_db(instance_id, arguments):
 def _configure_schedule_shutdown(instance_id, arguments):
     """Configure schedule-based shutdown"""
     stop_schedule = arguments.get('stopScheduleExpression')
+    start_schedule = arguments.get('startScheduleExpression')
     timezone = arguments.get('timezone', 'UTC')
     
-    if not stop_schedule:
-        raise ValueError("Missing stop schedule expression")
+    # Configure or remove stop schedule
+    if stop_schedule:
+        configure_scheduled_shutdown_event(instance_id, stop_schedule, timezone)
+    else:
+        remove_scheduled_shutdown_event(instance_id)
     
-    # Remove alarm and configure schedules
-    ec2_utils.remove_alarm(instance_id)
-    configure_scheduled_shutdown_event(instance_id, stop_schedule, timezone)
-    
-    # Handle start schedule
-    start_schedule = arguments.get('startScheduleExpression')
+    # Configure or remove start schedule
     if start_schedule:
         configure_start_event(instance_id, start_schedule, timezone)
     else:
         remove_start_event(instance_id)
 
-def _configure_alarm_shutdown(instance_id, shutdown_method, arguments):
-    """Configure alarm-based shutdown (CPU/Connections)"""
-    alarm_threshold = arguments.get('alarmThreshold')
-    alarm_period = arguments.get('alarmEvaluationPeriod')
+def _configure_alarm_shutdown(instance_id, arguments):
+    """Configure alarm-based shutdown (CPU-based)"""
+    alarm_threshold = arguments.get('alarmThreshold', 0)
+    alarm_period = arguments.get('alarmEvaluationPeriod', 10)
     
-    if alarm_threshold is None or alarm_period is None:
-        raise ValueError("Missing alarm parameters")
-    
-    # Remove schedules and configure alarm
-    remove_scheduled_shutdown_event(instance_id)
-    remove_start_event(instance_id)
-    ec2_utils.update_alarm(instance_id, shutdown_method, alarm_threshold, alarm_period)
+    if alarm_threshold and alarm_threshold > 0:
+        ec2_utils.update_alarm(instance_id, 'CPUUtilization', alarm_threshold, alarm_period)
+    else:
+        ec2_utils.remove_alarm(instance_id)
 
 def handle_update_server_config(instance_id, arguments):
     """Handle server configuration updates"""
@@ -539,13 +537,11 @@ def handle_update_server_config(instance_id, arguments):
         # Save to database
         _save_config_to_db(instance_id, arguments)
         
-        # Configure shutdown method
-        shutdown_method = arguments.get('shutdownMethod', '')
+        # Configure CPU-based alarm (independent of schedule)
+        _configure_alarm_shutdown(instance_id, arguments)
         
-        if shutdown_method == 'Schedule':
-            _configure_schedule_shutdown(instance_id, arguments)
-        elif shutdown_method in ['CPUUtilization', 'Connections']:
-            _configure_alarm_shutdown(instance_id, shutdown_method, arguments)
+        # Configure schedules (independent of alarm)
+        _configure_schedule_shutdown(instance_id, arguments)
         
         logger.info(f"Config updated successfully for {instance_id}")
         return True
