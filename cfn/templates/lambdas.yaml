@@ -584,10 +584,10 @@ Resources:
             ParameterName: !Sub "${ProjectName}*"
         - DynamoDBCrudPolicy:
             TableName:
-              Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-ServersTableName"
+              Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTableName"
         - DynamoDBCrudPolicy:
             TableName:
-              Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTableNameName"
+              Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-LogAuditTableName"
         - Version: "2012-10-17" # Policy Document
           Statement:
             - Effect: Allow
@@ -625,7 +625,7 @@ Resources:
         - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
         - DynamoDBCrudPolicy:
             TableName:
-              Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-ServersTableName"
+              Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTableName"
         - Version: "2012-10-17"
           Statement:
             - Effect: Allow
@@ -772,10 +772,10 @@ Resources:
             ParameterName: !Sub "${ProjectName}*"        
         - DynamoDBCrudPolicy:
             TableName:
-              Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-ServersTableName"
+              Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTableName"
         - DynamoDBCrudPolicy:
             TableName:
-              Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTableNameName"
+              Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-LogAuditTableName"
         - Version: "2012-10-17" # Policy Document
           Statement:
             - Effect: Allow
@@ -879,7 +879,7 @@ Resources:
         - arn:aws:iam::aws:policy/AWSCloudTrail_ReadOnlyAccess
         - DynamoDBCrudPolicy:
             TableName:
-              Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-ServersTableName"
+              Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTableName"
 
   SSMCommandProcessor:
     Type: AWS::Serverless::Function

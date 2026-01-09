@@ -64,7 +64,7 @@ Resources:
                   - "dynamodb:PutItem"
                   - "dynamodb:GetItem"
                 Resource:
-                  Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-ServersTable"
+                  Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTable"
         - PolicyName: ec2TagsAccess
           PolicyDocument:
             Version: "2012-10-17"
