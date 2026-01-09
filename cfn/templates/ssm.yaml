@@ -513,7 +513,7 @@ Resources:
                   # Get instance ID and region
                   INSTANCE_ID=$(ec2metadata --instance-id)
                   REGION=$(ec2metadata --availability-zone | sed 's/[a-z]$//')
-                  TABLE_NAME="${ProjectName}-${EnvironmentName}-ServersTable"
+                  TABLE_NAME="${ProjectName}-${EnvironmentName}-CoreTable"
                   TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
                   
                   # Verify CloudWatch agent is running
