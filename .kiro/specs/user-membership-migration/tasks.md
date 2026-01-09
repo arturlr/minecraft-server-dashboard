@@ -6,14 +6,14 @@ This implementation plan migrates user membership management from AWS Cognito us
 
 ## Tasks
 
-- [ ] 1. Create DynamoDB UserMembership table and infrastructure
+- [x] 1. Create DynamoDB UserMembership table and infrastructure
   - Add UserMembership table definition to `cfn/templates/dynamodb.yaml`
   - Include Global Secondary Index for server-based queries
   - Add IAM permissions for Lambda functions to access new table
   - Update environment variables for table name
   - _Requirements: 1.1, 1.5_
 
-- [ ] 2. Update GraphQL schema with membership types and operations
+- [x] 2. Update GraphQL schema with membership types and operations
   - Add UserMembership type and MembershipRole enum to `appsync/schema.graphql`
   - Update ServerUsers type to include role field
   - Add updateUserRole and removeUserFromServer mutations
@@ -24,22 +24,22 @@ This implementation plan migrates user membership management from AWS Cognito us
   - **Property 5: Role validation**
   - **Validates: Requirements 2.1**
 
-- [ ] 3. Create DynamoDB helper methods for membership operations
+- [x] 3. Create DynamoDB helper methods for membership operations
   - Add membership CRUD operations to `layers/ddbHelper/ddbHelper.py`
   - Implement `create_membership`, `get_membership`, `update_membership`, `delete_membership`
   - Implement `list_server_members` with optional role filtering
   - Add proper error handling and logging for all operations
   - _Requirements: 1.2, 1.3, 1.4_
 
-- [ ]* 3.1 Write property test for membership data integrity
+- [x] 3.1 Write property test for membership data integrity
   - **Property 1: Membership data integrity**
   - **Validates: Requirements 1.2**
 
-- [ ]* 3.2 Write property test for membership removal consistency
+- [x] 3.2 Write property test for membership removal consistency
   - **Property 3: Membership removal consistency**
   - **Validates: Requirements 1.4**
 
-- [ ] 4. Update Auth Helper with role-based authorization methods
+- [x] 4. Update Auth Helper with role-based authorization methods
   - Add role-based permission checking methods to `layers/authHelper/authHelper.py`
   - Implement `get_user_membership`, `check_user_permission`, `list_server_members`
   - Define permission levels and operation requirements
@@ -62,7 +62,7 @@ This implementation plan migrates user membership management from AWS Cognito us
   - **Property 8: Viewer permission limitations**
   - **Validates: Requirements 2.4**
 
-- [ ] 5. Update Util Helper with new authorization logic
+- [x] 5. Update Util Helper with new authorization logic
   - Update `check_user_authorization` method in `layers/utilHelper/utilHelper.py`
   - Replace Cognito group checks with DynamoDB membership queries
   - Update method signature to support role-based permissions
@@ -93,7 +93,7 @@ This implementation plan migrates user membership management from AWS Cognito us
   - **Property 16: Migration idempotency**
   - **Validates: Requirements 3.6**
 
-- [ ] 7. Update listServers Lambda function
+- [x] 7. Update listServers Lambda function
   - Modify `lambdas/listServers/index.py` to use DynamoDB membership queries
   - Replace Cognito group filtering with membership-based server filtering
   - Update authorization logic to use role-based permissions
@@ -108,7 +108,7 @@ This implementation plan migrates user membership management from AWS Cognito us
   - **Property 18: Membership-based access validation**
   - **Validates: Requirements 4.2**
 
-- [ ] 8. Update serverAction Lambda function
+- [x] 8. Update serverAction Lambda function
   - Modify `lambdas/serverAction/index.py` to use role-based authorization
   - Update `check_authorization` function to query DynamoDB membership
   - Implement role-based permission checking for different operations
@@ -132,7 +132,7 @@ This implementation plan migrates user membership management from AWS Cognito us
   - **Property 29: Self-admin-role protection**
   - **Validates: Requirements 6.5**
 
-- [ ] 9. Update getServerUsers GraphQL resolver
+- [x] 9. Update getServerUsers GraphQL resolver
   - Modify the resolver to query DynamoDB membership table instead of Cognito groups
   - Include role information in the response for each user
   - Ensure proper authorization checking for the requesting user
@@ -147,7 +147,7 @@ This implementation plan migrates user membership management from AWS Cognito us
   - **Property 24: Role information in responses**
   - **Validates: Requirements 5.4**
 
-- [ ] 10. Add comprehensive error handling and logging
+- [x] 10. Add comprehensive error handling and logging
   - Update all Lambda functions with consistent error messages
   - Add detailed logging for membership operations and authorization checks
   - Implement proper error responses for DynamoDB failures
@@ -173,7 +173,7 @@ This implementation plan migrates user membership management from AWS Cognito us
   - Add environment variables for UserMembership table name
   - _Requirements: 1.1_
 
-- [ ] 12. Create AppSync resolvers for new mutations
+- [x] 12. Create AppSync resolvers for new mutations
   - Create resolver for `updateUserRole` mutation
   - Create resolver for `removeUserFromServer` mutation
   - Ensure proper authorization and error handling in resolvers

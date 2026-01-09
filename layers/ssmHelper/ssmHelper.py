@@ -13,6 +13,12 @@ class SSMHelper:
         """Initialize SSM Helper with SQS client and configuration."""
         logger.info(f"------- SSMHelper Class Initialization {queue_url} {bootstrap_doc_name}")
         self.sqs = boto3.client('sqs')
+
+        queue_url = queue_url or os.getenv('SSM_COMMAND_QUEUE_URL')
+        bootstrap_doc_name = bootstrap_doc_name or os.getenv('BOOTSTRAP_SSM_DOC_NAME')
+        if not queue_url or not bootstrap_doc_name:
+            raise ValueError("Required environment variables missing or empty")
+
         self.queue_url = queue_url
         self.bootstrap_doc_name = bootstrap_doc_name
     

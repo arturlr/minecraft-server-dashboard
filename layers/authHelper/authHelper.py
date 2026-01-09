@@ -2,46 +2,25 @@ import boto3
 import logging
 import os
 import time
-import json
 import requests
-from datetime import datetime, timezone
 from jose import jwk, jwt
 from jose.utils import base64url_decode
-from botocore.exceptions import ClientError
-from boto3.dynamodb.conditions import Key, Attr
+from utilHelper.errorHandler import ErrorHandler
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 session = boto3.session.Session()
 aws_region = session.region_name
-
-def extract_auth_token(event):
-    """Extract authorization token from Lambda event."""
-    try:
-        return event['request']['headers']['authorization']
-    except KeyError:
-        if 'request' not in event:
-            raise ValueError("Local invocation detected")
-        elif 'headers' not in event['request']:
-            raise ValueError("No headers found in request")
-        else:
-            raise ValueError("No Authorization header found")
-
-def validate_user_token(token, auth_instance):
-    """Validate user token and return user attributes."""
-    try:
-        user_attributes = auth_instance.process_token(token)
-        if user_attributes is None:
-            raise ValueError("Invalid token")
-        return user_attributes
-    except Exception as e:
-        logger.error(f"Token processing FAILED: error={str(e)}", exc_info=True)
-        raise ValueError("Invalid token")
              
 class Auth:
     def __init__(self,cognito_pool_id):
         logger.info("------- Auth Class Initialization")
+
+        cognito_pool_id = cognito_pool_id or os.getenv('COGNITO_USER_POOL_ID')
+        if not cognito_pool_id:
+            raise ValueError("COGNITO_USER_POOL_ID environment variable not set")
+
         self.cognito_pool_id = cognito_pool_id
         self.jwk_url = 'https://cognito-idp.{}.amazonaws.com/{}/.well-known/jwks.json'.format(aws_region, cognito_pool_id)
         self.cognito_idp = boto3.client('cognito-idp')
@@ -118,7 +97,7 @@ class Auth:
 
     def group_exists(self, instanceId):
         try:
-            grpRsp = self.cognito_idp.get_group(
+            self.cognito_idp.get_group(
                     GroupName=instanceId,
                     UserPoolId=self.cognito_pool_id
                 )
@@ -131,7 +110,7 @@ class Auth:
             
     def create_group(self, instanceId):    
         try:
-            grpRsp = self.cognito_idp.create_group(
+            self.cognito_idp.create_group(
                 GroupName=instanceId,
                 UserPoolId=self.cognito_pool_id,
                 Description='Minecraft Dashboard'
@@ -146,7 +125,7 @@ class Auth:
             
     def add_user_to_group(self,instance_id,userName):
             try:                
-                userRsp = self.cognito_idp.admin_add_user_to_group(
+                self.cognito_idp.admin_add_user_to_group(
                     UserPoolId=self.cognito_pool_id,
                     Username=userName,
                     GroupName=instance_id
@@ -263,7 +242,9 @@ class Auth:
             
             # Verify the user has all required attributes
             if not all(key in user_attrs for key in ['sub', 'email']):
-                logger.warning(f"User found but missing required attributes: {email}")
+                ErrorHandler.log_error('VALIDATION_ERROR',
+                                     context={'operation': 'find_user_by_email', 'email': email},
+                                     error='User found but missing required attributes')
                 return None
             
             # Get full name from attributes
@@ -279,13 +260,85 @@ class Auth:
             }
             
         except self.cognito_idp.exceptions.InvalidParameterException as e:
-            logger.error(f"Invalid parameters when searching for user by email: {str(e)}")
+            ErrorHandler.log_error('VALIDATION_ERROR',
+                                 context={'operation': 'find_user_by_email', 'email': email},
+                                 exception=e, error=str(e))
             return None
         except self.cognito_idp.exceptions.TooManyRequestsException:
-            logger.error("Rate limit exceeded when querying Cognito")
+            ErrorHandler.log_error('NETWORK_ERROR',
+                                 context={'operation': 'find_user_by_email', 'email': email},
+                                 error='Rate limit exceeded when querying Cognito')
             return None
         except Exception as e:
-            logger.error(f"Unexpected error in find_user_by_email: {str(e)}")
+            ErrorHandler.log_error('INTERNAL_ERROR',
+                                 context={'operation': 'find_user_by_email', 'email': email},
+                                 exception=e, error=str(e))
+            return None
+    
+    def get_user_by_sub(self, user_sub):
+        """
+        Get user information from Cognito by their sub (user ID).
+        
+        Args:
+            user_sub (str): The Cognito user sub to search for
+            
+        Returns:
+            dict: User information if found, None if not found
+            Format: {'username': str, 'email': str, 'fullName': str, 'sub': str}
+        """
+        try:
+            # Use list_users with sub filter
+            response = self.cognito_idp.list_users(
+                UserPoolId=self.cognito_pool_id,
+                Filter=f'sub = "{user_sub}"',
+                Limit=1
+            )
+            
+            users = response.get('Users', [])
+            
+            if not users:
+                logger.info(f"No user found with sub: {user_sub}")
+                return None
+            
+            user = users[0]
+            user_attrs = {
+                attr['Name']: attr['Value'] 
+                for attr in user.get('Attributes', [])
+            }
+            
+            # Verify the user has all required attributes
+            if not all(key in user_attrs for key in ['sub', 'email']):
+                ErrorHandler.log_error('VALIDATION_ERROR',
+                                     context={'operation': 'get_user_by_sub', 'user_sub': user_sub},
+                                     error='User found but missing required attributes')
+                return None
+            
+            # Get full name from attributes
+            given_name = user_attrs.get('given_name', '')
+            family_name = user_attrs.get('family_name', '')
+            full_name = f"{given_name} {family_name}".strip() or user_attrs.get('email', 'Unknown')
+            
+            return {
+                'username': user.get('Username'),
+                'email': user_attrs['email'],
+                'fullName': full_name,
+                'sub': user_attrs['sub']
+            }
+            
+        except self.cognito_idp.exceptions.InvalidParameterException as e:
+            ErrorHandler.log_error('VALIDATION_ERROR',
+                                 context={'operation': 'get_user_by_sub', 'user_sub': user_sub},
+                                 exception=e, error=str(e))
+            return None
+        except self.cognito_idp.exceptions.TooManyRequestsException:
+            ErrorHandler.log_error('NETWORK_ERROR',
+                                 context={'operation': 'get_user_by_sub', 'user_sub': user_sub},
+                                 error='Rate limit exceeded when querying Cognito')
+            return None
+        except Exception as e:
+            ErrorHandler.log_error('INTERNAL_ERROR',
+                                 context={'operation': 'get_user_by_sub', 'user_sub': user_sub},
+                                 exception=e, error=str(e))
             return None
     
     def list_groups_for_user(self, username):
@@ -314,3 +367,5 @@ class Auth:
 
         return groups
         
+    # New role-based authorization methods using DynamoDB membership
+    

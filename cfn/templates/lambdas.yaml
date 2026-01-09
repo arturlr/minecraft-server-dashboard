@@ -11,8 +11,8 @@ Globals:
     Tracing: Active
     Environment:
       Variables:
-        SERVERS_TABLE_NAME:
-          Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-ServersTableName"   
+        CORE_TABLE_NAME:
+          Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTableName"   
         TAG_APP_VALUE: !Ref AppValue
         APP_NAME: !Ref ProjectName
         ENVIRONMENT_NAME: !Ref EnvironmentName
@@ -84,11 +84,11 @@ Resources:
               Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-LogAuditTableName"
             TableArn:
               Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-LogAuditTable"
-          ServersTable:
+          CoreTable:
             TableName:
-              Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-ServersTableName"
+              Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTableName"
             TableArn:
-              Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-ServersTable"
+              Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTable"
         Lambda:
           ListServersDataSource:
             FunctionArn: !GetAtt ListServers.Arn
@@ -147,13 +147,13 @@ Resources:
           Runtime:
             Name: APPSYNC_JS
             Version: "1.0.0"
-          DataSource: ServersTable
+          DataSource: CoreTable
           CodeUri: ../../appsync/resolvers/putById.js
         getServerRecordFunction:
           Runtime:
             Name: APPSYNC_JS
             Version: "1.0.0"
-          DataSource: ServersTable
+          DataSource: CoreTable
           CodeUri: ../../appsync/resolvers/getById.js
       Resolvers:
         Mutation: 
@@ -200,6 +200,18 @@ Resources:
             Pipeline:
               - fixServerRoleFunction
           addUserToServer:
+            Runtime:
+              Name: APPSYNC_JS
+              Version: "1.0.0"
+            Pipeline:
+              - serverActionFunction
+          updateUserRole:
+            Runtime:
+              Name: APPSYNC_JS
+              Version: "1.0.0"
+            Pipeline:
+              - serverActionFunction
+          removeUserFromServer:
             Runtime:
               Name: APPSYNC_JS
               Version: "1.0.0"
@@ -500,22 +512,21 @@ Resources:
               Action:
                 - sqs:SendMessage
               Resource: !GetAtt SSMCommandQueue.Arn
-        - Version: '2012-10-17' # Policy Document for DynamoDB
+        - Version: '2012-10-17' # Policy Document for UserMembership DynamoDB
           Statement:
             - Effect: Allow
               Action:
                 - dynamodb:GetItem
                 - dynamodb:PutItem
                 - dynamodb:UpdateItem
+                - dynamodb:Query
               Resource:
-                Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-ServersTable"
+                Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTableName"
       Environment:
         Variables:
           APPSYNC_URL: !GetAtt GraphQLAPI.GraphQLUrl
           COGNITO_USER_POOL_ID: 
             Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-UserPoolId"
-          SERVERS_TABLE_NAME:
-            Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-ServersTableName"
           BOOTSTRAP_SSM_DOC_NAME: !Ref BootstrapSSMDoc
           SSM_COMMAND_QUEUE_URL: !Ref SSMCommandQueue          
 
@@ -574,6 +585,9 @@ Resources:
         - DynamoDBCrudPolicy:
             TableName:
               Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-ServersTableName"
+        - DynamoDBCrudPolicy:
+            TableName:
+              Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTableNameName"
         - Version: "2012-10-17" # Policy Document
           Statement:
             - Effect: Allow
@@ -671,6 +685,73 @@ Resources:
         Variables:
           APPSYNC_URL: !GetAtt GraphQLAPI.GraphQLUrl
 
+  ServerBootProcessor:
+    Type: AWS::Serverless::Function
+    Properties:
+      Timeout: 60
+      FunctionName: !Sub "${ProjectName}-${EnvironmentName}-serverBootProcessor"
+      CodeUri: ../../lambdas/serverBootProcessor/
+      Layers:
+        - !Ref Ec2Layer
+        - !Ref DdbLayer
+      Events:
+        EC2StateChange:
+          Type: EventBridgeRule
+          Properties:
+            Pattern:
+              source: ["aws.ec2"]
+              detail-type: ["EC2 Instance State-change Notification"]
+              detail:
+                state: ["running"]
+      Policies:
+        - CostExplorerReadOnlyPolicy: {}
+        - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
+        - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess
+        - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
+        - arn:aws:iam::aws:policy/AmazonCognitoReadOnly
+        - SSMParameterReadPolicy:
+            ParameterName: !Sub "${ProjectName}*"
+        - Version: '2012-10-17' # Policy Document
+          Statement:
+            - Effect: Allow
+              Action:
+                - appsync:ListGraphqlApis
+                - appsync:GetGraphqlApi
+                - appsync:GraphQL
+              Resource: '*'
+        - Version: '2012-10-17' # Policy Document
+          Statement:
+            - Effect: Allow
+              Action:
+                - events:ListRules
+                - events:DescribeRule
+                - events:DisableRule
+                - events:EnableRule
+              Resource: "*"
+        - Version: "2012-10-17" # Policy Document for SQS
+          Statement:
+            - Effect: Allow
+              Action:
+                - sqs:SendMessage
+              Resource: !GetAtt SSMCommandQueue.Arn
+        - Version: '2012-10-17' # Policy Document for UserMembership DynamoDB
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+                - dynamodb:UpdateItem
+                - dynamodb:Query
+              Resource:
+                Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTableName"
+      Environment:
+        Variables:
+          APPSYNC_URL: !GetAtt GraphQLAPI.GraphQLUrl
+          COGNITO_USER_POOL_ID: 
+            Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-UserPoolId"
+          BOOTSTRAP_SSM_DOC_NAME: !Ref BootstrapSSMDoc
+          SSM_COMMAND_QUEUE_URL: !Ref SSMCommandQueue   
+
   ServerAction:
     Type: AWS::Serverless::Function
     Properties:
@@ -692,6 +773,9 @@ Resources:
         - DynamoDBCrudPolicy:
             TableName:
               Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-ServersTableName"
+        - DynamoDBCrudPolicy:
+            TableName:
+              Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTableNameName"
         - Version: "2012-10-17" # Policy Document
           Statement:
             - Effect: Allow
@@ -724,12 +808,10 @@ Resources:
             Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-IAMEC2InstanceProfile"
           EC2_INSTANCE_PROFILE_ARN:  
             Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-IAMEC2InstanceProfileArn"
-          # CONFIG_SERVER_LAMBDA_NAME: !Ref ConfigServer
           SERVER_ACTION_QUEUE_URL: !Ref ServerActionQueue
           APPSYNC_URL: !GetAtt GraphQLAPI.GraphQLUrl
           COGNITO_USER_POOL_ID:  
             Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-UserPoolId"
-          ADMIN_GROUP_NAME: admin
 
   PermissionForScheduledEventsToInvokeServerAction:
     Type: AWS::Lambda::Permission

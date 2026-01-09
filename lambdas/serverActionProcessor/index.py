@@ -6,11 +6,15 @@ import time
 import ec2Helper
 import ddbHelper
 import utilHelper
+from aws_croniter import AwsCroniter
+from datetime import datetime
+import pytz
 from botocore.session import Session
 from botocore.auth import SigV4Auth
 from botocore.awsrequest import AWSRequest
 from botocore.httpsession import URLLib3Session
 from botocore.exceptions import ClientError
+from utilHelper.errorHandler import ErrorHandler
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -19,6 +23,7 @@ ec2_client = boto3.client('ec2')
 eventbridge_client = boto3.client('events')
 ec2_utils = ec2Helper.Ec2Utils()
 utils = utilHelper.Utils()
+dyn = ddbHelper.CoreTableDyn()
 boto3_session = boto3.Session()
 
 # Environment variables
@@ -34,14 +39,9 @@ sts_client = boto3.client('sts')
 account_id = sts_client.get_caller_identity()['Account']
 aws_region = boto3_session.region_name
 
-
 # ============================================================================
 # Schedule Event Management Functions
 # ============================================================================
-
-from aws_croniter import AwsCroniter
-from datetime import datetime
-import pytz
 
 def _format_schedule_expression(cron_expression, timezone='UTC'):
     """Format cron expression for EventBridge using aws-croniter."""
@@ -338,18 +338,24 @@ def _parse_message(message_body):
         logger.info(f"Message parsed: action={message.get('action')}, instance={message.get('instanceId')}")
         return message
     except json.JSONDecodeError as e:
-        logger.error(f"Invalid JSON: {str(e)}")
+        ErrorHandler.log_error('VALIDATION_ERROR',
+                             context={'operation': 'parse_message'},
+                             exception=e, error=str(e))
         return None
 
 def _validate_message(message):
     """Validate required message fields"""
     if 'action' not in message:
-        logger.error("Missing 'action' field")
+        ErrorHandler.log_error('VALIDATION_ERROR',
+                             context={'operation': 'validate_message'},
+                             error='Missing action field')
         return False
     
     action = message['action'].lower().strip()
     if action != 'createserver' and 'instanceId' not in message:
-        logger.error("Missing 'instanceId' field")
+        ErrorHandler.log_error('VALIDATION_ERROR',
+                             context={'operation': 'validate_message', 'action': action},
+                             error='Missing instanceId field')
         return False
     
     return True
@@ -367,9 +373,17 @@ def _route_action(action, instance_id, arguments, message):
     
     for actions, handler in handlers.items():
         if action in actions:
-            return handler()
+            try:
+                return handler()
+            except Exception as e:
+                ErrorHandler.log_error('INTERNAL_ERROR',
+                                     context={'operation': 'route_action', 'action': action, 'instance_id': instance_id},
+                                     exception=e, error=str(e))
+                return False
     
-    logger.error(f"Unknown action: {action}")
+    ErrorHandler.log_error('VALIDATION_ERROR',
+                         context={'operation': 'route_action', 'action': action, 'instance_id': instance_id},
+                         error=f'Unknown action: {action}')
     return False
 
 def _send_status_update(action, instance_id, status, message, user_email):
@@ -378,7 +392,9 @@ def _send_status_update(action, instance_id, status, message, user_email):
         send_to_appsync(action, instance_id, status, message, user_email)
         logger.info(f"Status sent: {status}")
     except Exception as e:
-        logger.warning(f"Failed to send status: {str(e)}")
+        ErrorHandler.log_error('NETWORK_ERROR',
+                             context={'operation': 'send_status_update', 'action': action, 'instance_id': instance_id},
+                             exception=e, error=str(e))
 
 def process_server_action(message_body):
     """Process server action from SQS message"""
@@ -425,7 +441,6 @@ def process_server_action(message_body):
 
 def _get_server_context(instance_id):
     """Get server info and EC2 state"""
-    dyn = ddbHelper.Dyn()
     server_info = dyn.get_server_info(instance_id)
     if not server_info:
         return None, None, None, None
@@ -494,7 +509,6 @@ def _save_config_to_db(instance_id, arguments):
     if 'id' not in arguments:
         arguments['id'] = instance_id
     
-    dyn = ddbHelper.Dyn()
     dyn.put_server_config(arguments)
 
 def _configure_schedule_shutdown(instance_id, arguments):
@@ -558,14 +572,13 @@ def process_create_server(message):
         # Extract parameters directly from message (not from arguments field)
         server_name = message.get('serverName')
         instance_type = message.get('instanceType', 't3.micro')
-        shutdown_method = message.get('shutdownMethod', 'CPUUtilization')
         user_email = message.get('userEmail')
         
         if not server_name:
             logger.error("Server creation FAILED: Missing serverName in message")
             return False
         
-        logger.info(f"Server creation: Processing request - name={server_name}, type={instance_type}, shutdown={shutdown_method}, user={user_email}")
+        logger.info(f"Server creation: Processing request - name={server_name}, type={instance_type}, user={user_email}")
         
         # Create EC2 instance using ec2Helper
         logger.info(f"Creating EC2 instance: name={server_name}, type={instance_type}")
@@ -582,36 +595,34 @@ def process_create_server(message):
         
         logger.info(f"EC2 instance created successfully: instance_id={instance_id}, name={server_name}")
         
-        # Configure shutdown mechanism based on the specified method
+        # Configure default shutdown mechanism 
         try:
-            if shutdown_method == 'CPUUtilization':
-                alarm_threshold = message.get('alarmThreshold', 5.0)
-                alarm_period = message.get('alarmEvaluationPeriod', 30)
-                logger.info(f"Configuring CPU-based shutdown: instance={instance_id}, threshold={alarm_threshold}, period={alarm_period}")
-                ec2_utils.update_alarm(instance_id, 'CPUUtilization', alarm_threshold, alarm_period)
-                logger.info(f"CPU alarm configured successfully: instance={instance_id}")
+            alarm_threshold = message.get('alarmThreshold', 5.0)
+            alarm_period = message.get('alarmEvaluationPeriod', 30)
+            logger.info(f"Configuring CPU-based shutdown: instance={instance_id}, threshold={alarm_threshold}, period={alarm_period}")
+            ec2_utils.update_alarm(instance_id, 'CPUUtilization', alarm_threshold, alarm_period)
+            logger.info(f"CPU alarm configured successfully: instance={instance_id}")
                 
-            elif shutdown_method == 'Connections':
-                alarm_threshold = message.get('alarmThreshold', 0)
-                alarm_period = message.get('alarmEvaluationPeriod', 30)
-                logger.info(f"Configuring connection-based shutdown: instance={instance_id}, threshold={alarm_threshold}, period={alarm_period}")
-                ec2_utils.update_alarm(instance_id, 'Connections', alarm_threshold, alarm_period)
-                logger.info(f"Connection alarm configured successfully: instance={instance_id}")
+            # elif shutdown_method == 'Connections':
+            #     alarm_threshold = message.get('alarmThreshold', 0)
+            #     alarm_period = message.get('alarmEvaluationPeriod', 30)
+            #     logger.info(f"Configuring connection-based shutdown: instance={instance_id}, threshold={alarm_threshold}, period={alarm_period}")
+            #     ec2_utils.update_alarm(instance_id, 'Connections', alarm_threshold, alarm_period)
+            #     logger.info(f"Connection alarm configured successfully: instance={instance_id}")
                 
-            elif shutdown_method == 'Schedule':
-                start_schedule = message.get('startScheduleExpression', '')
-                stop_schedule = message.get('stopScheduleExpression', '')
-                timezone = message.get('timezone', 'UTC')
+            start_schedule = message.get('startScheduleExpression', '')
+            stop_schedule = message.get('stopScheduleExpression', '')
+            timezone = message.get('timezone', 'UTC')
                 
-                if stop_schedule:
-                    logger.info(f"Configuring scheduled shutdown: instance={instance_id}, schedule={stop_schedule}, timezone={timezone}")
-                    configure_scheduled_shutdown_event(instance_id, stop_schedule, timezone)
-                    logger.info(f"Shutdown schedule configured successfully: instance={instance_id}")
-                
-                if start_schedule:
-                    logger.info(f"Configuring scheduled start: instance={instance_id}, schedule={start_schedule}, timezone={timezone}")
-                    configure_start_event(instance_id, start_schedule, timezone)
-                    logger.info(f"Start schedule configured successfully: instance={instance_id}")
+            if utils.is_valid_cron(stop_schedule):
+                logger.info(f"Configuring scheduled shutdown: instance={instance_id}, schedule={stop_schedule}, timezone={timezone}")
+                configure_scheduled_shutdown_event(instance_id, stop_schedule, timezone)
+                logger.info(f"Shutdown schedule configured successfully: instance={instance_id}")
+            
+            if utils.is_valid_cron(start_schedule):
+                logger.info(f"Configuring scheduled start: instance={instance_id}, schedule={start_schedule}, timezone={timezone}")
+                configure_start_event(instance_id, start_schedule, timezone)
+                logger.info(f"Start schedule configured successfully: instance={instance_id}")
                     
         except Exception as e:
             logger.error(f"Server creation WARNING: Failed to configure shutdown mechanism - instance={instance_id}, error={str(e)}", exc_info=True)
@@ -620,11 +631,9 @@ def process_create_server(message):
         # Store initial configuration in DynamoDB
         try:
             logger.info(f"Storing server configuration in DynamoDB: instance={instance_id}")
-            dyn = ddbHelper.Dyn()
             
             config = {
                 'id': instance_id,
-                'shutdownMethod': shutdown_method,
                 'alarmThreshold': message.get('alarmThreshold', 0.0),
                 'alarmEvaluationPeriod': message.get('alarmEvaluationPeriod', 0),
                 'startScheduleExpression': message.get('startScheduleExpression', ''),
@@ -695,10 +704,9 @@ def handle_update_server_name(instance_id, arguments):
         # Update the server name in DynamoDB
         try:
             logger.info(f"Updating server name in DynamoDB: instance={instance_id}, newName={new_name}")
-            dyn = ddbHelper.Dyn()
             
             # Update just the server name
-            response = dyn.update_server_name(instance_id, new_name)
+            dyn.update_server_name(instance_id, new_name)
             logger.info(f"Server name updated successfully in DynamoDB: instance={instance_id}")
             
         except Exception as e:
@@ -720,10 +728,18 @@ def handler(event, context):
         message_id = record.get('messageId', 'unknown')
         logger.info(f"Processing SQS message {idx + 1}/{len(event['Records'])}: messageId={message_id}")
         
-        success = process_server_action(record['body'])
-        
-        if not success:
-            logger.error(f"Message processing FAILED: messageId={message_id}")
-            # Message will be retried or sent to DLQ based on SQS configuration
-        else:
-            logger.info(f"Message processing SUCCESS: messageId={message_id}")
+        try:
+            success = process_server_action(record['body'])
+            
+            if not success:
+                ErrorHandler.log_error('INTERNAL_ERROR',
+                                     context={'operation': 'handler', 'message_id': message_id},
+                                     error='Message processing failed')
+                # Message will be retried or sent to DLQ based on SQS configuration
+            else:
+                logger.info(f"Message processing SUCCESS: messageId={message_id}")
+                
+        except Exception as e:
+            ErrorHandler.log_error('INTERNAL_ERROR',
+                                 context={'operation': 'handler', 'message_id': message_id},
+                                 exception=e, error=str(e))

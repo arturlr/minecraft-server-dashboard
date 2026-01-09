@@ -1,13 +1,13 @@
 import boto3
 from botocore.exceptions import ClientError
-from boto3.dynamodb.conditions import Key, Attr
 import requests
-from requests.exceptions import RequestException
 import json
 import os
 import logging
 import time
+import re
 from typing import Dict, Any, Optional
+from .errorHandler import ErrorHandler
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -33,6 +33,55 @@ class Utils:
         capitalized_words = [word[0].upper() + word[1:] for word in words]
         return ' '.join(capitalized_words)
     
+    def get_metrics_data(self, instance_id, namespace, metric_name, unit, statistics, start_time, end_time, period=300):
+        logger.info(f"get_metrics_data: {metric_name} - {instance_id}")
+        cw_client = boto3.client('cloudwatch')
+
+        dimensions = [
+            {'Name': 'InstanceId', 'Value': instance_id}
+        ]
+
+        if metric_name == "cpu_usage_active":
+            dimensions.append({'Name': 'cpu', 'Value': "cpu-total"})
+
+        try:
+            response = cw_client.get_metric_statistics(
+                Namespace=namespace,
+                MetricName=metric_name,
+                Dimensions=dimensions,
+                StartTime=start_time,
+                EndTime=end_time,
+                Period=period,
+                Statistics=[statistics],
+                Unit=unit
+            )
+
+            if not response["Datapoints"]:
+                logger.warning(f'No Datapoint for namespace: {metric_name} - InstanceId: {instance_id}')
+                return "[]"
+
+            # Format data points for ApexCharts
+            datapoints = []
+            for point in sorted(response.get('Datapoints', []), key=lambda x: x['Timestamp']):
+                datapoints.append({
+                    # Convert to milliseconds
+                    'x': int(point['Timestamp'].timestamp() * 1000), 
+                    # Each datapoint contains keys like 'Timestamp', 'Average', 'Sum', 'Maximum', etc. - the actual statistic names.
+                    'y': round(point.get(statistics, 0), 2)
+                })
+            
+            if len(datapoints) > 0:
+                print(f"Fetched {len(datapoints)} points for {metric_name}. First: {datapoints[0]}, Last: {datapoints[-1]}")
+            else:
+                print(f"No datapoints found for {metric_name} in namespace {namespace} with dimensions {dimensions}")
+
+            return json.dumps(sorted(datapoints, key=lambda x: x['x']))
+
+        except Exception as e:
+            logger.error(f'Something went wrong: {str(e)}')
+            return "[]"
+
+
     def response(self, status_code, body, headers={}):
         """
         Returns a dictionary containing the status code, body, and headers.
@@ -50,6 +99,18 @@ class Utils:
         else:
             return {"statusCode": status_code, "body": body }
 
+    def extract_auth_token(self, event):
+        """Extract authorization token from Lambda event."""
+        try:
+            return event['request']['headers']['authorization']
+        except KeyError:
+            if 'request' not in event:
+                raise ValueError("No request found in event")
+            elif 'headers' not in event['request']:
+                raise ValueError("No headers found in request")
+            else:
+                raise ValueError("No Authorization header found")
+
     def retry_operation(self, operation, max_retries, delay):
         retries = 0
         while retries < max_retries:
@@ -58,57 +119,189 @@ class Utils:
             retries += 1
             time.sleep(delay)
         return False
-        
-    def is_admin_user(self, cognito_groups):
+
+    def is_valid_cron(self, cron_expression):
         """
-        Checks if a user belongs to the admin group
+        Basic validation for cron expressions (5-field format)
         
         Args:
-            cognito_groups (list): List of Cognito groups the user belongs to
+            cron_expression: String containing cron expression
             
         Returns:
-            bool: True if user is in admin group, False otherwise
+            bool: True if valid format, False otherwise
         """
-        if not cognito_groups:
+        if not cron_expression or not isinstance(cron_expression, str):
             return False
-            
-        return self.admin_group_name in cognito_groups
-        
-    def check_user_authorization(self, cognito_groups, instance_id, user_email, ec2_utils):
+
+        cron_pattern = r'^(((((\d+,)+\d+|(\d+(\/|-|#)\d+)|\d+L?|\*(\/\d+)?|L(-\d+)?|\?|[A-Z]{3}(-[A-Z]{3})?) ?){5,7}))$'
+    
+        return bool(re.match(cron_pattern, cron_expression))        
+   
+    def check_user_authorization(self, user_sub_or_groups, server_id, required_permission_or_email='read_server', ec2_utils=None):
         """
-        Comprehensive authorization check for server actions
+        Comprehensive authorization check for server actions using DynamoDB membership.
+        Supports both old and new calling patterns for backward compatibility.
+        
+        Old pattern: check_user_authorization(cognito_groups, instance_id, user_email, ec2_utils)
+        New pattern: check_user_authorization(user_sub, server_id, required_permission, user_email, ec2_utils)
         
         Args:
-            cognito_groups (list): List of Cognito groups the user belongs to
-            instance_id (str): EC2 instance ID
-            user_email (str): Email of the user attempting the action
-            ec2_utils: EC2 utility object for instance operations
+            user_sub_or_groups: Either Cognito user sub (str) or list of Cognito groups (list) - for backward compatibility
+            server_id (str): EC2 instance ID
+            required_permission_or_email: Either permission level (str) or user email (str) - for backward compatibility
+            ec2_utils (optional): EC2 utility object for fallback authorization
             
         Returns:
-            tuple: (bool, str) - (is_authorized, authorization_reason)
+            tuple: (bool, str, str) - (is_authorized, user_role, authorization_reason)
+                   For backward compatibility, may return (bool, str) for old calling pattern
         """
-        # Check if user is admin
-        if self.is_admin_user(cognito_groups):
-            return True, "admin_group"
+        try:
+            # Detect calling pattern based on first argument type
+            if isinstance(user_sub_or_groups, list):
+                # Old calling pattern: (cognito_groups, instance_id, user_email, ec2_utils)
+                cognito_groups = user_sub_or_groups
+                instance_id = server_id
+                user_email = required_permission_or_email
+                
+                logger.info(f"Using legacy authorization check: user={user_email}, instance={instance_id}, groups={cognito_groups}")
+                
+                # Log authorization attempt for legacy pattern
+                ErrorHandler.log_authorization_attempt(
+                    user_sub='legacy_user',
+                    server_id=instance_id,
+                    required_permission='legacy_check',
+                    success=False,
+                    reason='Using legacy Cognito groups authorization'
+                )
+                
+                # Check if user is admin using old method
+                if self.admin_group_name in cognito_groups:
+                    ErrorHandler.log_authorization_attempt(
+                        user_sub='legacy_user',
+                        server_id=instance_id,
+                        required_permission='legacy_check',
+                        user_role='admin_group',
+                        success=True,
+                        reason='Admin group membership'
+                    )
+                    return True, "admin_group"
+                    
+                # Check if user is in instance-specific group
+                if cognito_groups:
+                    for group in cognito_groups:
+                        if group == instance_id:
+                            ErrorHandler.log_authorization_attempt(
+                                user_sub='legacy_user',
+                                server_id=instance_id,
+                                required_permission='legacy_check',
+                                user_role='instance_group',
+                                success=True,
+                                reason='Instance group membership'
+                            )
+                            return True, "instance_group"
+                
+                # Check if user is the owner based on instance tags
+                if ec2_utils:
+                    try:
+                        server_info = ec2_utils.list_server_by_id(instance_id)
+                        if server_info["TotalInstances"] > 0:
+                            instance = server_info['Instances'][0]
+                            tags = instance.get('Tags', [])
+                            
+                            for tag in tags:
+                                if tag['Key'] == 'Owner' and tag['Value'] == user_email:
+                                    ErrorHandler.log_authorization_attempt(
+                                        user_sub='legacy_user',
+                                        server_id=instance_id,
+                                        required_permission='legacy_check',
+                                        user_role='instance_owner',
+                                        success=True,
+                                        reason='Instance owner tag match'
+                                    )
+                                    return True, "instance_owner"
+                    except Exception as e:
+                        logger.warning(f"Error checking owner tag: {str(e)}")
+                        ErrorHandler.log_error('INTERNAL_ERROR', 
+                                             context={'operation': 'check_owner_tag', 'instance_id': instance_id},
+                                             exception=e, error=str(e))
+                
+                # Not authorized - log the failure
+                ErrorHandler.log_authorization_attempt(
+                    user_sub='legacy_user',
+                    server_id=instance_id,
+                    required_permission='legacy_check',
+                    success=False,
+                    reason='No matching groups or owner tag'
+                )
+                return False, "unauthorized"
+                
+            else:
+                # New calling pattern: (user_sub, server_id, required_permission, ...)
+                user_sub = user_sub_or_groups
+                required_permission = required_permission_or_email if isinstance(required_permission_or_email, str) and required_permission_or_email in ['read_server', 'read_metrics', 'read_config', 'control_server', 'manage_users', 'manage_config'] else 'read_server'
+                
+                # Import here to avoid circular dependencies
+                import sys
+                sys.path.append('/opt/python')
+                try:
+                    from authHelper import Auth
+                except ImportError:
+                    # Fallback for local testing
+                    sys.path.insert(0, '../authHelper')
+                    from authHelper import Auth
+                
+                # Initialize Auth helper
+                cognito_pool_id = os.getenv('COGNITO_USER_POOL_ID', 'dummy-pool-id')
+                auth = Auth(cognito_pool_id)
+                
+                logger.info(f"Using DynamoDB authorization check: user={user_sub}, server={server_id}, permission={required_permission}")
+                
+                # Use the new DynamoDB-based permission checking
+                try:
+                    is_authorized, user_role, auth_reason = auth.check_user_permission(user_sub, server_id, required_permission)
+                    
+                    # Log the authorization attempt
+                    ErrorHandler.log_authorization_attempt(
+                        user_sub=user_sub,
+                        server_id=server_id,
+                        required_permission=required_permission,
+                        user_role=user_role,
+                        success=is_authorized,
+                        reason=auth_reason
+                    )
+                    
+                    if is_authorized:
+                        logger.info(f"Authorization granted: user={user_sub}, server={server_id}, role={user_role}")
+                        return True, user_role, auth_reason
+                    else:
+                        logger.warning(f"Authorization denied: user={user_sub}, server={server_id}, reason={auth_reason}")
+                        return False, user_role, auth_reason
+                        
+                except Exception as e:
+                    error_msg = f"Error checking permissions: {str(e)}"
+                    logger.error(f"Authorization check failed: error={error_msg}")
+                    
+                    # Log the error with context
+                    ErrorHandler.log_error('AUTHORIZATION_FAILED',
+                                         context={'user_sub': user_sub, 'server_id': server_id, 'required_permission': required_permission},
+                                         exception=e, reason=str(e))
+                    
+                    return False, None, error_msg
+                    
+        except Exception as e:
+            error_msg = f"Error checking permissions: {str(e)}"
+            logger.error(f"Authorization check failed: error={error_msg}")
             
-        # Check if user is in instance-specific group
-        if cognito_groups:
-            for group in cognito_groups:
-                if group == instance_id:
-                    return True, "instance_group"
-        
-        # Check if user is the owner based on instance tags
-        server_info = ec2_utils.list_server_by_id(instance_id)
-        if server_info["TotalInstances"] > 0:
-            instance = server_info['Instances'][0]
-            tags = instance.get('Tags', [])
+            # Log the error
+            ErrorHandler.log_error('AUTHORIZATION_FAILED',
+                                 context={'operation': 'check_user_authorization'},
+                                 exception=e, reason=str(e))
             
-            for tag in tags:
-                if tag['Key'] == 'Owner' and tag['Value'] == user_email:
-                    return True, "instance_owner"
-        
-        # Not authorized
-        return False, "unauthorized"
+            # For backward compatibility, return the old format on error
+            if isinstance(user_sub_or_groups, list):
+                return False, "error"
+            else:
+                return False, None, error_msg
 
     def get_ssm_param(self, paramKey, isEncrypted=False):
         try:

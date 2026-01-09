@@ -27,224 +27,126 @@ ddb = ddbHelper.Dyn(servers_table_name)
 utc = pytz.utc
 pst = pytz.timezone('US/Pacific')
 
-def create_default_config(instance_id):
-    """Creates and applies default configuration for an instance."""
-    default_config = {
-        'id': instance_id,
-        'shutdownMethod': 'CPUUtilization',
-        'alarmThreshold': 5.0,
-        'alarmEvaluationPeriod': 30,
-        'runCommand': 'java -Xmx2G -Xms1G -jar server.jar nogui',
-        'workDir': '/home/minecraft/server',
-        'autoConfigured': True
-    }
-    
-    ddb.put_server_config(default_config)
-    ec2_utils.update_alarm(
-        instance_id, 
-        'CPUUtilization', 
-        default_config['alarmThreshold'], 
-        default_config['alarmEvaluationPeriod']
-    )
-    return default_config
+# Import error handling utilities
+try:
+    from utilHelper.errorHandler import ErrorHandler
+except ImportError:
+    # Fallback for local testing
+    import sys
+    sys.path.insert(0, '../utilHelper')
+    from errorHandler import ErrorHandler
 
-def validate_shutdown_config(config, validation_result):
-    """Validates shutdown method configuration."""
-    shutdown_method = config.get('shutdownMethod', '')
-    
-    if shutdown_method == 'Schedule':
-        stop_schedule = config.get('stopScheduleExpression', '')
-        if not stop_schedule:
-            validation_result['errors'].append('Schedule shutdown method selected but no stop schedule expression configured')
-            validation_result['isValid'] = False
-            validation_result['configStatus'] = 'invalid'
-        
-        start_schedule = config.get('startScheduleExpression', '')
-        if stop_schedule and not start_schedule:
-            validation_result['warnings'].append('Stop schedule configured but no start schedule - server will need manual start')
-            
-    elif shutdown_method in ['CPUUtilization', 'Connections']:
-        alarm_threshold = config.get('alarmThreshold', 0.0)
-        alarm_evaluation_period = config.get('alarmEvaluationPeriod', 0)
-        
-        if alarm_threshold <= 0:
-            validation_result['errors'].append(f'Invalid alarm threshold: {alarm_threshold}. Must be greater than 0')
-            validation_result['isValid'] = False
-            validation_result['configStatus'] = 'invalid'
-            
-        if alarm_evaluation_period <= 0:
-            validation_result['errors'].append(f'Invalid evaluation period: {alarm_evaluation_period}. Must be greater than 0')
-            validation_result['isValid'] = False
-            validation_result['configStatus'] = 'invalid'
 
-def apply_minecraft_config(instance_id, config, validation_result):
-    """Applies default Minecraft configuration if missing."""
-    minecraft_config_updates = {}
-    
-    if not config.get('runCommand', ''):
-        minecraft_config_updates['runCommand'] = 'java -Xmx2G -Xms1G -jar server.jar nogui'
-        
-    if not config.get('workDir', ''):
-        minecraft_config_updates['workDir'] = '/home/minecraft/server'
-    
-    if minecraft_config_updates:
-        minecraft_config_updates['id'] = instance_id
-        ddb.update_server_config(minecraft_config_updates)
-        
-        validation_result['autoConfigured'] = True
-        config_items = []
-        if 'runCommand' in minecraft_config_updates:
-            config_items.append('run command')
-        if 'workDir' in minecraft_config_updates:
-            config_items.append('working directory')
-            
-        validation_result['warnings'].append(f'Default Minecraft server configuration applied: {", ".join(config_items)}')
-        
-        if validation_result['configStatus'] == 'complete':
-            validation_result['configStatus'] = 'auto-configured'
-            
-        logger.info(f"Applied default Minecraft configuration to {instance_id}: {config_items}")
-
-def check_missing_minecraft_config(config, validation_result):
-    """Adds warnings for missing Minecraft configuration."""
-    if not config.get('runCommand', ''):
-        validation_result['warnings'].append('No run command configured for Minecraft server')
-        if validation_result['configStatus'] == 'complete':
-            validation_result['configStatus'] = 'incomplete'
-            
-    if not config.get('workDir', ''):
-        validation_result['warnings'].append('No working directory configured for Minecraft server')
-        if validation_result['configStatus'] == 'complete':
-            validation_result['configStatus'] = 'incomplete'
-
-def validate_aws_resources(instance_id, config, validation_result):
-    """Validates that AWS resources exist for the configuration."""
-    if config.get('shutdownMethod') == 'Schedule':
-        rules_status = ec2_utils.check_eventbridge_rules_exist(instance_id)
-        if not rules_status['shutdown_rule_exists']:
-            validation_result['errors'].append('Shutdown EventBridge rule not found')
-            validation_result['isValid'] = False
-            if validation_result['configStatus'] == 'complete':
-                validation_result['configStatus'] = 'invalid'
-        
-        start_schedule = config.get('startScheduleExpression', '')
-        if start_schedule and not rules_status['start_rule_exists']:
-            validation_result['errors'].append('Start EventBridge rule not found')
-            validation_result['isValid'] = False
-            if validation_result['configStatus'] == 'complete':
-                validation_result['configStatus'] = 'invalid'
-                
-    elif config.get('shutdownMethod') in ['CPUUtilization', 'Connections']:
-        if not ec2_utils.check_alarm_exists(instance_id):
-            validation_result['errors'].append('CloudWatch alarm not found')
-            validation_result['isValid'] = False
-            if validation_result['configStatus'] == 'complete':
-                validation_result['configStatus'] = 'invalid'
-
-def validate_and_configure_instance_config(instance_id):
-    """
-    Validates that instance has proper shutdown configuration in DynamoDB.
-    If no shutdown configuration exists, applies default configuration.
-    Returns validation status and any missing/invalid configurations.
-    """
+def get_user_instances(user_sub, app_value):
+    """Get instances based on user permissions using DynamoDB membership."""
     try:
-        logger.info(f"Validating and configuring DynamoDB config for instance: {instance_id}")
+        from ddbHelper import CoreTableDyn
         
-        config = ddb.get_server_config(instance_id)
+        core_dyn = CoreTableDyn()
         
-        validation_result = {
+        # Check if user has global admin role
+        if core_dyn.check_global_admin(user_sub):
+            logger.info(f"Global admin user - listing all instances by app tag: {app_value}")
+            user_instances = ec2_utils.list_instances_by_app_tag(app_value)
+            logger.info(f"Found {user_instances['TotalInstances']} instances with App={app_value}")
+            return user_instances
+        
+        # Get user server memberships
+        user_data = core_dyn.get_user_permissions(user_sub)
+        user_memberships = user_data.get('server_roles', [])
+        
+        if not user_memberships:
+            logger.info(f"User has no server memberships: {user_sub}")
+            return {
+                "Instances": [],
+                "TotalInstances": 0
+            }
+
+        # Get instances for servers where user has membership
+        server_ids = [membership['serverId'] for membership in user_memberships]
+        logger.info(f"User has membership for servers: {server_ids}")
+        
+        # Get instance details for each server the user has access to
+        user_instances = []
+        for server_id in server_ids:
+            try:
+                response = ec2_client.describe_instances(InstanceIds=[server_id])
+                if response["Reservations"]:
+                    for reservation in response["Reservations"]:
+                        for instance in reservation["Instances"]:
+                            # Verify instance has the correct app tag
+                            tags = instance.get('Tags', [])
+                            app_tag = next((tag['Value'] for tag in tags if tag['Key'] == 'App'), None)
+                            if app_tag == app_value:
+                                user_instances.append(instance)
+                            else:
+                                logger.warning(f"Instance {server_id} does not have App={app_value} tag")
+            except Exception as e:
+                logger.error(f"Error getting instance {server_id}: {str(e)}")
+                continue
+        
+        total_instances = len(user_instances)
+        logger.info(f"Found {total_instances} instances for user memberships")
+        
+        return {
+            "Instances": user_instances,
+            "TotalInstances": total_instances
+        }
+            
+    except Exception as e:
+        logger.error(f"Error retrieving user instances: {str(e)}")
+        raise ValueError(f"Error retrieving user instances: {str(e)}")
+
+def get_server_validation(instance_id):
+    """Get stored server configuration validation from DynamoDB."""
+    try:
+        from ddbHelper import CoreTableDyn
+        
+        core_dyn = CoreTableDyn()
+        # Get stored validation results from serverBootProcessor
+        server_info = core_dyn.get_server_info(instance_id)
+        
+        if server_info:
+            return {
+                'instanceId': instance_id,
+                'configStatus': server_info.get('configStatus', 'unknown'),
+                'isValid': server_info.get('configValid', False),
+                'warnings': server_info.get('configWarnings', []),
+                'errors': server_info.get('configErrors', []),
+                'autoConfigured': server_info.get('autoConfigured', False)
+            }
+        
+        # Fallback if no server info found (server not processed by serverBootProcessor yet)
+        return {
             'instanceId': instance_id,
-            'isValid': True,
-            'warnings': [],
+            'configStatus': 'pending',
+            'isValid': False,
+            'warnings': ['Server validation pending'],
             'errors': [],
-            'configStatus': 'complete',
             'autoConfigured': False
         }
         
-        if not config:
-            logger.info(f"No configuration found for {instance_id}, creating default configuration")
-            try:
-                create_default_config(instance_id)
-                validation_result['autoConfigured'] = True
-                validation_result['warnings'].append('Default shutdown configuration applied: CPU-based (5% threshold, 30min evaluation)')
-                validation_result['configStatus'] = 'auto-configured'
-                logger.info(f"Successfully applied default configuration to {instance_id}")
-            except Exception as config_error:
-                logger.error(f"Failed to apply default configuration to {instance_id}: {config_error}")
-                validation_result['errors'].append(f'Failed to apply default configuration: {str(config_error)}')
-                validation_result['isValid'] = False
-                validation_result['configStatus'] = 'configuration-failed'
-        else:
-            validate_shutdown_config(config, validation_result)
-            
-            try:
-                apply_minecraft_config(instance_id, config, validation_result)
-            except Exception as minecraft_config_error:
-                logger.error(f"Failed to apply Minecraft configuration to {instance_id}: {minecraft_config_error}")
-                validation_result['warnings'].append(f'Failed to apply default Minecraft configuration: {str(minecraft_config_error)}')
-            
-            if not validation_result.get('autoConfigured', False):
-                check_missing_minecraft_config(config, validation_result)
-        
-        if config:
-            validate_aws_resources(instance_id, config, validation_result)
-        
-        # Log validation summary
-        if validation_result['errors']:
-            logger.warning(f"Config validation for {instance_id} has errors: {validation_result['errors']}")
-        elif validation_result['warnings']:
-            logger.info(f"Config validation for {instance_id} has warnings: {validation_result['warnings']}")
-        else:
-            logger.info(f"Config validation for {instance_id} completed successfully: {validation_result['configStatus']}")
-            
-        return validation_result
-        
     except Exception as e:
-        logger.error(f"Error validating configuration for instance {instance_id}: {e}")
+        logger.error(f"Error retrieving server validation for {instance_id}: {str(e)}")
         return {
             'instanceId': instance_id,
+            'configStatus': 'error',
             'isValid': False,
             'warnings': [],
-            'errors': [f'Failed to validate configuration: {str(e)}'],
-            'configStatus': 'error'
+            'errors': [f"Validation retrieval error: {str(e)}"],
+            'autoConfigured': False
         }
-
-def extract_auth_token(event):
-    """Extract authorization token from event with proper error handling."""
-    try:
-        return event['request']['headers']['authorization']
-    except KeyError as e:
-        if 'request' not in event:
-            raise ValueError("No request found in event")
-        elif 'headers' not in event['request']:
-            raise ValueError("No headers found in request")
-        else:
-            raise ValueError("No Authorization header found")
-
-def get_user_instances(cognito_groups, app_value):
-    """Get instances based on user permissions."""
-    if utl.is_admin_user(cognito_groups):
-        logger.info(f"Admin user - listing all instances by app tag: {app_value}")
-        user_instances = ec2_utils.list_instances_by_app_tag(app_value)
-        logger.info(f"Found {user_instances['TotalInstances']} instances with App={app_value}")
-        return user_instances
-    elif cognito_groups:
-        user_instances = ec2_utils.list_instances_by_user_group(cognito_groups)
-        logger.info(user_instances)
-        return user_instances
-    else:
-        raise ValueError("No Cognito Groups found")
 
 def fetch_parallel_data(instances):
     """Fetch instance data in parallel using ThreadPoolExecutor."""
     with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
         instance_types = {executor.submit(ec2_client.describe_instance_types, InstanceTypes=[instance['InstanceType']]): instance for instance in instances}
         instance_status = {executor.submit(ec2_utils.describe_instance_status, instance['InstanceId']): instance for instance in instances}
-        tag_validation = {executor.submit(validate_and_configure_instance_config, instance['InstanceId']): instance for instance in instances}
+        config_validation = {executor.submit(get_server_validation, instance['InstanceId']): instance for instance in instances}
     
-    return instance_types, instance_status, tag_validation
+    return instance_types, instance_status, config_validation
 
-def build_server_response(server, instance_types, instance_status, tag_validation, user_email):
+def build_server_response(server, instance_types, instance_status, config_validation, user_email):
     """Build individual server response object."""
     instance_id = server['InstanceId']
     
@@ -253,8 +155,8 @@ def build_server_response(server, instance_types, instance_status, tag_validatio
     instance_type = instance_type_future.result()
     instance_status_future = next(future for future in instance_status if future.result()['instanceId'] == instance_id)
     status = instance_status_future.result()
-    tag_validation_future = next(future for future in tag_validation if future.result()['instanceId'] == instance_id)
-    validation = tag_validation_future.result()
+    config_validation_future = next(future for future in config_validation if future.result()['instanceId'] == instance_id)
+    validation = config_validation_future.result()
 
     # Extract server details
     instance_name = next((tag['Value'] for tag in server['Tags'] if tag['Key'] == 'Name'), 'Undefined')
@@ -292,33 +194,51 @@ def build_server_response(server, instance_types, instance_status, tag_validatio
 def handler(event, context): 
     try:
         # Extract and validate token
-        token = authHelper.extract_auth_token(event)
-        user_attributes = authHelper.validate_user_token(token, auth)
+        token = utl.extract_auth_token(event)
+        user_attributes = auth.process_token(token)
         
-        # Get user instances
-        cognito_groups = event["identity"].get("groups", [])
-        user_instances = get_user_instances(cognito_groups, appValue)
+        # Get user sub for DynamoDB membership queries
+        user_sub = user_attributes.get('sub')
+        if not user_sub:
+            ErrorHandler.log_error('VALIDATION_ERROR',
+                                 context={'operation': 'handler'},
+                                 error='No user sub found in token')
+            return "Invalid user token - missing sub"
+        
+        # Get user instances using DynamoDB membership
+        user_instances = get_user_instances(user_sub, appValue)
         
         if user_instances["TotalInstances"] == 0:
-            logger.error(f"No Servers Found with App={appValue}")
+            logger.info(f"No servers found for user {user_sub}")
             return []
         
         # Fetch data in parallel
         instances = user_instances["Instances"]
-        instance_types, instance_status, tag_validation = fetch_parallel_data(instances)
+        instance_types, instance_status, config_validation = fetch_parallel_data(instances)
         
         # Build response
         result = []
         for server in instances:
-            server_data = build_server_response(server, instance_types, instance_status, tag_validation, user_attributes['email'])
-            result.append(server_data)
+            try:
+                server_data = build_server_response(server, instance_types, instance_status, config_validation, user_attributes['email'])
+                result.append(server_data)
+            except Exception as e:
+                # Log error but continue processing other servers
+                ErrorHandler.log_error('INTERNAL_ERROR',
+                                     context={'operation': 'build_server_response', 'instance_id': server.get('InstanceId', 'unknown')},
+                                     exception=e, error=str(e))
+                continue
         
         logger.info(result)
         return result
         
     except ValueError as e:
-        logger.error(str(e))
+        ErrorHandler.log_error('VALIDATION_ERROR',
+                             context={'operation': 'handler'},
+                             exception=e, error=str(e))
         return str(e)
     except Exception as e:
-        logger.error(f"Error processing request: {e}")
+        ErrorHandler.log_error('INTERNAL_ERROR',
+                             context={'operation': 'handler'},
+                             exception=e, error=str(e))
         return f"Error processing request: {e}"

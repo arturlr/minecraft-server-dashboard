@@ -1,11 +1,9 @@
 import boto3
 import logging
 import os
-import json
-import time
 import authHelper
 import utilHelper
-from datetime import date, datetime, timezone, timedelta
+from datetime import datetime, timezone, timedelta
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
