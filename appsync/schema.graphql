@@ -6,7 +6,6 @@ input AddUserToServerInput {
 input CreateServerInput {
 	serverName: String!
 	instanceType: String!
-	shutdownMethod: String!
 	alarmThreshold: Float
 	alarmEvaluationPeriod: Int
 	startScheduleExpression: String
@@ -58,7 +57,6 @@ input ServerActionInput {
 type ServerConfig @aws_iam
 @aws_cognito_user_pools {
 	id: String!
-	shutdownMethod: String
 	stopScheduleExpression: String
 	startScheduleExpression: String
 	alarmThreshold: Float
@@ -79,7 +77,6 @@ type ServerConfig @aws_iam
 
 input ServerConfigInput {
 	id: String!
-	shutdownMethod: String
 	stopScheduleExpression: String
 	startScheduleExpression: String
 	alarmThreshold: Float

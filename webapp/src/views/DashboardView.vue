@@ -34,6 +34,7 @@
           <ServerCard 
             :server="mapServer(server)" 
             :metrics="serverStore.getMetricsById(server.id)"
+            :history="serverStore.getMetricsHistory(server.id)"
             @settings="goToSettings"
             @start="handleStart"
             @stop="handleStop"
@@ -177,6 +178,7 @@ const handleStop = async (server) => {
 
 onMounted(() => {
   serverStore.listServers()
+  serverStore.subscribeToStateChanges()
   loadAdminUsers()
 })
 

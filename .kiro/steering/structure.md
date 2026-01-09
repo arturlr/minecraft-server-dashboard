@@ -2,7 +2,7 @@
 
 ## Root Level Organization
 ```
-├── dashboard/          # Vue.js frontend application
+├── webapp/            # Vue.js frontend application
 ├── cfn/               # AWS SAM CloudFormation templates
 ├── lambdas/           # AWS Lambda function source code
 ├── layers/            # AWS Lambda layers for shared code
@@ -12,9 +12,9 @@
 └── public/            # Static web assets
 ```
 
-## Frontend Structure (`dashboard/`)
+## Frontend Structure (`webapp/`)
 ```
-dashboard/
+webapp/
 ├── src/
 │   ├── components/    # Reusable Vue components
 │   ├── views/         # Page-level Vue components
@@ -95,13 +95,13 @@ cfn/
 - **CloudFormation**: kebab-case for resources, PascalCase for types
 
 ## Key Configuration Files
-- **dashboard/.env**: Frontend environment variables (VITE_ prefixed)
+- **webapp/.env**: Frontend environment variables (VITE_ prefixed)
 - **cfn/samconfig.toml**: SAM deployment parameters
 - **appsync/schema.graphql**: GraphQL API schema
 - **layers/*/requirements.txt**: Python dependencies for each layer
 - **lambdas/*/requirements.txt**: Python dependencies for each function
 
-### Environment Variables (dashboard/.env)
+### Environment Variables (webapp/.env)
 ```
 VITE_AWS_REGION=us-west-2
 VITE_GRAPHQL_ENDPOINT=[AppSync API Endpoint]

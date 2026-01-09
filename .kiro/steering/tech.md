@@ -28,8 +28,8 @@
 
 ### Frontend Development
 ```bash
-# Navigate to dashboard directory
-cd dashboard
+# Navigate to webapp directory
+cd webapp
 
 # Install dependencies
 npm install
@@ -160,14 +160,14 @@ cd layers/authHelper && make
   - Added `stopScheduleExpression`, `startScheduleExpression` to queries
   - Created separate `getServerUsers` query
   - Fixed data type handling in ServerSettings component
-- **Location**: `dashboard/src/graphql/queries.js`, `dashboard/src/components/ServerSettings.vue`
+- **Location**: `webapp/src/graphql/queries.js`, `webapp/src/components/ServerSettings.vue`
 
 ### UI/UX Improvements
 - **Quick Schedule Presets**: One-click common schedules (weekday evenings, weekends, etc.)
 - **Smart Validation**: Warnings for timing conflicts, short durations, high thresholds
 - **Visual Feedback**: Day chips, runtime calculations, color-coded summaries
 - **Better Layout**: Card-based design with progressive disclosure
-- **Location**: `dashboard/src/components/ServerSettings.vue`
+- **Location**: `webapp/src/components/ServerSettings.vue`
 
 ## GraphQL Schema & Data Models
 

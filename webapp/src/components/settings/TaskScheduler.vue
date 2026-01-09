@@ -85,12 +85,10 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, watch } from 'vue'
 
 const props = defineProps({ modelValue: Object })
 const emit = defineEmits(['update:modelValue'])
-
-const config = computed(() => props.modelValue || {})
 
 const enabled = ref(false)
 const startTime = ref('')
@@ -136,8 +134,13 @@ const buildCron = (time, days) => {
   return `${parseInt(minute)} ${parseInt(hour)} * * ${dayStr}`
 }
 
-// Initialize from config
-watch(() => config.value, (cfg) => {
+let isUpdatingFromProps = false
+
+// Initialize from config (only once)
+watch(() => props.modelValue, (cfg) => {
+  if (!cfg || isUpdatingFromProps) return
+  isUpdatingFromProps = true
+  
   if (cfg.startScheduleExpression || cfg.stopScheduleExpression) {
     enabled.value = true
     const start = parseCron(cfg.startScheduleExpression)
@@ -148,11 +151,15 @@ watch(() => config.value, (cfg) => {
     stopDays.value = stop.days
   }
   if (cfg.timezone) timezone.value = cfg.timezone
+  
+  setTimeout(() => { isUpdatingFromProps = false }, 0)
 }, { immediate: true })
 
 // Update config when values change
 watch([enabled, startTime, startDays, stopTime, stopDays, timezone], () => {
-  const update = { ...config.value, timezone: timezone.value }
+  if (isUpdatingFromProps) return
+  
+  const update = { ...props.modelValue, timezone: timezone.value }
   if (enabled.value) {
     update.startScheduleExpression = buildCron(startTime.value, startDays.value)
     update.stopScheduleExpression = buildCron(stopTime.value, stopDays.value)
