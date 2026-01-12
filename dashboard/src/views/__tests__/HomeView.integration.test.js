@@ -1,6 +1,28 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
+
+// Use vi.hoisted to ensure mockGraphQLClient is available in hoisted mock
+const { mockGraphQLClient } = vi.hoisted(() => ({
+  mockGraphQLClient: {
+    graphql: vi.fn()
+  }
+}));
+
+vi.mock('aws-amplify/api', () => ({
+  generateClient: () => mockGraphQLClient
+}));
+
+// Mock the stores
+vi.mock('../../stores/user', () => ({
+  useUserStore: () => ({
+    isAdmin: true,
+    fullname: 'Test Admin',
+    email: 'admin@test.com'
+  })
+}));
+
+// Now import the component
 import HomeView from '../HomeView.vue';
 
 // Mock all the child components to focus on integration logic
@@ -32,24 +54,6 @@ vi.mock('../components/IamAlert.vue', () => ({
     template: '<div data-testid="iam-alert"></div>',
     props: ['servers']
   }
-}));
-
-// Mock the GraphQL client
-const mockGraphQLClient = {
-  graphql: vi.fn()
-};
-
-vi.mock('aws-amplify/api', () => ({
-  generateClient: () => mockGraphQLClient
-}));
-
-// Mock the stores
-vi.mock('../../stores/user', () => ({
-  useUserStore: () => ({
-    isAdmin: true,
-    fullname: 'Test Admin',
-    email: 'admin@test.com'
-  })
 }));
 
 // Mock Vuetify

@@ -258,7 +258,7 @@ onUnmounted(() => {
           >
             {{ snackbar.text }}
 
-            <template v-slot:actions>
+            <template #actions>
               <v-btn color="white" variant="text" @click="snackbar.visible = false">
                 Close
               </v-btn>

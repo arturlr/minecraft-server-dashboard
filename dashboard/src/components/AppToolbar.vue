@@ -66,7 +66,7 @@ function handleServerCreated() {
 
     <v-btn icon @click="userSignOut" class="ml-2">
       <v-tooltip text="Sign Out" location="bottom">
-        <template v-slot:activator="{ props }">
+        <template #activator="{ props }">
           <v-icon v-bind="props">mdi-logout</v-icon>
         </template>
       </v-tooltip>

@@ -33,7 +33,7 @@ function isFixing(serverId) {
     border-color="warning"
     class="mb-4"
   >
-    <template v-slot:prepend>
+    <template #prepend>
       <v-icon size="large">mdi-alert-circle</v-icon>
     </template>
 
@@ -48,7 +48,7 @@ function isFixing(serverId) {
         :key="server.id"
         class="px-0 mb-2"
       >
-        <template v-slot:prepend>
+        <template #prepend>
           <v-icon color="warning" size="small" class="mr-2">
             mdi-server-off
           </v-icon>
@@ -62,7 +62,7 @@ function isFixing(serverId) {
           Instance ID: {{ server.id }}
         </v-list-item-subtitle>
 
-        <template v-slot:append>
+        <template #append>
           <v-btn
             color="warning"
             variant="elevated"

@@ -225,7 +225,7 @@ async function submitForm() {
           // Subscribe to status updates for this instance
           subscribeToStatusUpdates(response.instanceId);
         }
-      } catch (parseError) {
+      } catch {
         console.log('Could not parse createServer response for instance ID');
       }
     }
@@ -418,9 +418,9 @@ onUnmounted(() => {
             class="mb-4"
             prepend-inner-icon="mdi-memory"
           >
-            <template v-slot:item="{ props, item }">
+            <template #item="{ props, item }">
               <v-list-item v-bind="props">
-                <template v-slot:title>
+                <template #title>
                   <div class="d-flex justify-space-between align-center w-100">
                     <div>
                       <div class="font-weight-medium">{{ item.raw.label }}</div>
@@ -466,9 +466,9 @@ onUnmounted(() => {
             class="mb-4"
             prepend-inner-icon="mdi-power"
           >
-            <template v-slot:item="{ props, item }">
+            <template #item="{ props, item }">
               <v-list-item v-bind="props">
-                <template v-slot:title>
+                <template #title>
                   <div>
                     <div class="font-weight-medium">{{ item.raw.label }}</div>
                     <div class="text-caption text-medium-emphasis">{{ item.raw.description }}</div>

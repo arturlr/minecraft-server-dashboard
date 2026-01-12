@@ -1,15 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
-import { useServerStore } from '../stores/server';
 
-// Mock the GraphQL client
-const mockGraphQLClient = {
-  graphql: vi.fn()
-};
+// Use vi.hoisted to ensure mockGraphQLClient is available in hoisted mock
+const { mockGraphQLClient } = vi.hoisted(() => ({
+  mockGraphQLClient: {
+    graphql: vi.fn()
+  }
+}));
 
 vi.mock('aws-amplify/api', () => ({
   generateClient: () => mockGraphQLClient
 }));
+
+import { useServerStore } from '../stores/server';
 
 describe('Server Creation End-to-End Integration', () => {
   let serverStore;
@@ -340,7 +343,6 @@ describe('Server Creation End-to-End Integration', () => {
       expect(newServer.name).toBe('new-minecraft-server');
 
       // Test server name functionality
-      const serverName = serverStore.getServerName;
       serverStore.setSelectedServerId('i-new-server');
       expect(serverStore.getServerName).toBe('new-minecraft-server');
     });

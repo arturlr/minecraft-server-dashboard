@@ -40,7 +40,7 @@
           aria-live="assertive"
         >
           {{ errorMessage }}
-          <template v-slot:append>
+          <template #append>
             <v-btn
               size="small"
               variant="text"
@@ -100,7 +100,7 @@
                 aria-required="true"
                 aria-describedby="email-search-help"
               >
-                <template v-slot:append-inner>
+                <template #append-inner>
                   <v-btn
                     v-if="newUserEmail"
                     icon="mdi-close"
@@ -216,7 +216,7 @@
               role="listitem"
               :aria-label="`User: ${user.fullName}, Email: ${user.email}`"
             >
-              <template v-slot:prepend>
+              <template #prepend>
                 <v-icon icon="mdi-account-circle" aria-hidden="true"></v-icon>
               </template>
             </v-list-item>

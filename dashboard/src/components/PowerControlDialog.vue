@@ -3,7 +3,7 @@ import { ref, computed } from 'vue';
 import { generateClient } from 'aws-amplify/api';
 import * as mutations from '../graphql/mutations';
 import { useServerStore } from '../stores/server';
-import { parseGraphQLError, retryOperation, isRetryableError } from '../utils/errorHandler';
+import { parseGraphQLError, retryOperation } from '../utils/errorHandler';
 
 const client = generateClient();
 const serverStore = useServerStore();
@@ -171,7 +171,7 @@ function closeDialog() {
           border-color="error"
           class="mb-4"
         >
-          <template v-slot:prepend>
+          <template #prepend>
             <v-icon>mdi-alert-circle</v-icon>
           </template>
           <div class="font-weight-medium mb-2">IAM Role Issue Detected</div>
@@ -267,7 +267,7 @@ function closeDialog() {
               border="start"
               border-color="info"
             >
-              <template v-slot:prepend>
+              <template #prepend>
                 <v-icon>mdi-information</v-icon>
               </template>
               <div class="font-weight-medium">Server in Transition</div>

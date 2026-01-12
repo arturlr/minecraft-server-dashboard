@@ -1,0 +1,61 @@
+# Node modules
+node_modules/
+**/node_modules/
+
+# Build artifacts
+dist/
+build/
+*.log
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Environment files
+.env
+.env.local
+.env.*.local
+*.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# Images and media
+images/
+wireframe/
+public/
+
+# AWS and CloudFormation
+cfn/
+appsync/
+
+# Test files
+*.test.js
+*.spec.js
+tests/
+playwright-report/
+test-results/
+
+# Misc
+complexity_analyzer.py
+complexity_report.md

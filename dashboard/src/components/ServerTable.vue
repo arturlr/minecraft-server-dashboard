@@ -26,10 +26,10 @@
       hover
     >
       <!-- Name Column Slot with Power Button -->
-      <template v-slot:item.name="{ item }">
+      <template #item.name="{ item }">
         <div class="d-flex align-center ga-2">
           <v-tooltip text="Power Control" location="top">
-            <template v-slot:activator="{ props }">
+            <template #activator="{ props }">
               <v-btn 
                 icon 
                 size="small" 
@@ -58,7 +58,7 @@
             ></v-text-field>
             
             <v-tooltip v-else :text="`Instance ID: ${item.id}`" location="top">
-              <template v-slot:activator="{ props }">
+              <template #activator="{ props }">
                 <span 
                   v-bind="props"
                   class="font-weight-bold server-name-text"
@@ -70,7 +70,7 @@
             </v-tooltip>
             
             <v-tooltip v-if="editingName !== item.id" text="Click to edit server name" location="top">
-              <template v-slot:activator="{ props }">
+              <template #activator="{ props }">
                 <v-btn 
                   icon 
                   size="x-small" 
@@ -85,7 +85,7 @@
             
             <div v-if="editingName === item.id" class="d-flex ga-1">
               <v-tooltip text="Save" location="top">
-                <template v-slot:activator="{ props }">
+                <template #activator="{ props }">
                   <v-btn 
                     icon 
                     size="x-small" 
@@ -101,7 +101,7 @@
               </v-tooltip>
               
               <v-tooltip text="Cancel" location="top">
-                <template v-slot:activator="{ props }">
+                <template #activator="{ props }">
                   <v-btn 
                     icon 
                     size="x-small" 
@@ -120,7 +120,7 @@
       </template>
 
       <!-- State Column Slot -->
-      <template v-slot:item.state="{ item }">
+      <template #item.state="{ item }">
         <v-chip
           :color="getChipColor(item.state)"
           size="small"
@@ -132,11 +132,11 @@
       </template>
 
       <!-- Public IP Column Slot with Copy Button -->
-      <template v-slot:item.publicIp="{ item }">
+      <template #item.publicIp="{ item }">
         <div class="d-flex align-center ga-2">
           <span>{{ item.publicIp || '-' }}</span>
           <v-tooltip v-if="item.publicIp" text="Copy IP Address" location="top">
-            <template v-slot:activator="{ props }">
+            <template #activator="{ props }">
               <v-btn 
                 icon 
                 size="x-small" 
@@ -152,24 +152,24 @@
       </template>
 
       <!-- Specs Column Slot (CPU, RAM, Disk) -->
-      <template v-slot:item.specs="{ item }">
+      <template #item.specs="{ item }">
         <v-list density="compact" class="pa-0">
           <v-list-item class="pa-0 specs-item">
-            <template v-slot:prepend>
+            <template #prepend>
               <v-icon size="small" color="primary">mdi-cpu-64-bit</v-icon>
             </template>
             <v-list-item-title class="specs-text">{{ item.vCpus }} vCPU{{ item.vCpus !== 1 ? 's' : '' }}</v-list-item-title>
           </v-list-item>
           
           <v-list-item class="pa-0 specs-item">
-            <template v-slot:prepend>
+            <template #prepend>
               <v-icon size="small" color="success">mdi-memory</v-icon>
             </template>
             <v-list-item-title class="specs-text">{{ formatRamSize(item.memSize) }}</v-list-item-title>
           </v-list-item>
           
           <v-list-item class="pa-0 specs-item">
-            <template v-slot:prepend>
+            <template #prepend>
               <v-icon size="small" color="warning">mdi-harddisk</v-icon>
             </template>
             <v-list-item-title class="specs-text">{{ item.diskSize }} GB</v-list-item-title>
@@ -178,9 +178,9 @@
       </template>
 
       <!-- Running Time Column Slot -->
-      <template v-slot:item.runningMinutes="{ item }">
+      <template #item.runningMinutes="{ item }">
         <v-tooltip v-if="item.runningMinutesCacheTimestamp" location="top">
-          <template v-slot:activator="{ props }">
+          <template #activator="{ props }">
             <span v-bind="props" class="d-flex align-center ga-1">
               {{ formatRunningTime(item.runningMinutes) }}
               <v-icon size="x-small" color="grey-lighten-1">mdi-clock-outline</v-icon>
@@ -192,24 +192,24 @@
       </template>
 
       <!-- Actions Column Slot -->
-      <template v-slot:item.actions="{ item }">
+      <template #item.actions="{ item }">
         <v-list density="compact" class="pa-0">
           <v-list-item class="pa-0 action-item" @click="$emit('open-stats', item.id)">
-            <template v-slot:prepend>
+            <template #prepend>
               <v-icon size="small" color="info">mdi-chart-line</v-icon>
             </template>
             <v-list-item-title class="action-text">Stats</v-list-item-title>
           </v-list-item>
           
           <v-list-item class="pa-0 action-item" @click="$emit('open-config', item.id)">
-            <template v-slot:prepend>
+            <template #prepend>
               <v-icon size="small" color="primary">mdi-cog</v-icon>
             </template>
             <v-list-item-title class="action-text">Config</v-list-item-title>
           </v-list-item>
           
           <v-list-item class="pa-0 action-item" @click="openUserManagement(item.id, item.name || item.id)">
-            <template v-slot:prepend>
+            <template #prepend>
               <v-icon size="small" color="success">mdi-account-multiple</v-icon>
             </template>
             <v-list-item-title class="action-text">Users</v-list-item-title>
@@ -218,7 +218,7 @@
       </template>
 
       <!-- Loading Skeleton -->
-      <template v-slot:loading>
+      <template #loading>
         <v-skeleton-loader
           v-for="n in 5"
           :key="n"
@@ -228,7 +228,7 @@
       </template>
 
       <!-- Empty State -->
-      <template v-slot:no-data>
+      <template #no-data>
         <div class="text-center py-8">
           <v-icon size="64" color="grey-lighten-1">mdi-server-off</v-icon>
           <div class="text-h6 mt-4 text-grey">No servers available</div>

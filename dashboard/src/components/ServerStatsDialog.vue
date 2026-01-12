@@ -261,7 +261,7 @@ const closeDialog = () => {
           border-color="error"
           class="mb-4"
         >
-          <template v-slot:prepend>
+          <template #prepend>
             <v-icon>mdi-alert-circle</v-icon>
           </template>
           <div class="font-weight-medium mb-2">Connection Error</div>
@@ -299,7 +299,7 @@ const closeDialog = () => {
               </v-chip>
 
               <v-tooltip v-if="cacheTimestamp" location="top">
-                <template v-slot:activator="{ props }">
+                <template #activator="{ props }">
                   <v-chip variant="tonal" v-bind="props">
                     <v-icon class="mr-1">mdi-clock-outline</v-icon>
                     {{ runningTime }}

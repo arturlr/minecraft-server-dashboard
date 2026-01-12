@@ -57,7 +57,7 @@ function reload() {
       border-color="error"
       class="ma-4"
     >
-      <template v-slot:prepend>
+      <template #prepend>
         <v-icon size="large">mdi-alert-circle</v-icon>
       </template>
       

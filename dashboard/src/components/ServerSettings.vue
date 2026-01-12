@@ -717,7 +717,7 @@ async function onSubmit() {
                                         class="mt-4"
                                         border="start"
                                     >
-                                        <template v-slot:prepend>
+                                        <template #prepend>
                                             <v-icon>{{ scheduleWarning.type === 'warning' ? 'mdi-alert' : 'mdi-information' }}</v-icon>
                                         </template>
                                         {{ scheduleWarning.message }}
@@ -844,7 +844,7 @@ async function onSubmit() {
                                         class="mt-4"
                                         border="start"
                                     >
-                                        <template v-slot:prepend>
+                                        <template #prepend>
                                             <v-icon>mdi-alert</v-icon>
                                         </template>
                                         {{ metricWarning.message }}
@@ -964,7 +964,7 @@ async function onSubmit() {
         <v-snackbar v-model="snackbar" :timeout="snackTimeout" :color="snackColor" outlined left centered text>
             {{ snackText }}
 
-            <template v-slot:actions>
+            <template #actions>
                 <v-btn color="white" variant="text" @click="snackbar = false">
                     Close
                 </v-btn>

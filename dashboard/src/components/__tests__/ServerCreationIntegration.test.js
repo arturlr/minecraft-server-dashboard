@@ -1,12 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
-import { useServerStore } from '../../stores/server';
 
-// Mock the GraphQL client
-const mockGraphQLClient = {
-  graphql: vi.fn()
-};
+// Use vi.hoisted to ensure mockGraphQLClient is available in hoisted mock
+const { mockGraphQLClient } = vi.hoisted(() => ({
+  mockGraphQLClient: {
+    graphql: vi.fn()
+  }
+}));
 
 vi.mock('aws-amplify/api', () => ({
   generateClient: () => mockGraphQLClient
@@ -20,6 +21,8 @@ vi.mock('../../stores/user', () => ({
     email: 'admin@test.com'
   })
 }));
+
+import { useServerStore } from '../../stores/server';
 
 describe('Server Creation Integration', () => {
   let serverStore;

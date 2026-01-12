@@ -25,8 +25,7 @@ onMounted(async () => {
       <v-app-bar-nav-icon></v-app-bar-nav-icon>
 
       <v-toolbar-title>Minecraft Dashboard</v-toolbar-title>
-
-    </v-toolbar>
+</v-toolbar>
   </div>  
 </template>
 

@@ -1,7 +1,7 @@
 <template>
   <div class="actions-menu d-flex align-center ga-1">
     <v-tooltip text="View Statistics" location="top">
-      <template v-slot:activator="{ props }">
+      <template #activator="{ props }">
         <v-btn 
           icon 
           size="small" 
@@ -16,7 +16,7 @@
     </v-tooltip>
     
     <v-tooltip text="Configuration" location="top">
-      <template v-slot:activator="{ props }">
+      <template #activator="{ props }">
         <v-btn 
           icon 
           size="small" 
@@ -31,7 +31,7 @@
     </v-tooltip>
     
     <v-tooltip text="Manage Users" location="top">
-      <template v-slot:activator="{ props }">
+      <template #activator="{ props }">
         <v-btn 
           icon 
           size="small" 
