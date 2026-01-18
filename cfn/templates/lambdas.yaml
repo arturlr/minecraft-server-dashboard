@@ -272,12 +272,6 @@ Resources:
               Version: "1.0.0"
             Pipeline:
               - getLogAuditFunction
-          getServerActionStatus:
-            Runtime:
-              Name: APPSYNC_JS
-              Version: "1.0.0"
-            Pipeline:
-              - getServerRecordFunction
           getServerMetrics:
             Runtime:
               Name: APPSYNC_JS
