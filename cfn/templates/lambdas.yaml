@@ -278,7 +278,6 @@ Resources:
               Version: "1.0.0"
             Pipeline:
               - getServerRecordFunction
-              - getServerRecordFunction
           getServerMetrics:
             Runtime:
               Name: APPSYNC_JS
