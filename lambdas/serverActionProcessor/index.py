@@ -14,7 +14,7 @@ from botocore.auth import SigV4Auth
 from botocore.awsrequest import AWSRequest
 from botocore.httpsession import URLLib3Session
 from botocore.exceptions import ClientError
-from utilHelper.errorHandler import ErrorHandler
+from errorHandler import ErrorHandler
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)

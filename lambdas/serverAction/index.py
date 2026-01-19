@@ -8,7 +8,7 @@ import authHelper
 import ec2Helper
 import utilHelper
 import ddbHelper
-from utilHelper.errorHandler import ErrorHandler
+from errorHandler import ErrorHandler
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
