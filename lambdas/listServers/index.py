@@ -7,7 +7,7 @@ import ec2Helper
 import utilHelper
 import ddbHelper
 import pytz
-from errorHandler import ErrorHandle
+from errorHandler import ErrorHandler
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -31,9 +31,7 @@ pst = pytz.timezone('US/Pacific')
 def get_user_instances(user_sub, app_value):
     """Get instances based on user permissions using DynamoDB membership."""
     try:
-        from ddbHelper import CoreTableDyn
-        
-        core_dyn = CoreTableDyn()
+        core_dyn = ddbHelper.CoreTableDyn()
         
         # Check if user has global admin role
         if core_dyn.check_global_admin(user_sub):
@@ -91,9 +89,7 @@ def get_user_instances(user_sub, app_value):
 def get_server_validation(instance_id):
     """Get stored server configuration validation from DynamoDB."""
     try:
-        from ddbHelper import CoreTableDyn
-        
-        core_dyn = CoreTableDyn()
+        core_dyn = ddbHelper.CoreTableDyn()
         # Get stored validation results from serverBootProcessor
         server_info = core_dyn.get_server_info(instance_id)
         
