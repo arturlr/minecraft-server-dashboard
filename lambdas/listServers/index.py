@@ -7,6 +7,7 @@ import ec2Helper
 import utilHelper
 import ddbHelper
 import pytz
+from errorHandler import ErrorHandle
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -23,19 +24,9 @@ servers_table_name = os.getenv('SERVERS_TABLE_NAME')
 auth = authHelper.Auth(cognito_pool_id)
 ec2_utils = ec2Helper.Ec2Utils()
 utl = utilHelper.Utils()
-ddb = ddbHelper.Dyn(servers_table_name)
+ddb = ddbHelper.CoreTableDyn(servers_table_name)
 utc = pytz.utc
 pst = pytz.timezone('US/Pacific')
-
-# Import error handling utilities
-try:
-    from utilHelper.errorHandler import ErrorHandler
-except ImportError:
-    # Fallback for local testing
-    import sys
-    sys.path.insert(0, '../utilHelper')
-    from errorHandler import ErrorHandler
-
 
 def get_user_instances(user_sub, app_value):
     """Get instances based on user permissions using DynamoDB membership."""
