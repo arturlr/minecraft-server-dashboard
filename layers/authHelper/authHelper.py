@@ -5,7 +5,7 @@ import time
 import requests
 from jose import jwk, jwt
 from jose.utils import base64url_decode
-from utilHelper.errorHandler import ErrorHandler
+from errorHandler import ErrorHandler
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
