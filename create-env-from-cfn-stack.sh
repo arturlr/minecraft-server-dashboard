@@ -83,9 +83,9 @@ main() {
     echo ""
     
     # Create .env file
-    echo -e "${WHITE}---- Creating dashboard/.env file ----${SET}"
+    echo -e "${WHITE}---- Creating webapp/.env file ----${SET}"
     
-    cat > dashboard/.env << EOF
+    cat > webapp/.env << EOF
 VITE_AWS_REGION=${region}
 VITE_GRAPHQL_ENDPOINT=${GraphQLAPIEndpoint}
 VITE_CLOUDFRONT_URL=https://${CloudFrontDomain}
@@ -101,7 +101,7 @@ VITE_I18N_FALLBACK_LOCALE=en
 EOF
     
     if [ $? -eq 0 ]; then
-        echo -e "${GREEN}.env file created successfully at dashboard/.env${SET}"
+        echo -e "${GREEN}.env file created successfully at webapp/.env${SET}"
     else
         echo -e "${RED}Failed to create .env file${SET}"
         exit 1
@@ -126,7 +126,7 @@ EOF
     echo ""
     echo -e "${GREEN}Configuration complete!${SET}"
     echo -e "Next steps:"
-    echo -e "  ${CYAN}cd dashboard${SET}"
+    echo -e "  ${CYAN}cd webapp${SET}"
     echo -e "  ${CYAN}npm install${SET}"
     echo -e "  ${CYAN}npm run build${SET}"
     echo -e "  ${CYAN}aws s3 cp dist s3://${WebAppBucket} --recursive${SET}"

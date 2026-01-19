@@ -172,9 +172,9 @@ jobs:
           name: Get stack configuration
           command: |
             set -e
-            # Run get-stack-config.sh to generate .env file
-            chmod +x get-stack-config.sh
-            ./get-stack-config.sh msd-<< parameters.stage >> us-west-2
+            # Run create-env-from-cfn-stack.sh to generate .env file
+            chmod +x create-env-from-cfn-stack.sh
+            ./create-env-from-cfn-stack.sh msd-<< parameters.stage >> us-west-2
       - run:
           name: Build frontend
           command: |

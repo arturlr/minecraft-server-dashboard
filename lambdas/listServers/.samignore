@@ -1,0 +1,5 @@
+test_*.py
+__pycache__/
+.pytest_cache/
+*.pyc
+README.md
