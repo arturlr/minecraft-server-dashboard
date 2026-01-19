@@ -12,7 +12,7 @@ Globals:
     Environment:
       Variables:
         CORE_TABLE_NAME:
-          Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTableName"   
+          Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTable"   
         TAG_APP_VALUE: !Ref AppValue
         APP_NAME: !Ref ProjectName
         ENVIRONMENT_NAME: !Ref EnvironmentName
@@ -86,7 +86,7 @@ Resources:
               Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-LogAuditTable"
           CoreTable:
             TableName:
-              Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTableName"
+              Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTable"
             TableArn:
               Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTable"
         Lambda:
@@ -514,7 +514,7 @@ Resources:
                 - dynamodb:UpdateItem
                 - dynamodb:Query
               Resource:
-                Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTableName"
+                Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTable"
       Environment:
         Variables:
           APPSYNC_URL: !GetAtt GraphQLAPI.GraphQLUrl
@@ -577,7 +577,7 @@ Resources:
             ParameterName: !Sub "${ProjectName}*"
         - DynamoDBCrudPolicy:
             TableName:
-              Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTableName"
+              Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTable"
         - DynamoDBCrudPolicy:
             TableName:
               Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-LogAuditTableName"
@@ -618,7 +618,7 @@ Resources:
         - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
         - DynamoDBCrudPolicy:
             TableName:
-              Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTableName"
+              Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTable"
         - Version: "2012-10-17"
           Statement:
             - Effect: Allow
@@ -736,7 +736,7 @@ Resources:
                 - dynamodb:UpdateItem
                 - dynamodb:Query
               Resource:
-                Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTableName"
+                Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTable"
       Environment:
         Variables:
           APPSYNC_URL: !GetAtt GraphQLAPI.GraphQLUrl
@@ -765,7 +765,7 @@ Resources:
             ParameterName: !Sub "${ProjectName}*"        
         - DynamoDBCrudPolicy:
             TableName:
-              Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTableName"
+              Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTable"
         - DynamoDBCrudPolicy:
             TableName:
               Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-LogAuditTableName"
@@ -872,7 +872,7 @@ Resources:
         - arn:aws:iam::aws:policy/AWSCloudTrail_ReadOnlyAccess
         - DynamoDBCrudPolicy:
             TableName:
-              Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTableName"
+              Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTable"
 
   SSMCommandProcessor:
     Type: AWS::Serverless::Function
