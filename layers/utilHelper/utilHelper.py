@@ -81,7 +81,6 @@ class Utils:
             logger.error(f'Something went wrong: {str(e)}')
             return "[]"
 
-
     def response(self, status_code, body, headers={}):
         """
         Returns a dictionary containing the status code, body, and headers.
@@ -99,6 +98,7 @@ class Utils:
         else:
             return {"statusCode": status_code, "body": body }
 
+    # To be removed - Moved it to Auth Layer
     def extract_auth_token(self, event):
         """Extract authorization token from Lambda event."""
         try:

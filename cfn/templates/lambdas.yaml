@@ -458,8 +458,6 @@ Resources:
         - !Ref AuthLayer
         - !Ref UtilLayer
         - !Ref Ec2Layer
-        - !Ref DdbLayer
-        - !Ref SsmLayer 
         - !Ref ErrorLayer
       Events:
         EC2StateTrigger:
@@ -575,7 +573,6 @@ Resources:
       CodeUri: ../../lambdas/listServers/
       Layers:
         - !Ref AuthLayer
-        - !Ref UtilLayer
         - !Ref Ec2Layer
         - !Ref DdbLayer
         - !Ref ErrorLayer

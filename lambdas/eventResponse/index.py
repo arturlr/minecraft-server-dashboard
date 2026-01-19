@@ -6,7 +6,6 @@ import httpx
 from httpx_aws_auth import AwsSigV4Auth, AwsCredentials 
 import ec2Helper
 import utilHelper
-import ddbHelper
 import pytz
 from errorHandler import ErrorHandler
 
@@ -26,7 +25,6 @@ cognito_pool_id = os.getenv('COGNITO_USER_POOL_ID', None)
 
 utl = utilHelper.Utils()
 ec2_utils = ec2Helper.Ec2Utils()
-dyn = ddbHelper.CoreTableDyn()
 utc = pytz.utc
 pst = pytz.timezone('US/Pacific')
 

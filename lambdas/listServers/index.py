@@ -4,7 +4,6 @@ import os
 import concurrent.futures
 import authHelper
 import ec2Helper
-import utilHelper
 import ddbHelper
 import pytz
 # from errorHandler import ErrorHandler
@@ -23,7 +22,6 @@ servers_table_name = os.getenv('SERVERS_TABLE_NAME')
 
 auth = authHelper.Auth(cognito_pool_id)
 ec2_utils = ec2Helper.Ec2Utils()
-utl = utilHelper.Utils()
 ddb = ddbHelper.CoreTableDyn(servers_table_name)
 utc = pytz.utc
 pst = pytz.timezone('US/Pacific')
@@ -181,7 +179,7 @@ def build_server_response(server, instance_types, instance_status, config_valida
 def handler(event, context): 
     try:
         # Extract and validate token
-        token = utl.extract_auth_token(event)
+        token = auth.extract_auth_token(event)
         user_attributes = auth.process_token(token)
         
         # Get user sub for DynamoDB membership queries

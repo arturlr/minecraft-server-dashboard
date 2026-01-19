@@ -61,6 +61,18 @@ class Auth:
         # now we can use the claims
         return claims
 
+    def extract_auth_token(self, event):
+        """Extract authorization token from Lambda event."""
+        try:
+            return event['request']['headers']['authorization']
+        except KeyError:
+            if 'request' not in event:
+                raise ValueError("No request found in event")
+            elif 'headers' not in event['request']:
+                raise ValueError("No headers found in request")
+            else:
+                raise ValueError("No Authorization header found")
+
     def process_token(self,token):
         # download the key
         try:
