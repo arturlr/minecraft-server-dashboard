@@ -7,7 +7,7 @@ import ec2Helper
 import utilHelper
 import ddbHelper
 import pytz
-from errorHandler import ErrorHandler
+# from errorHandler import ErrorHandler
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -186,11 +186,11 @@ def handler(event, context):
         
         # Get user sub for DynamoDB membership queries
         user_sub = user_attributes.get('sub')
-        if not user_sub:
-            ErrorHandler.log_error('VALIDATION_ERROR',
-                                 context={'operation': 'handler'},
-                                 error='No user sub found in token')
-            return "Invalid user token - missing sub"
+        # if not user_sub:
+        #     ErrorHandler.log_error('VALIDATION_ERROR',
+        #                          context={'operation': 'handler'},
+        #                          error='No user sub found in token')
+        #     return "Invalid user token - missing sub"
         
         # Get user instances using DynamoDB membership
         user_instances = get_user_instances(user_sub, appValue)
@@ -206,26 +206,32 @@ def handler(event, context):
         # Build response
         result = []
         for server in instances:
-            try:
-                server_data = build_server_response(server, instance_types, instance_status, config_validation, user_attributes['email'])
-                result.append(server_data)
-            except Exception as e:
-                # Log error but continue processing other servers
-                ErrorHandler.log_error('INTERNAL_ERROR',
-                                     context={'operation': 'build_server_response', 'instance_id': server.get('InstanceId', 'unknown')},
-                                     exception=e, error=str(e))
-                continue
+            server_data = build_server_response(server, instance_types, instance_status, config_validation, user_attributes['email'])
+            result.append(server_data)
+            continue
+            # try:
+            #     server_data = build_server_response(server, instance_types, instance_status, config_validation, user_attributes['email'])
+            #     result.append(server_data)
+            # except Exception as e:
+            #     # Log error but continue processing other servers
+            #     ErrorHandler.log_error('INTERNAL_ERROR',
+            #                          context={'operation': 'build_server_response', 'instance_id': server.get('InstanceId', 'unknown')},
+            #                          exception=e, error=str(e))
+            #     continue
         
         logger.info(result)
         return result
-        
-    except ValueError as e:
-        ErrorHandler.log_error('VALIDATION_ERROR',
-                             context={'operation': 'handler'},
-                             exception=e, error=str(e))
-        return str(e)
+
     except Exception as e:
-        ErrorHandler.log_error('INTERNAL_ERROR',
-                             context={'operation': 'handler'},
-                             exception=e, error=str(e))
         return f"Error processing request: {e}"
+        
+    # except ValueError as e:
+    #     ErrorHandler.log_error('VALIDATION_ERROR',
+    #                          context={'operation': 'handler'},
+    #                          exception=e, error=str(e))
+    #     return str(e)
+    # except Exception as e:
+    #     ErrorHandler.log_error('INTERNAL_ERROR',
+    #                          context={'operation': 'handler'},
+    #                          exception=e, error=str(e))
+    #     return f"Error processing request: {e}"

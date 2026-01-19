@@ -438,6 +438,17 @@ Resources:
     Metadata:
       BuildMethod: makefile
 
+  ErrorLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      Description: SSM Command Helper
+      ContentUri: ../../layers/errorHelper/
+      CompatibleRuntimes:
+        - python3.13
+      RetentionPolicy: Delete
+    Metadata:
+      BuildMethod: makefile
+
   EventResponse:
     Type: AWS::Serverless::Function 
     Properties:
@@ -449,6 +460,7 @@ Resources:
         - !Ref Ec2Layer
         - !Ref DdbLayer
         - !Ref SsmLayer 
+        - !Ref ErrorLayer
       Events:
         EC2StateTrigger:
           Type: CloudWatchEvent 
@@ -566,6 +578,7 @@ Resources:
         - !Ref UtilLayer
         - !Ref Ec2Layer
         - !Ref DdbLayer
+        - !Ref ErrorLayer
       Policies:
         - CostExplorerReadOnlyPolicy: {}
         - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
