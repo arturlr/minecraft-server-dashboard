@@ -6,11 +6,6 @@ import json
 from datetime import datetime, timezone
 from botocore.exceptions import ClientError
 
-sys.path.insert(0, '/opt/utilHelper')
-import utilHelper
-
-utl = utilHelper.Utils()
-
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
