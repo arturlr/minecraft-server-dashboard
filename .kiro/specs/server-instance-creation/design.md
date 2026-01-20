@@ -32,9 +32,9 @@ sequenceDiagram
     participant AppToolbar
     participant CreateServerDialog
     participant AppSync
-    participant ServerAction Lambda
+    participant ec2ActionValidator Lambda
     participant SQS Queue
-    participant ServerActionProcessor
+    participant ec2ActionWorker
     participant EC2
     participant DynamoDB
     participant CloudWatch
@@ -43,18 +43,18 @@ sequenceDiagram
     AppToolbar->>CreateServerDialog: Open dialog
     User->>CreateServerDialog: Fill form & submit
     CreateServerDialog->>AppSync: createServer mutation
-    AppSync->>ServerAction Lambda: Invoke
-    ServerAction Lambda->>ServerAction Lambda: Validate auth & params
-    ServerAction Lambda->>SQS Queue: Queue creation request
-    ServerAction Lambda->>AppSync: Return 202 Accepted
+    AppSync->>ec2ActionValidator Lambda: Invoke
+    ec2ActionValidator Lambda->>ec2ActionValidator Lambda: Validate auth & params
+    ec2ActionValidator Lambda->>SQS Queue: Queue creation request
+    ec2ActionValidator Lambda->>AppSync: Return 202 Accepted
     AppSync->>CreateServerDialog: Show "Creating..."
     
-    SQS Queue->>ServerActionProcessor: Trigger
-    ServerActionProcessor->>EC2: create_ec2_instance()
-    EC2->>ServerActionProcessor: Instance ID
-    ServerActionProcessor->>CloudWatch: Create alarm
-    ServerActionProcessor->>DynamoDB: Store config
-    ServerActionProcessor->>AppSync: Send COMPLETED status
+    SQS Queue->>ec2ActionWorker: Trigger
+    ec2ActionWorker->>EC2: create_ec2_instance()
+    EC2->>ec2ActionWorker: Instance ID
+    ec2ActionWorker->>CloudWatch: Create alarm
+    ec2ActionWorker->>DynamoDB: Store config
+    ec2ActionWorker->>AppSync: Send COMPLETED status
     AppSync->>CreateServerDialog: Update UI
     CreateServerDialog->>User: Show success & refresh
 ```
@@ -147,7 +147,7 @@ type Mutation {
 }
 ```
 
-#### 2. serverAction Lambda (Modified)
+#### 2. ec2ActionValidator Lambda (Modified)
 **New Handler**: `handle_create_server()`
 
 **Responsibilities**:
@@ -209,7 +209,7 @@ def validate_create_server_input(input_data):
     return True, None
 ```
 
-#### 3. serverActionProcessor Lambda (Modified)
+#### 3. ec2ActionWorker Lambda (Modified)
 **New Handler**: `process_create_server()`
 
 **Responsibilities**:
@@ -515,7 +515,7 @@ input CreateServerInput {
    - Instance exists but config not stored
    - Send WARNING status via AppSync
    - Log error for manual intervention
-   - Instance will be auto-configured on next listServers call
+   - Instance will be auto-configured on next ec2Discovery call
 
 ## Testing Strategy
 

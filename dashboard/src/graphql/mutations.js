@@ -32,9 +32,9 @@ export const onChangeState = /* GraphQL */ `
     }
   }
 `;
-export const fixServerRole = /* GraphQL */ `
-  mutation FixServerRole($instanceId: String!) {
-    fixServerRole(instanceId: $instanceId)
+export const iamProfileManager = /* GraphQL */ `
+  mutation iamProfileManager($instanceId: String!) {
+    iamProfileManager(instanceId: $instanceId)
   }
 `;
 export const startServer = /* GraphQL */ `
@@ -132,9 +132,9 @@ export const createServer = /* GraphQL */ `
   }
 `;
 
-export const putServerActionStatus = /* GraphQL */ `
-  mutation PutServerActionStatus($input: ServerActionStatusInput!) {
-    putServerActionStatus(input: $input) {
+export const putec2ActionValidatorStatus = /* GraphQL */ `
+  mutation Putec2ActionValidatorStatus($input: ec2ActionValidatorStatusInput!) {
+    putec2ActionValidatorStatus(input: $input) {
       id
       action
       status

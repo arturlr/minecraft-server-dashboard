@@ -74,7 +74,7 @@ GraphQL Mutation:
 
 ### 3. Backend Processing
 ```
-serverActionProcessor Lambda
+ec2ActionWorker Lambda
   ↓
   Receives:
     - stopScheduleExpression: "00 16 * * 1,2,3,4,5"
@@ -206,7 +206,7 @@ Note: IANA timezone names (America/Los_Angeles) handle DST automatically
   }
   ```
 
-- **Conversion**: `lambdas/serverActionProcessor/index.py`
+- **Conversion**: `lambdas/ec2ActionWorker/index.py`
   ```python
   def configure_scheduled_shutdown_event(instance_id, cron_expression, timezone='UTC'):
       formatted_schedule = _format_schedule_expression(cron_expression, timezone)

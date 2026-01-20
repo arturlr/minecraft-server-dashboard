@@ -177,7 +177,7 @@ const handleStop = async (server) => {
 }
 
 onMounted(() => {
-  serverStore.listServers()
+  serverStore.ec2Discovery()
   serverStore.subscribeToStateChanges()
   loadAdminUsers()
 })

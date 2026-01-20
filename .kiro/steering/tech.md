@@ -73,18 +73,18 @@ cd layers/authHelper && make
 ### Asynchronous Action Processing
 - **Pattern**: Queue-based asynchronous processing for server control actions
 - **Components**:
-  - `serverAction` Lambda: Receives GraphQL mutations (start/stop/restart/config), validates, and queues to SQS
+  - `ec2ActionValidator` Lambda: Receives GraphQL mutations (start/stop/restart/config), validates, and queues to SQS
   - SQS Queue: Buffers server actions for reliable processing
-  - `serverActionProcessor` Lambda: Processes server control actions from queue, updates AppSync
+  - `ec2ActionWorker` Lambda: Processes server control actions from queue, updates AppSync
   - Dead Letter Queue (DLQ): Captures failed messages for troubleshooting
 - **Benefits**: Improved reliability, timeout handling, decoupled processing
 - **Status Updates**: Real-time status via GraphQL subscriptions (PROCESSING/COMPLETED/FAILED)
-- **Note**: IAM profile management (`fixServerRole`) is handled synchronously by a dedicated Lambda, not queued
+- **Note**: IAM profile management (`iamProfileManager`) is handled synchronously by a dedicated Lambda, not queued
 
 ### IAM Profile Management
 - **Pattern**: Synchronous IAM profile association/disassociation
 - **Components**:
-  - `fixServerRole` Lambda: Dedicated function for IAM profile management
+  - `iamProfileManager` Lambda: Dedicated function for IAM profile management
   - Direct execution (no SQS queue needed)
 - **Operations**:
   - Validates existing IAM profile on EC2 instance
@@ -145,7 +145,7 @@ cd layers/authHelper && make
 ### IAM Permissions (Fixed)
 - **Issue**: `iam:PassRole` permission was incorrectly targeting instance profile ARN
 - **Fix**: Updated to target EC2 role ARN (required for associating instance profiles)
-- **Location**: `cfn/templates/lambdas.yaml` - FixServerRole Lambda policies
+- **Location**: `cfn/templates/lambdas.yaml` - iamProfileManager Lambda policies
 
 ### Schedule Expression Validation (Fixed)
 - **Issue**: EventBridge rejected cron expressions from frontend
@@ -178,12 +178,12 @@ cd layers/authHelper && make
 - **ServerUsers**: User access management
 - **MonthlyCost**: Cost tracking information
 - **LogAudit**: Audit trail for actions
-- **ServerActionStatus**: Real-time action status tracking (start/stop/restart/config updates)
+- **ec2ActionValidatorStatus**: Real-time action status tracking (start/stop/restart/config updates)
 
 ### Key GraphQL Operations
-- **Queries**: `listServers`, `getMonthlyCost`, `getServerConfig`, `getServerUsers`, `getLogAudit`, `getServerActionStatus`
-- **Mutations**: `startServer`, `stopServer`, `restartServer`, `putServerConfig`, `updateServerConfig`, `addUserToServer`, `fixServerRole`, `putServerActionStatus`
-- **Subscriptions**: `onPutServerMetric`, `onChangeState`, `onPutServerActionStatus` (real-time action status updates)
+- **Queries**: `ec2Discovery`, `ec2CostCalculator`, `getServerConfig`, `getServerUsers`, `getLogAudit`, `getec2ActionValidatorStatus`
+- **Mutations**: `startServer`, `stopServer`, `restartServer`, `putServerConfig`, `updateServerConfig`, `addUserToServer`, `iamProfileManager`, `putec2ActionValidatorStatus`
+- **Subscriptions**: `onPutServerMetric`, `onChangeState`, `onPutec2ActionValidatorStatus` (real-time action status updates)
 
 ## Authentication & Authorization
 - **Primary Auth**: Amazon Cognito User Pools with Google OAuth

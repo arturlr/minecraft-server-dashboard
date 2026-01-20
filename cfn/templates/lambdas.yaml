@@ -31,17 +31,17 @@ Parameters:
 
 Resources:
 
-  ServerActionQueue:
+  ec2ActionValidatorQueue:
     Type: AWS::SQS::Queue
     Properties:
       QueueName: !Sub "${ProjectName}-${EnvironmentName}-server-actions"
       VisibilityTimeout: 300
       MessageRetentionPeriod: 1209600
       RedrivePolicy:
-        deadLetterTargetArn: !GetAtt ServerActionDLQ.Arn
+        deadLetterTargetArn: !GetAtt ec2ActionValidatorDLQ.Arn
         maxReceiveCount: 3
 
-  ServerActionDLQ:
+  ec2ActionValidatorDLQ:
     Type: AWS::SQS::Queue
     Properties:
       QueueName: !Sub "${ProjectName}-${EnvironmentName}-server-actions-dlq"
@@ -90,46 +90,38 @@ Resources:
             TableArn:
               Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTable"
         Lambda:
-          ListServersDataSource:
-            FunctionArn: !GetAtt ListServers.Arn
-          ServerActionDataSource:
-            FunctionArn: !GetAtt ServerAction.Arn
-          FixServerRoleDataSource:
-            FunctionArn: !GetAtt FixServerRole.Arn
-          GetMonthlyCostDataSource:
-            FunctionArn: !GetAtt GetMonthlyCost.Arn
-          GetServerMetricsDataSource:
-            FunctionArn: !GetAtt GetServerMetrics.Arn
+          ec2DiscoveryDataSource:
+            FunctionArn: !GetAtt ec2Discovery.Arn
+          ec2ActionValidatorDataSource:
+            FunctionArn: !GetAtt ec2ActionValidator.Arn
+          iamProfileManagerDataSource:
+            FunctionArn: !GetAtt iamProfileManager.Arn
+          ec2MetricsHandlerDataSource:
+            FunctionArn: !GetAtt ec2MetricsHandler.Arn
       Functions:
         serverListFunction:
           Runtime:
             Name: APPSYNC_JS
             Version: "1.0.0"
-          DataSource: ListServersDataSource
+          DataSource: ec2DiscoveryDataSource
           CodeUri: ../../appsync/resolvers/lambdaInvoker.js
-        serverActionFunction:
+        ec2ActionValidatorFunction:
           Runtime:
             Name: APPSYNC_JS
             Version: "1.0.0"
-          DataSource: ServerActionDataSource
+          DataSource: ec2ActionValidatorDataSource
           CodeUri: ../../appsync/resolvers/lambdaInvoker.js
-        fixServerRoleFunction:
+        iamProfileManagerFunction:
           Runtime:
             Name: APPSYNC_JS
             Version: "1.0.0"
-          DataSource: FixServerRoleDataSource
+          DataSource: iamProfileManagerDataSource
           CodeUri: ../../appsync/resolvers/lambdaInvoker.js
-        getMonthlyCostFunction:
+        ec2MetricsHandlerFunction:
           Runtime:
             Name: APPSYNC_JS
             Version: "1.0.0"
-          DataSource: GetMonthlyCostDataSource
-          CodeUri: ../../appsync/resolvers/lambdaInvoker.js
-        getServerMetricsFunction:
-          Runtime:
-            Name: APPSYNC_JS
-            Version: "1.0.0"
-          DataSource: GetServerMetricsDataSource
+          DataSource: ec2MetricsHandlerDataSource
           CodeUri: ../../appsync/resolvers/lambdaInvoker.js
         putLogAuditFunction:
           Runtime:
@@ -162,67 +154,67 @@ Resources:
               Name: APPSYNC_JS
               Version: "1.0.0"
             Pipeline:
-              - serverActionFunction
+              - ec2ActionValidatorFunction
           updateServerConfig:
             Runtime:
               Name: APPSYNC_JS
               Version: "1.0.0"
             Pipeline:
-              - serverActionFunction
+              - ec2ActionValidatorFunction
           startServer:
             Runtime:
               Name: APPSYNC_JS
               Version: "1.0.0"
             Pipeline:
-              - serverActionFunction
+              - ec2ActionValidatorFunction
           stopServer:
             Runtime:
               Name: APPSYNC_JS
               Version: "1.0.0"
             Pipeline:
-              - serverActionFunction
+              - ec2ActionValidatorFunction
           restartServer:
             Runtime:
               Name: APPSYNC_JS
               Version: "1.0.0"
             Pipeline:
-              - serverActionFunction
+              - ec2ActionValidatorFunction
           createServer:
             Runtime:
               Name: APPSYNC_JS
               Version: "1.0.0"
             Pipeline:
-              - serverActionFunction
-          fixServerRole:
+              - ec2ActionValidatorFunction
+          iamProfileManager:
             Runtime:
               Name: APPSYNC_JS
               Version: "1.0.0"
             Pipeline:
-              - fixServerRoleFunction
+              - iamProfileManagerFunction
           addUserToServer:
             Runtime:
               Name: APPSYNC_JS
               Version: "1.0.0"
             Pipeline:
-              - serverActionFunction
+              - ec2ActionValidatorFunction
           updateUserRole:
             Runtime:
               Name: APPSYNC_JS
               Version: "1.0.0"
             Pipeline:
-              - serverActionFunction
+              - ec2ActionValidatorFunction
           removeUserFromServer:
             Runtime:
               Name: APPSYNC_JS
               Version: "1.0.0"
             Pipeline:
-              - serverActionFunction
+              - ec2ActionValidatorFunction
           updateServerName:
             Runtime:
               Name: APPSYNC_JS
               Version: "1.0.0"
             Pipeline:
-              - serverActionFunction
+              - ec2ActionValidatorFunction
           putLogAudit:
             Runtime:
               Name: APPSYNC_JS
@@ -236,7 +228,7 @@ Resources:
             Pipeline:
               - getLogAuditFunction
         Query:
-          listServers:
+          ec2Discovery:
             Runtime:
               Name: APPSYNC_JS
               Version: "1.0.0"
@@ -247,37 +239,31 @@ Resources:
               Name: APPSYNC_JS
               Version: "1.0.0"
             Pipeline:
-              - serverActionFunction
+              - ec2ActionValidatorFunction
           getServerUsers:
             Runtime:
               Name: APPSYNC_JS
               Version: "1.0.0"
             Pipeline:
-              - serverActionFunction
+              - ec2ActionValidatorFunction
           searchUserByEmail:
             Runtime:
               Name: APPSYNC_JS
               Version: "1.0.0"
             Pipeline:
-              - serverActionFunction
-          getMonthlyCost:
-            Runtime:
-              Name: APPSYNC_JS
-              Version: "1.0.0"
-            Pipeline:
-              - getMonthlyCostFunction
+              - ec2ActionValidatorFunction
           getLogAudit:
             Runtime:
               Name: APPSYNC_JS
               Version: "1.0.0"
             Pipeline:
               - getLogAuditFunction
-          getServerMetrics:
+          ec2MetricsHandler:
             Runtime:
               Name: APPSYNC_JS
               Version: "1.0.0"
             Pipeline:
-              - getServerMetricsFunction
+              - ec2MetricsHandlerFunction
 
   DataSourceNone:
     Type: AWS::AppSync::DataSource
@@ -345,8 +331,8 @@ Resources:
       State: "DISABLED"
       Targets: 
         - 
-          Arn: !GetAtt EventResponse.Arn              
-          Id: "EventResponseV1"
+          Arn: !GetAtt ec2StateHandler.Arn              
+          Id: "ec2StateHandlerV1"
 
   ScheduledRuleParameter:
     Type: AWS::SSM::Parameter
@@ -359,7 +345,7 @@ Resources:
   PermissionForEventsToInvokeLambda: 
     Type: AWS::Lambda::Permission
     Properties: 
-      FunctionName: !Ref "EventResponse"
+      FunctionName: !Ref "ec2StateHandler"
       Action: "lambda:InvokeFunction"
       Principal: "events.amazonaws.com"
       SourceArn: 
@@ -449,11 +435,11 @@ Resources:
     Metadata:
       BuildMethod: makefile
 
-  EventResponse:
+  ec2StateHandler:
     Type: AWS::Serverless::Function 
     Properties:
-      FunctionName: !Sub "${ProjectName}-${EnvironmentName}-eventResponse"
-      CodeUri: ../../lambdas/eventResponse/
+      FunctionName: !Sub "${ProjectName}-${EnvironmentName}-ec2StateHandler"
+      CodeUri: ../../lambdas/ec2StateHandler/
       Layers:
         - !Ref AuthLayer
         - !Ref UtilLayer
@@ -533,30 +519,11 @@ Resources:
           BOOTSTRAP_SSM_DOC_NAME: !Ref BootstrapSSMDoc
           SSM_COMMAND_QUEUE_URL: !Ref SSMCommandQueue          
 
-  GetMonthlyCost:
+  ec2MetricsHandler:
     Type: AWS::Serverless::Function 
     Properties:
-      FunctionName: !Sub "${ProjectName}-${EnvironmentName}-getMonthlyCost"
-      CodeUri: ../../lambdas/getMonthlyCost/
-      Layers:
-        - !Ref AuthLayer
-        - !Ref UtilLayer
-        - !Ref Ec2Layer         
-      Policies:
-        - CostExplorerReadOnlyPolicy: {}
-        - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
-        - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess
-        - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
-        - arn:aws:iam::aws:policy/AWSCloudTrail_ReadOnlyAccess
-        - arn:aws:iam::aws:policy/AmazonCognitoReadOnly
-        - SSMParameterReadPolicy:
-            ParameterName: !Sub "${ProjectName}*"
-
-  GetServerMetrics:
-    Type: AWS::Serverless::Function 
-    Properties:
-      FunctionName: !Sub "${ProjectName}-${EnvironmentName}-getServerMetrics"
-      CodeUri: ../../lambdas/getServerMetrics/
+      FunctionName: !Sub "${ProjectName}-${EnvironmentName}-ec2MetricsHandler"
+      CodeUri: ../../lambdas/ec2MetricsHandler/
       Layers:
         - !Ref AuthLayer
         - !Ref UtilLayer
@@ -566,11 +533,11 @@ Resources:
         - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
 
 
-  ListServers:
+  ec2Discovery:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !Sub "${ProjectName}-${EnvironmentName}-listServers"
-      CodeUri: ../../lambdas/listServers/
+      FunctionName: !Sub "${ProjectName}-${EnvironmentName}-ec2Discovery"
+      CodeUri: ../../lambdas/ec2Discovery/
       Layers:
         - !Ref AuthLayer
         - !Ref Ec2Layer
@@ -611,21 +578,21 @@ Resources:
             - Effect: Allow
               Action:
                 - lambda:InvokeFunction
-              Resource: !GetAtt FixServerRole.Arn
+              Resource: !GetAtt iamProfileManager.Arn
       Environment:
         Variables:
           EC2_INSTANCE_PROFILE_ARN: 
             Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-IAMEC2InstanceProfileArn"
           COGNITO_USER_POOL_ID: 
             Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-UserPoolId"
-          FIX_SERVER_ROLE_LAMBDA_ARN: !GetAtt FixServerRole.Arn
+          FIX_SERVER_ROLE_LAMBDA_ARN: !GetAtt iamProfileManager.Arn
 
-  ServerActionProcessor:
+  ec2ActionWorker:
     Type: AWS::Serverless::Function
     Properties:
       Timeout: 300
-      FunctionName: !Sub "${ProjectName}-${EnvironmentName}-serverActionProcessor"
-      CodeUri: ../../lambdas/serverActionProcessor/
+      FunctionName: !Sub "${ProjectName}-${EnvironmentName}-ec2ActionWorker"
+      CodeUri: ../../lambdas/ec2ActionWorker/
       Layers:
         - !Ref UtilLayer
         - !Ref Ec2Layer
@@ -634,7 +601,7 @@ Resources:
         SQSEvent:
           Type: SQS
           Properties:
-            Queue: !GetAtt ServerActionQueue.Arn
+            Queue: !GetAtt ec2ActionValidatorQueue.Arn
             BatchSize: 1
       Policies:
         - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
@@ -711,12 +678,12 @@ Resources:
         Variables:
           APPSYNC_URL: !GetAtt GraphQLAPI.GraphQLUrl
 
-  ServerBootProcessor:
+  ec2BootWorker:
     Type: AWS::Serverless::Function
     Properties:
       Timeout: 60
-      FunctionName: !Sub "${ProjectName}-${EnvironmentName}-serverBootProcessor"
-      CodeUri: ../../lambdas/serverBootProcessor/
+      FunctionName: !Sub "${ProjectName}-${EnvironmentName}-ec2BootWorker"
+      CodeUri: ../../lambdas/ec2BootWorker/
       Layers:
         - !Ref Ec2Layer
         - !Ref DdbLayer
@@ -779,12 +746,12 @@ Resources:
           BOOTSTRAP_SSM_DOC_NAME: !Ref BootstrapSSMDoc
           SSM_COMMAND_QUEUE_URL: !Ref SSMCommandQueue   
 
-  ServerAction:
+  ec2ActionValidator:
     Type: AWS::Serverless::Function
     Properties:
       Timeout: 30
-      FunctionName: !Sub "${ProjectName}-${EnvironmentName}-serverAction"
-      CodeUri: ../../lambdas/serverAction/
+      FunctionName: !Sub "${ProjectName}-${EnvironmentName}-ec2ActionValidator"
+      CodeUri: ../../lambdas/ec2ActionValidator/
       Layers:
         - !Ref AuthLayer
         - !Ref UtilLayer
@@ -829,7 +796,7 @@ Resources:
             - Effect: Allow
               Action:
                 - sqs:SendMessage
-              Resource: !GetAtt ServerActionQueue.Arn
+              Resource: !GetAtt ec2ActionValidatorQueue.Arn
         - Version: "2012-10-17"
           Statement:
             - Effect: Allow
@@ -842,25 +809,25 @@ Resources:
             Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-IAMEC2InstanceProfile"
           EC2_INSTANCE_PROFILE_ARN:  
             Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-IAMEC2InstanceProfileArn"
-          SERVER_ACTION_QUEUE_URL: !Ref ServerActionQueue
+          SERVER_ACTION_QUEUE_URL: !Ref ec2ActionValidatorQueue
           APPSYNC_URL: !GetAtt GraphQLAPI.GraphQLUrl
           COGNITO_USER_POOL_ID:  
             Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-UserPoolId"
 
-  PermissionForScheduledEventsToInvokeServerAction:
+  PermissionForScheduledEventsToInvokeec2ActionValidator:
     Type: AWS::Lambda::Permission
     Properties:
-      FunctionName: !Ref ServerAction
+      FunctionName: !Ref ec2ActionValidator
       Action: "lambda:InvokeFunction"
       Principal: "events.amazonaws.com"
       SourceArn: !Sub "arn:aws:events:${AWS::Region}:${AWS::AccountId}:rule/*"
 
-  FixServerRole:
+  iamProfileManager:
     Type: AWS::Serverless::Function
     Properties:
       Timeout: 120
-      FunctionName: !Sub "${ProjectName}-${EnvironmentName}-fixServerRole"
-      CodeUri: ../../lambdas/fixServerRole/
+      FunctionName: !Sub "${ProjectName}-${EnvironmentName}-iamProfileManager"
+      CodeUri: ../../lambdas/iamProfileManager/
       Layers:
         - !Ref AuthLayer
         - !Ref UtilLayer
@@ -902,8 +869,8 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       Timeout: 300
-      FunctionName: !Sub "${ProjectName}-${EnvironmentName}-calculateMonthlyRuntime"
-      CodeUri: ../../lambdas/calculateMonthlyRuntime/
+      FunctionName: !Sub "${ProjectName}-${EnvironmentName}-calculateEc2MonthlyRuntime"
+      CodeUri: ../../lambdas/calculateEc2MonthlyRuntime/
       Layers:
         - !Ref Ec2Layer
         - !Ref DdbLayer
@@ -924,12 +891,12 @@ Resources:
               Resource:
                 Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTable"
 
-  SSMCommandProcessor:
+  ssmCommandWorker:
     Type: AWS::Serverless::Function
     Properties:
       Timeout: 900  # 15 minutes for retries
-      FunctionName: !Sub "${ProjectName}-${EnvironmentName}-ssmCommandProcessor"
-      CodeUri: ../../lambdas/ssmCommandProcessor/
+      FunctionName: !Sub "${ProjectName}-${EnvironmentName}-ssmCommandWorker"
+      CodeUri: ../../lambdas/ssmCommandWorker/
       Events:
         SQSEvent:
           Type: SQS
@@ -964,45 +931,40 @@ Outputs:
 
   # ConfigServer output removed as Lambda is no longer needed
 
-  GetMonthlyCost:
-    Value: !GetAtt GetMonthlyCost.Arn
+  ec2MetricsHandler:
+    Value: !GetAtt ec2MetricsHandler.Arn
     Export:
-      Name: !Sub "${ProjectName}-${EnvironmentName}-GetMonthlyCost"
+      Name: !Sub "${ProjectName}-${EnvironmentName}-ec2MetricsHandler"
 
-  GetServerMetrics:
-    Value: !GetAtt GetServerMetrics.Arn
+  ec2Discovery:
+    Value: !GetAtt ec2Discovery.Arn
     Export:
-      Name: !Sub "${ProjectName}-${EnvironmentName}-GetServerMetrics"
+      Name: !Sub "${ProjectName}-${EnvironmentName}-ec2Discovery"
 
-  ListServers:
-    Value: !GetAtt ListServers.Arn
+  ec2ActionValidator:
+    Value: !GetAtt ec2ActionValidator.Arn
     Export:
-      Name: !Sub "${ProjectName}-${EnvironmentName}-ListServers"
+      Name: !Sub "${ProjectName}-${EnvironmentName}-ec2ActionValidator"
 
-  ServerAction:
-    Value: !GetAtt ServerAction.Arn
+  iamProfileManager:
+    Value: !GetAtt iamProfileManager.Arn
     Export:
-      Name: !Sub "${ProjectName}-${EnvironmentName}-ServerAction"
+      Name: !Sub "${ProjectName}-${EnvironmentName}-iamProfileManager"
 
-  FixServerRole:
-    Value: !GetAtt FixServerRole.Arn
+  ec2StateHandler:
+    Value: !GetAtt ec2StateHandler.Arn
     Export:
-      Name: !Sub "${ProjectName}-${EnvironmentName}-FixServerRole"
-
-  EventResponse:
-    Value: !GetAtt EventResponse.Arn
-    Export:
-      Name: !Sub "${ProjectName}-${EnvironmentName}-EventResponse"
+      Name: !Sub "${ProjectName}-${EnvironmentName}-ec2StateHandler"
 
   CalculateMonthlyRuntime:
     Value: !GetAtt CalculateMonthlyRuntime.Arn
     Export:
       Name: !Sub "${ProjectName}-${EnvironmentName}-CalculateMonthlyRuntime"
 
-  SSMCommandProcessor:
-    Value: !GetAtt SSMCommandProcessor.Arn
+  ssmCommandWorker:
+    Value: !GetAtt ssmCommandWorker.Arn
     Export:
-      Name: !Sub "${ProjectName}-${EnvironmentName}-SSMCommandProcessor"
+      Name: !Sub "${ProjectName}-${EnvironmentName}-ssmCommandWorker"
 
   SSMCommandQueueUrl:
     Value: !Ref SSMCommandQueue

@@ -28,7 +28,7 @@ Frontend (User Input)
   ↓
   4:00 PM PST → Cron: "00 16 * * 1,2,3,4,5" (local time)
   ↓
-Backend (serverActionProcessor)
+Backend (ec2ActionWorker)
   ↓
   Receives: "00 16 * * 1,2,3,4,5" + timezone: "America/Los_Angeles"
   ↓
@@ -88,7 +88,7 @@ function parseCronExpression(cronExpression, isStartSchedule = false) {
 ```
 
 ### Backend (No Changes Required)
-The backend logic in `lambdas/serverActionProcessor/index.py` was already correct:
+The backend logic in `lambdas/ec2ActionWorker/index.py` was already correct:
 - Receives cron expression in local time + timezone
 - Converts to UTC for EventBridge rules
 - Stores original local time expression in DynamoDB
@@ -140,7 +140,7 @@ The backend stores the **original local time** cron expression along with the ti
 
 ## Related Files
 - `dashboard/src/components/ServerSettings.vue` - Frontend schedule configuration
-- `lambdas/serverActionProcessor/index.py` - Backend cron conversion logic
+- `lambdas/ec2ActionWorker/index.py` - Backend cron conversion logic
 - `layers/ddbHelper/ddbHelper.py` - DynamoDB storage
 - `scripts/test_cron_conversion.py` - Test suite
 - `docs/fix-schedule-expression-validation.md` - Original schedule feature documentation

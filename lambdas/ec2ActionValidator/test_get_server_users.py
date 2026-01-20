@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Unit tests for getServerUsers functionality in serverAction Lambda
+Unit tests for getServerUsers functionality in ec2ActionValidator Lambda
 Tests the updated resolver that queries DynamoDB membership table instead of Cognito groups
 """
 import sys

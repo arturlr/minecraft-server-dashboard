@@ -63,8 +63,8 @@
   - Test color contrast for accessibility
   - _Requirements: 4.4_
 
-- [x] 6. Update ServerActionsMenu component
-  - Open `dashboard/src/components/ServerActionsMenu.vue`
+- [x] 6. Update ec2ActionValidatorsMenu component
+  - Open `dashboard/src/components/ec2ActionValidatorsMenu.vue`
   - Add new v-tooltip with "Manage Users" text
   - Add v-btn with icon="mdi-account-multiple"
   - Emit 'open-users' event on button click
@@ -79,8 +79,8 @@
   - Add UserManagementDialog to template with v-model binding
   - Pass `selectedServerId` and `selectedServerName` as props to dialog
   - Implement `openUserManagement(serverId, serverName)` method
-  - Add event handler for 'open-users' event from ServerActionsMenu
-  - Pass 'open-users' event through from ServerActionsMenu to openUserManagement method
+  - Add event handler for 'open-users' event from ec2ActionValidatorsMenu
+  - Pass 'open-users' event through from ec2ActionValidatorsMenu to openUserManagement method
   - _Requirements: 1.2_
 
 - [ ]* 8. Write unit tests for UserManagementDialog
@@ -96,7 +96,7 @@
   - Test user list refreshes after successful addition
   - _Requirements: All_
 
-- [ ]* 9. Write unit tests for ServerActionsMenu updates
+- [ ]* 9. Write unit tests for ec2ActionValidatorsMenu updates
   - Test user management button is rendered
   - Test correct icon is used (mdi-account-multiple)
   - Test click event emits 'open-users' event
@@ -105,7 +105,7 @@
 - [ ]* 10. Write unit tests for ServerTable updates
   - Test dialog state management
   - Test correct server context is passed to dialog
-  - Test event handling from ServerActionsMenu
+  - Test event handling from ec2ActionValidatorsMenu
   - _Requirements: 1.2_
 
 - [ ] 11. Checkpoint - Ensure all tests pass

@@ -2,19 +2,19 @@
 
 ## Overview
 
-This design document describes the refactoring of the server action processing system to fully embrace asynchronous, queue-based processing. The refactoring separates concerns between request validation/authorization (ServerAction Lambda) and action execution (ServerActionProcessor Lambda), improving reliability, scalability, and user experience through real-time status updates.
+This design document describes the refactoring of the server action processing system to fully embrace asynchronous, queue-based processing. The refactoring separates concerns between request validation/authorization (ec2ActionValidator Lambda) and action execution (ec2ActionWorker Lambda), improving reliability, scalability, and user experience through real-time status updates.
 
-The architecture follows a producer-consumer pattern where ServerAction acts as the producer (validating and queueing requests) and ServerActionProcessor acts as the consumer (executing the actual operations).
+The architecture follows a producer-consumer pattern where ec2ActionValidator acts as the producer (validating and queueing requests) and ec2ActionWorker acts as the consumer (executing the actual operations).
 
 ## Architecture
 
 ### Current Architecture Issues
 
 The current implementation has mixed responsibilities:
-- ServerAction Lambda contains both synchronous EC2 operations AND queue-sending logic
+- ec2ActionValidator Lambda contains both synchronous EC2 operations AND queue-sending logic
 - Some operations bypass the queue entirely, leading to timeout risks
 - Inconsistent status update patterns
-- Duplicate code between ServerAction and ServerActionProcessor
+- Duplicate code between ec2ActionValidator and ec2ActionWorker
 
 ### Target Architecture
 
@@ -26,7 +26,7 @@ The current implementation has mixed responsibilities:
        │
        ▼
 ┌─────────────────────────────────────────┐
-│      ServerAction Lambda                │
+│      ec2ActionValidator Lambda                │
 │  ┌───────────────────────────────────┐  │
 │  │ 1. Validate JWT Token             │  │
 │  │ 2. Check Authorization            │  │
@@ -40,7 +40,7 @@ The current implementation has mixed responsibilities:
        │
        ▼
 ┌─────────────────────┐
-│ ServerActionQueue   │
+│ ec2ActionValidatorQueue   │
 │      (SQS)          │
 │  - Visibility: 300s │
 │  - Retry: 3 times   │
@@ -49,12 +49,12 @@ The current implementation has mixed responsibilities:
        │
        ▼
 ┌─────────────────────────────────────────┐
-│   ServerActionProcessor Lambda          │
+│   ec2ActionWorker Lambda          │
 │  ┌───────────────────────────────────┐  │
 │  │ 1. Parse SQS Message              │  │
 │  │ 2. Route to Handler:              │  │
 │  │    - start/stop/restart           │  │
-│  │    - fixServerRole                │  │
+│  │    - iamProfileManager                │  │
 │  │    - putServerConfig              │  │
 │  │    - updateServerConfig           │  │
 │  │ 3. Execute AWS Operations         │  │
@@ -65,7 +65,7 @@ The current implementation has mixed responsibilities:
        ▼
 ┌─────────────────────┐
 │   AppSync           │
-│ putServerAction     │
+│ putec2ActionValidator     │
 │    Status           │
 │ (Real-time updates) │
 └─────────────────────┘
@@ -73,7 +73,7 @@ The current implementation has mixed responsibilities:
 
 ## Components and Interfaces
 
-### ServerAction Lambda
+### ec2ActionValidator Lambda
 
 **Responsibilities:**
 - JWT token validation
@@ -130,10 +130,10 @@ def handle_get_server_users(instance_id) -> list:
 - CloudWatch alarm management
 - Config update handling
 
-### ServerActionProcessor Lambda
+### ec2ActionWorker Lambda
 
 **Responsibilities:**
-- Processing messages from ServerActionQueue
+- Processing messages from ec2ActionValidatorQueue
 - Executing EC2 operations (start/stop/restart)
 - Managing IAM profiles
 - Managing EventBridge schedules
@@ -184,7 +184,7 @@ def send_to_appsync(action, instance_id, status, message=None, user_email=None) 
 
 ```json
 {
-  "action": "start|stop|restart|fixServerRole|putServerConfig|updateServerConfig",
+  "action": "start|stop|restart|iamProfileManager|putServerConfig|updateServerConfig",
   "instanceId": "i-1234567890abcdef0",
   "arguments": {
     "shutdownMethod": "cpu|connections|schedule",
@@ -216,10 +216,10 @@ def send_to_appsync(action, instance_id, status, message=None, user_email=None) 
 
 ## Data Models
 
-### ServerActionStatus (GraphQL Type)
+### ec2ActionValidatorStatus (GraphQL Type)
 
 ```graphql
-type ServerActionStatus {
+type ec2ActionValidatorStatus {
   id: String!              # EC2 instance ID
   action: String!          # Action being performed
   status: String!          # PROCESSING, COMPLETED, FAILED
@@ -243,25 +243,25 @@ type ServerActionStatus {
 
 ### Property 1: Authorization before queueing
 
-*For any* write operation request, the ServerAction Lambda should verify user authorization before queueing the message to SQS, ensuring unauthorized requests never enter the processing pipeline.
+*For any* write operation request, the ec2ActionValidator Lambda should verify user authorization before queueing the message to SQS, ensuring unauthorized requests never enter the processing pipeline.
 
 **Validates: Requirements 1.1, 3.3, 7.2**
 
 ### Property 2: Queue message completeness
 
-*For any* queued action message, the message should contain all required fields (action, instanceId, timestamp) and any provided optional fields (arguments, userEmail), ensuring ServerActionProcessor has all necessary information.
+*For any* queued action message, the message should contain all required fields (action, instanceId, timestamp) and any provided optional fields (arguments, userEmail), ensuring ec2ActionWorker has all necessary information.
 
 **Validates: Requirements 1.2**
 
 ### Property 3: Read operations bypass queue
 
-*For any* read operation (getServerConfig, getServerUsers), the ServerAction Lambda should process it synchronously and return results immediately without queueing to SQS.
+*For any* read operation (getServerConfig, getServerUsers), the ec2ActionValidator Lambda should process it synchronously and return results immediately without queueing to SQS.
 
 **Validates: Requirements 1.4**
 
 ### Property 4: Write operations always queued
 
-*For any* write operation (start, stop, restart, fixServerRole, putServerConfig, updateServerConfig), when authorization succeeds, the ServerAction Lambda should queue the request to SQS and return a 202 status.
+*For any* write operation (start, stop, restart, iamProfileManager, putServerConfig, updateServerConfig), when authorization succeeds, the ec2ActionValidator Lambda should queue the request to SQS and return a 202 status.
 
 **Validates: Requirements 1.1, 6.1**
 
@@ -273,25 +273,25 @@ type ServerActionStatus {
 
 ### Property 6: Failed message retry
 
-*For any* action that fails in ServerActionProcessor, the SQS queue should automatically retry the message up to the configured maximum (3 times) before moving it to the dead letter queue.
+*For any* action that fails in ec2ActionWorker, the SQS queue should automatically retry the message up to the configured maximum (3 times) before moving it to the dead letter queue.
 
 **Validates: Requirements 5.1, 5.2**
 
 ### Property 7: Validation before queueing
 
-*For any* request with missing required fields or invalid authorization, the ServerAction Lambda should return an error response immediately (400 or 401) without queueing the message.
+*For any* request with missing required fields or invalid authorization, the ec2ActionValidator Lambda should return an error response immediately (400 or 401) without queueing the message.
 
 **Validates: Requirements 7.1, 7.2, 7.3**
 
 ### Property 8: Action routing correctness
 
-*For any* message received by ServerActionProcessor, the system should route it to the correct handler function based on the action type (start/stop/restart → handle_server_action, fixServerRole → handle_fix_role, config updates → handle_update_server_config).
+*For any* message received by ec2ActionWorker, the system should route it to the correct handler function based on the action type (start/stop/restart → handle_server_action, iamProfileManager → handle_fix_role, config updates → handle_update_server_config).
 
 **Validates: Requirements 4.2, 4.3, 4.4**
 
-### Property 9: ServerAction code cleanliness
+### Property 9: ec2ActionValidator code cleanliness
 
-*For any* code review of ServerAction Lambda, the code should not contain direct EC2 client calls (start_instances, stop_instances, reboot_instances), IAM profile management, EventBridge rule management, or CloudWatch alarm management.
+*For any* code review of ec2ActionValidator Lambda, the code should not contain direct EC2 client calls (start_instances, stop_instances, reboot_instances), IAM profile management, EventBridge rule management, or CloudWatch alarm management.
 
 **Validates: Requirements 6.1, 6.2, 6.3, 6.4, 6.5**
 
@@ -303,7 +303,7 @@ type ServerActionStatus {
 
 ## Error Handling
 
-### ServerAction Lambda Error Scenarios
+### ec2ActionValidator Lambda Error Scenarios
 
 1. **Missing JWT Token**
    - Return: 401 Unauthorized
@@ -330,7 +330,7 @@ type ServerActionStatus {
    - Message: "Failed to queue action"
    - Action: Log error with full exception details
 
-### ServerActionProcessor Lambda Error Scenarios
+### ec2ActionWorker Lambda Error Scenarios
 
 1. **Invalid Message Format**
    - Action: Log error, send FAILED status to AppSync
@@ -367,7 +367,7 @@ type ServerActionStatus {
 
 ### Unit Testing
 
-**ServerAction Lambda Tests:**
+**ec2ActionValidator Lambda Tests:**
 - Test JWT token validation with valid and invalid tokens
 - Test authorization checking for admin users, group members, and unauthorized users
 - Test request validation with missing/invalid fields
@@ -375,7 +375,7 @@ type ServerActionStatus {
 - Test read operation synchronous processing
 - Test error response formatting
 
-**ServerActionProcessor Lambda Tests:**
+**ec2ActionWorker Lambda Tests:**
 - Test message parsing with valid and malformed messages
 - Test action routing to correct handlers
 - Test EC2 operation execution (mocked)
@@ -425,7 +425,7 @@ We will use the Hypothesis library for Python to implement property-based tests.
 
 ### Integration Testing
 
-- Test end-to-end flow: AppSync → ServerAction → SQS → ServerActionProcessor → AppSync
+- Test end-to-end flow: AppSync → ec2ActionValidator → SQS → ec2ActionWorker → AppSync
 - Test real-time subscription delivery of status updates
 - Test retry behavior with intentionally failing operations
 - Test DLQ message handling
@@ -443,17 +443,17 @@ We will use the Hypothesis library for Python to implement property-based tests.
 
 ## Implementation Notes
 
-### Code Removal from ServerAction
+### Code Removal from ec2ActionValidator
 
-The following code sections should be removed from `lambdas/serverAction/index.py`:
+The following code sections should be removed from `lambdas/ec2ActionValidator/index.py`:
 
-1. **IamProfile class** (lines 52-147) - Move entirely to ServerActionProcessor
-2. **handle_server_action function** - Already exists in ServerActionProcessor
-3. **handle_fix_role function** - Already exists in ServerActionProcessor
-4. **handle_update_server_config function** - Already exists in ServerActionProcessor
-5. **All direct ec2_client calls** - Should only exist in ServerActionProcessor
+1. **IamProfile class** (lines 52-147) - Move entirely to ec2ActionWorker
+2. **handle_server_action function** - Already exists in ec2ActionWorker
+3. **handle_fix_role function** - Already exists in ec2ActionWorker
+4. **handle_update_server_config function** - Already exists in ec2ActionWorker
+5. **All direct ec2_client calls** - Should only exist in ec2ActionWorker
 
-### Code to Keep in ServerAction
+### Code to Keep in ec2ActionValidator
 
 1. **handler function** - Main entry point
 2. **check_authorization function** - Authorization logic
@@ -465,14 +465,14 @@ The following code sections should be removed from `lambdas/serverAction/index.p
 
 ### Environment Variables
 
-**ServerAction Lambda:**
+**ec2ActionValidator Lambda:**
 - `SERVER_ACTION_QUEUE_URL` - SQS queue URL for queueing actions
 - `COGNITO_USER_POOL_ID` - For user authentication
 - `TAG_APP_VALUE` - For EC2 instance filtering
 - `EC2_INSTANCE_PROFILE_NAME` - For validation only
 - `EC2_INSTANCE_PROFILE_ARN` - For validation only
 
-**ServerActionProcessor Lambda:**
+**ec2ActionWorker Lambda:**
 - `APPSYNC_URL` - For sending status updates
 - `EC2_INSTANCE_PROFILE_NAME` - For IAM profile operations
 - `EC2_INSTANCE_PROFILE_ARN` - For IAM profile operations
@@ -481,7 +481,7 @@ The following code sections should be removed from `lambdas/serverAction/index.p
 
 ### IAM Permissions
 
-**ServerAction Lambda:**
+**ec2ActionValidator Lambda:**
 - Remove: EC2 start/stop/reboot permissions
 - Remove: IAM PassRole permission
 - Remove: EventBridge rule management permissions
@@ -490,17 +490,17 @@ The following code sections should be removed from `lambdas/serverAction/index.p
 - Keep: EC2 read-only permissions (for authorization checks)
 - Keep: Cognito permissions (for user management)
 
-**ServerActionProcessor Lambda:**
+**ec2ActionWorker Lambda:**
 - Keep: All existing permissions (EC2, IAM, EventBridge, CloudWatch, AppSync)
 
 ## Deployment Considerations
 
 ### Rollout Strategy
 
-1. **Phase 1**: Deploy updated ServerActionProcessor with enhanced logging
-2. **Phase 2**: Deploy updated ServerAction that queues all write operations
+1. **Phase 1**: Deploy updated ec2ActionWorker with enhanced logging
+2. **Phase 2**: Deploy updated ec2ActionValidator that queues all write operations
 3. **Phase 3**: Monitor SQS queue metrics and CloudWatch logs
-4. **Phase 4**: Remove unused IAM permissions from ServerAction
+4. **Phase 4**: Remove unused IAM permissions from ec2ActionValidator
 
 ### Monitoring
 
@@ -512,16 +512,16 @@ The following code sections should be removed from `lambdas/serverAction/index.p
 ### Rollback Plan
 
 If issues arise:
-1. Revert ServerAction Lambda to previous version
+1. Revert ec2ActionValidator Lambda to previous version
 2. SQS queue will continue to buffer messages
-3. ServerActionProcessor will continue processing queued messages
+3. ec2ActionWorker will continue processing queued messages
 4. No data loss due to SQS message retention
 
 ## Performance Considerations
 
 - **Latency**: Users receive immediate 202 response, actual operation happens asynchronously
 - **Throughput**: SQS can handle high message volumes, Lambda scales automatically
-- **Concurrency**: Multiple ServerActionProcessor instances can process messages in parallel
+- **Concurrency**: Multiple ec2ActionWorker instances can process messages in parallel
 - **Cost**: Minimal additional cost from SQS usage (~$0.40 per million requests)
 
 ## Security Considerations

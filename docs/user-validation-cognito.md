@@ -33,7 +33,7 @@ This method:
 - Returns `None` if user doesn't exist
 - Handles rate limiting and errors gracefully
 
-#### 2. ServerAction Lambda (`lambdas/serverAction/index.py`)
+#### 2. ec2ActionValidator Lambda (`lambdas/ec2ActionValidator/index.py`)
 Added a new handler `handle_add_user_to_server()` that:
 
 1. **Validates user exists**: Calls `find_user_by_email()` to check if user has a Cognito profile

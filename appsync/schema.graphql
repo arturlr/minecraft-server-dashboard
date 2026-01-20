@@ -80,7 +80,7 @@ input MonthlyCostInput {
 	UsageQuantity: Float
 }
 
-input ServerActionInput {
+input ec2ActionValidatorInput {
 	action: String!
 	instanceId: String!
 	params: AWSJSON
@@ -205,7 +205,7 @@ input ServerMetricInput {
 }
 
 # New type for server action status
-type ServerActionStatus @aws_iam
+type ec2ActionValidatorStatus @aws_iam
 @aws_cognito_user_pools {
 	id: String!
 	action: String!
@@ -215,7 +215,7 @@ type ServerActionStatus @aws_iam
 	userEmail: AWSEmail
 }
 
-input ServerActionStatusInput {
+input ec2ActionValidatorStatusInput {
 	id: String!
 	action: String!
 	status: String!
@@ -230,7 +230,7 @@ type Mutation {
 	changeServerState(input: ServerInfoInput!): ServerInfo
 		@aws_iam
 	
-	putServerActionStatus(input: ServerActionStatusInput!): ServerActionStatus
+	putec2ActionValidatorStatus(input: ec2ActionValidatorStatusInput!): ec2ActionValidatorStatus
 		@aws_iam @aws_cognito_user_pools
 	startServer(instanceId: String!): AWSJSON
 		@aws_cognito_user_pools
@@ -238,7 +238,7 @@ type Mutation {
 		@aws_cognito_user_pools
 	stopServer(instanceId: String!): AWSJSON
 		@aws_cognito_user_pools
-	fixServerRole(instanceId: String!): AWSJSON
+	iamProfileManager(instanceId: String!): AWSJSON
 		@aws_cognito_user_pools  
 	verifyUserEmail(id: String!): AWSJSON
 		@aws_cognito_user_pools
@@ -261,9 +261,7 @@ type Mutation {
 }
 
 type Query {
-	listServers: [ServerInfo]  
-		@aws_cognito_user_pools
-	getMonthlyCost(instanceId: String!): MonthlyCost
+	ec2Discovery: [ServerInfo]  
 		@aws_cognito_user_pools
 	getServerConfig(id: String!): ServerConfig
 		@aws_cognito_user_pools
@@ -276,7 +274,7 @@ type Query {
 	getLogAudit(id: String!): [LogAudit]
 		@aws_cognito_user_pools  
 	# Query for historical server metrics
-	getServerMetrics(id: String!): ServerMetric
+	ec2MetricsHandler(id: String!): ServerMetric
 		@aws_cognito_user_pools
 }
 
@@ -291,8 +289,8 @@ type Subscription {
 @aws_cognito_user_pools
 @aws_iam
 
-	onPutServerActionStatus(id: String!): ServerActionStatus
-		@aws_subscribe(mutations: ["putServerActionStatus"])
+	onPutec2ActionValidatorStatus(id: String!): ec2ActionValidatorStatus
+		@aws_subscribe(mutations: ["putec2ActionValidatorStatus"])
 @aws_cognito_user_pools
 @aws_iam
 

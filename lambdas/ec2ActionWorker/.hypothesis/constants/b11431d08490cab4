@@ -1,0 +1,4 @@
+# file: /Users/artrodri/dev/minecraft-server-dashboard/lambdas/ec2ActionWorker/index.py
+# hypothesis_version: 6.148.2
+
+[200, 'APPSYNC_URL', 'APP_NAME', 'Arn', 'AssociationId', 'COMPLETED', 'CPUUtilization', 'Connections', 'Content-Type', 'ENVIRONMENT_NAME', 'FAILED', 'Instances', 'Name', 'PROCESSING', 'Records', 'Schedule', 'State', 'TAG_APP_VALUE', 'action', 'alarmThreshold', 'application/json', 'appsync', 'arguments', 'associated', 'body', 'code', 'disassociated', 'ec2', 'error', 'fixrole', 'iamProfileManager', 'id', 'input', 'instanceId', 'message', 'putserverconfig', 'query', 'restart', 'restartserver', 'running', 'shutdownMethod', 'start', 'startserver', 'status', 'stop', 'stopped', 'stopserver', 'timestamp', 'unknown', 'updateserverconfig', 'userEmail', 'variables']

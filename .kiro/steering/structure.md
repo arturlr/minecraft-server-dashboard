@@ -44,12 +44,12 @@ webapp/
 ## Backend Structure
 
 ### Lambda Functions (`lambdas/`)
-- **eventResponse/**: Processes EC2 state changes and metrics
-- **getMonthlyCost/**: Retrieves AWS cost data from Cost Explorer API
-- **listServers/**: Lists available Minecraft servers from EC2 with tag validation and auto-configuration
-- **serverAction/**: Validates and queues server control actions (start/stop/restart/config) to SQS for asynchronous processing
-- **serverActionProcessor/**: Processes server control actions from SQS queue (start/stop/restart/config updates)
-- **fixServerRole/**: Handles IAM instance profile management synchronously (associate/disassociate profiles)
+- **ec2StateHandler/**: Processes EC2 state changes and metrics
+- **ec2CostCalculator/**: Retrieves AWS cost data from Cost Explorer API
+- **ec2Discovery/**: Lists available Minecraft servers from EC2 with tag validation and auto-configuration
+- **ec2ActionValidator/**: Validates and queues server control actions (start/stop/restart/config) to SQS for asynchronous processing
+- **ec2ActionWorker/**: Processes server control actions from SQS queue (start/stop/restart/config updates)
+- **iamProfileManager/**: Handles IAM instance profile management synchronously (associate/disassociate profiles)
 
 ### Lambda Layers (`layers/`)
 - **authHelper/**: Cognito authentication utilities
@@ -91,7 +91,7 @@ cfn/
 ## File Naming Conventions
 - **Vue Components**: PascalCase (e.g., `ServerCard.vue`, `Header.vue`)
 - **Python Files**: snake_case (e.g., `index.py`, `auth_helper.py`)
-- **Lambda Functions**: camelCase directories (e.g., `listServers/`, `getMonthlyCost/`)
+- **Lambda Functions**: camelCase directories (e.g., `ec2Discovery/`, `ec2CostCalculator/`)
 - **CloudFormation**: kebab-case for resources, PascalCase for types
 
 ## Key Configuration Files

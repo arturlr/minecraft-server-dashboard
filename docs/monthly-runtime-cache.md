@@ -60,7 +60,7 @@ The original `get_total_hours_running_per_month()` method had several performanc
                      │
                      ▼
 ┌─────────────────────────────────────────────────────────────┐
-│ EventResponse Lambda (State Changes)                       │
+│ ec2StateHandler Lambda (State Changes)                       │
 │ - Calls get_cached_running_minutes()                       │
 │ - Returns cached value if fresh                            │
 │ - Falls back to calculation if stale                       │

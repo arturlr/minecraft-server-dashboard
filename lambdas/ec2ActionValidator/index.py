@@ -821,7 +821,7 @@ def route_instance_operation(event, instance_id, user_attributes):
 
 def handler(event, context):
     """
-    Main handler for ServerAction Lambda
+    Main handler for ec2ActionValidator Lambda
     Validates authorization and routes requests to appropriate handlers
     """
     try:

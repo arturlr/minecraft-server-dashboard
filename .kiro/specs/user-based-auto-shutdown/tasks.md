@@ -11,7 +11,7 @@ The user-based auto-shutdown feature is **already fully implemented** in the cod
 
 - [x] 1. Verify and document existing implementation
   - Review ServerSettings.vue Connections method UI
-  - Review serverActionProcessor Lambda configuration handling
+  - Review ec2ActionWorker Lambda configuration handling
   - Review ec2Helper.py alarm management functions
   - Review port_count.sh script installation in BootstrapSSMDoc
   - Document any gaps or issues found

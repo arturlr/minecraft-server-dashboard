@@ -1,9 +1,9 @@
 /* eslint-disable */
 // this is an auto generated file. This will be overwritten
 
-export const listServers = /* GraphQL */ `
-  query ListServers {
-    listServers {
+export const ec2Discovery = /* GraphQL */ `
+  query ec2Discovery {
+    ec2Discovery {
       id
       name
       type
@@ -23,16 +23,6 @@ export const listServers = /* GraphQL */ `
       configWarnings
       configErrors
       autoConfigured
-    }
-  }
-`;
-export const getMonthlyCost = /* GraphQL */ `
-  query GetMonthlyCost {
-    getMonthlyCost {
-      id
-      timePeriod
-      UnblendedCost
-      UsageQuantity
     }
   }
 `;
@@ -119,9 +109,9 @@ export const searchUserByEmail = /* GraphQL */ `
   }
 `;
 
-export const getServerActionStatus = /* GraphQL */ `
-  query GetServerActionStatus($id: String!) {
-    getServerActionStatus(id: $id) {
+export const getec2ActionValidatorStatus = /* GraphQL */ `
+  query Getec2ActionValidatorStatus($id: String!) {
+    getec2ActionValidatorStatus(id: $id) {
       id
       action
       status
@@ -132,9 +122,9 @@ export const getServerActionStatus = /* GraphQL */ `
   }
 `;
 
-export const getServerMetrics = /* GraphQL */ `
-  query GetServerMetrics($id: String!) {
-    getServerMetrics(id: $id) {
+export const ec2MetricsHandler = /* GraphQL */ `
+  query ec2MetricsHandler($id: String!) {
+    ec2MetricsHandler(id: $id) {
       id
       cpuStats
       networkStats

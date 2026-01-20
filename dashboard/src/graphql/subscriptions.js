@@ -68,9 +68,9 @@ export const onDeleteLoginAudit = /* GraphQL */ `
   }
 `;
 
-export const onPutServerActionStatus = /* GraphQL */ `
-  subscription OnPutServerActionStatus($id: String!) {
-    onPutServerActionStatus(id: $id) {
+export const onPutec2ActionValidatorStatus = /* GraphQL */ `
+  subscription OnPutec2ActionValidatorStatus($id: String!) {
+    onPutec2ActionValidatorStatus(id: $id) {
       id
       action
       status

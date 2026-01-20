@@ -65,9 +65,9 @@ const serverConfigInput = reactive({
 
 ---
 
-### 2. Backend Configuration Handler (serverActionProcessor Lambda) ✅
+### 2. Backend Configuration Handler (ec2ActionWorker Lambda) ✅
 
-**Location:** `lambdas/serverActionProcessor/index.py`
+**Location:** `lambdas/ec2ActionWorker/index.py`
 
 **Status:** FULLY IMPLEMENTED
 
@@ -230,8 +230,8 @@ elif alarm_metric == "Connections":
    - Data includes: `shutdownMethod: "Connections"`, `alarmThreshold`, `alarmEvaluationPeriod`
 
 3. **Lambda Processing**
-   - `serverAction` Lambda queues message to SQS
-   - `serverActionProcessor` Lambda processes from queue
+   - `ec2ActionValidator` Lambda queues message to SQS
+   - `ec2ActionWorker` Lambda processes from queue
    - Calls `handle_update_server_config()`
 
 4. **Configuration Persistence**

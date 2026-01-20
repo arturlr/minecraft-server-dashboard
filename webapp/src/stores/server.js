@@ -38,12 +38,12 @@ export const useServerStore = defineStore("server", {
   },
 
   actions: {
-    async listServers() {
+    async ec2Discovery() {
       this.loading = true;
       this.error = null;
       try {
-        const result = await client.graphql({ query: queries.listServers });
-        const serverList = result.data.listServers || [];
+        const result = await client.graphql({ query: queries.ec2Discovery });
+        const serverList = result.data.ec2Discovery || [];
         
         this.servers = serverList;
         this.serversById = {};
@@ -63,10 +63,10 @@ export const useServerStore = defineStore("server", {
     async fetchMetrics(serverId) {
       try {
         const result = await client.graphql({
-          query: queries.getServerMetrics,
+          query: queries.ec2MetricsHandler,
           variables: { id: serverId }
         });
-        const m = result.data.getServerMetrics;
+        const m = result.data.ec2MetricsHandler;
         if (m) {
           this.processMetrics(serverId, m);
         }
@@ -235,13 +235,13 @@ export const useServerStore = defineStore("server", {
       }
     },
 
-    async getServerMetrics(serverId) {
+    async ec2MetricsHandler(serverId) {
       try {
         const result = await client.graphql({
-          query: queries.getServerMetrics,
+          query: queries.ec2MetricsHandler,
           variables: { id: serverId }
         });
-        return result.data.getServerMetrics;
+        return result.data.ec2MetricsHandler;
       } catch (error) {
         this.error = parseGraphQLError(error);
         throw error;
@@ -297,10 +297,10 @@ export const useServerStore = defineStore("server", {
       }
     },
 
-    async fixServerRole(serverId) {
+    async iamProfileManager(serverId) {
       try {
         await client.graphql({
-          query: mutations.fixServerRole,
+          query: mutations.iamProfileManager,
           variables: { instanceId: serverId }
         });
       } catch (error) {

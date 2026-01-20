@@ -2,7 +2,7 @@
 import { ref, computed, watch, onUnmounted } from 'vue';
 import { generateClient } from 'aws-amplify/api';
 import { createServer } from '@/graphql/mutations';
-import { onPutServerActionStatus } from '@/graphql/subscriptions';
+import { onPutec2ActionValidatorStatus } from '@/graphql/subscriptions';
 
 const props = defineProps({
   visible: {
@@ -287,12 +287,12 @@ async function submitForm() {
 function subscribeToStatusUpdates(instanceId) {
   try {
     statusSubscription = graphQlClient.graphql({
-      query: onPutServerActionStatus,
+      query: onPutec2ActionValidatorStatus,
       variables: { id: instanceId }
     }).subscribe({
       next: ({ data }) => {
-        if (data?.onPutServerActionStatus) {
-          const status = data.onPutServerActionStatus;
+        if (data?.onPutec2ActionValidatorStatus) {
+          const status = data.onPutec2ActionValidatorStatus;
           console.log('Server creation status update:', status);
           
           if (status.action === 'createServer') {

@@ -151,8 +151,8 @@ def configure_scheduled_shutdown_event(instance_id, cron_expression, timezone='U
         State='ENABLED'
     )
     
-    # Create the target to invoke ServerAction Lambda
-    lambda_function_name = f"{appName}-{envName}-serverAction"
+    # Create the target to invoke ec2ActionValidator Lambda
+    lambda_function_name = f"{appName}-{envName}-ec2ActionValidator"
     lambda_arn = f"arn:aws:lambda:{aws_region}:{account_id}:function:{lambda_function_name}"
     
     target = {
@@ -227,8 +227,8 @@ def configure_start_event(instance_id, cron_expression, timezone='UTC'):
         State='ENABLED'
     )
     
-    # Create the target to invoke ServerAction Lambda
-    lambda_function_name = f"{appName}-{envName}-serverAction"
+    # Create the target to invoke ec2ActionValidator Lambda
+    lambda_function_name = f"{appName}-{envName}-ec2ActionValidator"
     lambda_arn = f"arn:aws:lambda:{aws_region}:{account_id}:function:{lambda_function_name}"
     
     target = {
@@ -276,8 +276,8 @@ def send_to_appsync(action, instance_id, status, message=None, user_email=None):
     try:
         # GraphQL mutation
         mutation = """
-        mutation PutServerActionStatus($input: ServerActionStatusInput!) {
-            putServerActionStatus(input: $input) {
+        mutation Putec2ActionValidatorStatus($input: ec2ActionValidatorStatusInput!) {
+            putec2ActionValidatorStatus(input: $input) {
                 id
                 action
                 status

@@ -241,7 +241,7 @@ class Ec2Utils:
     
     def check_eventbridge_rules_exist(self, instance_id):
         """Check if EventBridge rules exist for the instance.
-           This is a read-only check used by the listServers Lambda function
+           This is a read-only check used by the ec2Discovery Lambda function
         """
         eventbridge = boto3.client('events')
         shutdown_rule = f"shutdown-{instance_id}"

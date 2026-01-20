@@ -105,12 +105,12 @@ async function fixIamRole() {
     // Execute with retry logic for network errors
     const result = await retryOperation(async () => {
       return await client.graphql({
-        query: mutations.fixServerRole,
+        query: mutations.iamProfileManager,
         variables: { instanceId: props.serverId }
       });
     });
 
-    if (result.data.fixServerRole) {
+    if (result.data.iamProfileManager) {
       emit('action-complete', 'IAM role fixed successfully', true);
       emit('update:visible', false);
     } else {

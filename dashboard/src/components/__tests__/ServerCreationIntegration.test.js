@@ -94,7 +94,7 @@ describe('Server Creation Integration', () => {
       expect(serverStore.serversDict[initialServer.id]).toEqual(updatedServer);
     });
 
-    it('should handle listServers response correctly', async () => {
+    it('should handle ec2Discovery response correctly', async () => {
       const mockServers = [
         {
           id: 'i-1111111111111111',
@@ -123,12 +123,12 @@ describe('Server Creation Integration', () => {
       // Mock successful GraphQL response
       mockGraphQLClient.graphql.mockResolvedValue({
         data: {
-          listServers: mockServers
+          ec2Discovery: mockServers
         }
       });
 
-      // Call listServers
-      const result = await serverStore.listServers();
+      // Call ec2Discovery
+      const result = await serverStore.ec2Discovery();
 
       // Verify the result
       expect(result).toEqual(mockServers);
@@ -138,15 +138,15 @@ describe('Server Creation Integration', () => {
       expect(serverStore.loading).toBe(false);
     });
 
-    it('should handle empty listServers response', async () => {
+    it('should handle empty ec2Discovery response', async () => {
       // Mock empty response
       mockGraphQLClient.graphql.mockResolvedValue({
         data: {
-          listServers: []
+          ec2Discovery: []
         }
       });
 
-      const result = await serverStore.listServers();
+      const result = await serverStore.ec2Discovery();
 
       expect(result).toEqual([]);
       expect(serverStore.serversList).toHaveLength(0);
@@ -154,11 +154,11 @@ describe('Server Creation Integration', () => {
       expect(serverStore.loading).toBe(false);
     });
 
-    it('should handle listServers error correctly', async () => {
+    it('should handle ec2Discovery error correctly', async () => {
       const mockError = new Error('GraphQL Error');
       mockGraphQLClient.graphql.mockRejectedValue(mockError);
 
-      await expect(serverStore.listServers()).rejects.toThrow();
+      await expect(serverStore.ec2Discovery()).rejects.toThrow();
       expect(serverStore.loading).toBe(false);
     });
   });
@@ -209,7 +209,7 @@ describe('Server Creation Integration', () => {
       // Step 2: Mock server creation response (server gets created in backend)
       const newServerId = 'i-1234567890abcdef0';
       
-      // Step 3: Mock listServers response after creation (includes new server)
+      // Step 3: Mock ec2Discovery response after creation (includes new server)
       const serversAfterCreation = [
         {
           id: newServerId,
@@ -228,12 +228,12 @@ describe('Server Creation Integration', () => {
 
       mockGraphQLClient.graphql.mockResolvedValue({
         data: {
-          listServers: serversAfterCreation
+          ec2Discovery: serversAfterCreation
         }
       });
 
       // Step 4: Simulate server list refresh after creation
-      await serverStore.listServers();
+      await serverStore.ec2Discovery();
 
       // Step 5: Verify new server appears in list
       expect(serverStore.serversList).toHaveLength(1);

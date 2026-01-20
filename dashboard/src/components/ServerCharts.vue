@@ -505,11 +505,11 @@ async function loadHistoricalMetrics() {
 
   try {
     const response = await graphQlClient.graphql({
-      query: queries.getServerMetrics,
+      query: queries.ec2MetricsHandler,
       variables: { id: serverStore.selectedServerId }
     });
 
-    const metrics = response.data.getServerMetrics;
+    const metrics = response.data.ec2MetricsHandler;
     if (metrics) {
       console.log('[ServerCharts] Historical metrics loaded');
       processMetricData(metrics);

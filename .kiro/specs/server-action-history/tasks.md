@@ -1,13 +1,13 @@
 # Implementation Plan
 
 - [ ] 1. Create DynamoDB table and infrastructure
-  - Create ServerActionHistory DynamoDB table with eventId as primary key
+  - Create ec2ActionValidatorHistory DynamoDB table with eventId as primary key
   - Add Global Secondary Index (instanceId-queuedAt-index) for efficient queries by server
   - Configure TTL on the ttl attribute for automatic 365-day expiration
   - Add IAM permissions for Lambda functions to read/write to the table
   - _Requirements: 2.1, 2.5, 5.1, 5.2_
 
-- [ ] 2. Enhance ServerAction Lambda to create event records
+- [ ] 2. Enhance ec2ActionValidator Lambda to create event records
 - [ ] 2.1 Add event record creation function
   - Implement `create_event_record()` function that generates UUID, calculates TTL, and writes to DynamoDB
   - Include instanceId, action, userEmail, queuedAt, status (QUEUED), and ttl fields
@@ -24,13 +24,13 @@
   - Handle DynamoDB write failures gracefully (log error, continue with action)
   - _Requirements: 2.1_
 
-- [ ]* 2.4 Write unit tests for ServerAction Lambda integration
+- [ ]* 2.4 Write unit tests for ec2ActionValidator Lambda integration
   - Test event record created when action queued
   - Test eventId included in SQS message
   - Test graceful handling of DynamoDB failures
   - _Requirements: 2.1_
 
-- [ ] 3. Enhance ServerActionProcessor Lambda to update event status
+- [ ] 3. Enhance ec2ActionWorker Lambda to update event status
 - [ ] 3.1 Add event status update function
   - Implement `update_event_status()` function that updates status and timestamps
   - Support PROCESSING, COMPLETED, FAILED statuses with appropriate timestamp fields
@@ -54,7 +54,7 @@
   - Extract eventId from SQS message body for correlation
   - _Requirements: 2.2, 2.3, 2.4, 11.1_
 
-- [ ]* 3.5 Write unit tests for ServerActionProcessor integration
+- [ ]* 3.5 Write unit tests for ec2ActionWorker integration
   - Test status updated to PROCESSING when processing starts
   - Test intermediate states recorded for EC2 transitions
   - Test status updated to COMPLETED on success
@@ -62,21 +62,21 @@
   - _Requirements: 2.2, 2.3, 2.4, 11.1_
 
 - [ ] 4. Create GraphQL schema extensions
-- [ ] 4.1 Add ServerActionEvent type to schema
-  - Define ServerActionEvent type with all fields (eventId, instanceId, action, status, timestamps, intermediateStates, etc.)
-  - Add ServerActionEventFilter input type for filtering
-  - Add ServerActionHistoryConnection type for pagination
+- [ ] 4.1 Add ec2ActionValidatorEvent type to schema
+  - Define ec2ActionValidatorEvent type with all fields (eventId, instanceId, action, status, timestamps, intermediateStates, etc.)
+  - Add ec2ActionValidatorEventFilter input type for filtering
+  - Add ec2ActionValidatorHistoryConnection type for pagination
   - _Requirements: 8.1_
 
-- [ ] 4.2 Add getServerActionHistory query to schema
+- [ ] 4.2 Add getec2ActionValidatorHistory query to schema
   - Define query with instanceId, filter, limit, and nextToken parameters
   - Add @aws_cognito_user_pools authorization directive
   - _Requirements: 8.1_
 
-- [ ] 5. Implement getServerActionHistory Lambda resolver
+- [ ] 5. Implement getec2ActionValidatorHistory Lambda resolver
 - [ ] 5.1 Create Lambda function for query resolution
   - Validate user authorization for the instanceId using existing check_authorization
-  - Query ServerActionHistory table using instanceId-queuedAt-index
+  - Query ec2ActionValidatorHistory table using instanceId-queuedAt-index
   - Apply optional filters (action types, statuses, date range)
   - Calculate duration field for completed events (completedAt - queuedAt)
   - Return paginated results (default 100, max 500)
@@ -107,25 +107,25 @@
 
 - [ ] 6. Create frontend GraphQL operations
 - [ ] 6.1 Add query and subscription to graphql/queries.js
-  - Add getServerActionHistory query with filter parameters
+  - Add getec2ActionValidatorHistory query with filter parameters
   - Export query for use in components
   - _Requirements: 1.1_
 
 - [ ] 6.2 Update graphql/subscriptions.js if needed
-  - Verify onPutServerActionStatus subscription exists
+  - Verify onPutec2ActionValidatorStatus subscription exists
   - Verify onChangeState subscription exists
   - _Requirements: 6.1, 11.2_
 
-- [ ] 7. Create ServerActionHistory Vue component
+- [ ] 7. Create ec2ActionValidatorHistory Vue component
 - [ ] 7.1 Create component structure and props
-  - Create ServerActionHistory.vue in components directory
+  - Create ec2ActionValidatorHistory.vue in components directory
   - Define props: serverId (required), maxHeight (optional)
   - Set up component data: events array, loading state, filters, expandedEvents set
   - _Requirements: 1.1_
 
 - [ ] 7.2 Implement event loading and subscription
-  - Implement loadHistory() method to query getServerActionHistory
-  - Implement subscribeToUpdates() to subscribe to onPutServerActionStatus and onChangeState
+  - Implement loadHistory() method to query getec2ActionValidatorHistory
+  - Implement subscribeToUpdates() to subscribe to onPutec2ActionValidatorStatus and onChangeState
   - Update events array when subscription receives updates
   - Unsubscribe on component unmount
   - _Requirements: 1.1, 6.1, 6.2, 6.3_
@@ -193,15 +193,15 @@
   - Test formatting methods produce correct output
   - _Requirements: 1.1, 4.1, 4.2, 6.2, 10.1_
 
-- [ ] 8. Integrate ServerActionHistory into existing components
+- [ ] 8. Integrate ec2ActionValidatorHistory into existing components
 - [ ] 8.1 Add history tab to ServerStatsDialog
-  - Import ServerActionHistory component
+  - Import ec2ActionValidatorHistory component
   - Add "History" tab alongside existing tabs
   - Pass serverId prop to component
   - _Requirements: 1.1_
 
 - [ ] 8.2 Add history section to ServerSettings
-  - Import ServerActionHistory component
+  - Import ec2ActionValidatorHistory component
   - Add collapsible section or tab for action history
   - Pass serverId prop to component
   - _Requirements: 1.1_
@@ -213,14 +213,14 @@
   - _Requirements: 1.1_
 
 - [ ] 9. Add store methods for event history
-- [ ] 9.1 Add getServerActionHistory method to server store
+- [ ] 9.1 Add getec2ActionValidatorHistory method to server store
   - Implement method in dashboard/src/stores/server.js
   - Call GraphQL query with instanceId and optional filters
   - Handle errors and return results
   - _Requirements: 1.1_
 
 - [ ]* 9.2 Write unit tests for store methods
-  - Test getServerActionHistory calls correct GraphQL query
+  - Test getec2ActionValidatorHistory calls correct GraphQL query
   - Test error handling
   - Test filter parameters passed correctly
   - _Requirements: 1.1_

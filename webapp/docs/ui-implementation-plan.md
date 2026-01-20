@@ -225,7 +225,7 @@ export default createVuetify({
 ```
 webapp/src/
 ├── graphql/
-│   ├── queries.js       # GraphQL queries (listServers, getServerConfig, etc.)
+│   ├── queries.js       # GraphQL queries (ec2Discovery, getServerConfig, etc.)
 │   ├── mutations.js     # GraphQL mutations (startServer, stopServer, etc.)
 │   └── subscriptions.js # Real-time subscriptions
 ├── stores/
@@ -240,15 +240,15 @@ webapp/src/
 ### Server Store Methods
 | Method | Description |
 |--------|-------------|
-| `listServers()` | Fetch all servers |
+| `ec2Discovery()` | Fetch all servers |
 | `getServerConfig(id)` | Get server configuration |
 | `getServerUsers(id)` | Get server members |
-| `getServerMetrics(id)` | Get server metrics |
+| `ec2MetricsHandler(id)` | Get server metrics |
 | `startServer(id)` | Start a server |
 | `stopServer(id)` | Stop a server |
 | `restartServer(id)` | Restart a server |
 | `putServerConfig(config)` | Save server configuration |
-| `fixServerRole(id)` | Fix IAM instance profile |
+| `iamProfileManager(id)` | Fix IAM instance profile |
 
 ### User Store Methods
 | Method | Description |

@@ -73,10 +73,10 @@ describe('HomeView Server Creation Integration', () => {
     // Reset mocks
     vi.clearAllMocks();
     
-    // Mock successful listServers response
+    // Mock successful ec2Discovery response
     mockGraphQLClient.graphql.mockResolvedValue({
       data: {
-        listServers: []
+        ec2Discovery: []
       }
     });
   });
@@ -89,7 +89,7 @@ describe('HomeView Server Creation Integration', () => {
 
   describe('Server Creation Event Handling', () => {
     it('should handle server-created event from AppToolbar', async () => {
-      // Mock listServers to return a new server after creation
+      // Mock ec2Discovery to return a new server after creation
       const mockServersAfterCreation = [
         {
           id: 'i-1234567890abcdef0',
@@ -106,8 +106,8 @@ describe('HomeView Server Creation Integration', () => {
 
       // First call returns empty list, second call returns new server
       mockGraphQLClient.graphql
-        .mockResolvedValueOnce({ data: { listServers: [] } })
-        .mockResolvedValueOnce({ data: { listServers: mockServersAfterCreation } });
+        .mockResolvedValueOnce({ data: { ec2Discovery: [] } })
+        .mockResolvedValueOnce({ data: { ec2Discovery: mockServersAfterCreation } });
 
       wrapper = mount(HomeView, {
         global: {
@@ -137,7 +137,7 @@ describe('HomeView Server Creation Integration', () => {
       await wrapper.vm.$nextTick();
       await new Promise(resolve => setTimeout(resolve, 0)); // Wait for async operations
 
-      // Verify listServers was called again
+      // Verify ec2Discovery was called again
       expect(mockGraphQLClient.graphql).toHaveBeenCalledTimes(2);
       
       // Verify server was added to store
@@ -146,9 +146,9 @@ describe('HomeView Server Creation Integration', () => {
     });
 
     it('should handle server creation refresh error gracefully', async () => {
-      // Mock listServers to fail on second call
+      // Mock ec2Discovery to fail on second call
       mockGraphQLClient.graphql
-        .mockResolvedValueOnce({ data: { listServers: [] } })
+        .mockResolvedValueOnce({ data: { ec2Discovery: [] } })
         .mockRejectedValueOnce(new Error('Network error'));
 
       wrapper = mount(HomeView, {
@@ -197,7 +197,7 @@ describe('HomeView Server Creation Integration', () => {
       ];
 
       mockGraphQLClient.graphql.mockResolvedValue({
-        data: { listServers: mockServers }
+        data: { ec2Discovery: mockServers }
       });
 
       wrapper = mount(HomeView, {
@@ -216,7 +216,7 @@ describe('HomeView Server Creation Integration', () => {
 
       await wrapper.vm.$nextTick();
 
-      // Verify listServers was called on mount
+      // Verify ec2Discovery was called on mount
       expect(mockGraphQLClient.graphql).toHaveBeenCalledWith({
         query: expect.any(String)
       });
@@ -263,7 +263,7 @@ describe('HomeView Server Creation Integration', () => {
       };
 
       mockGraphQLClient.graphql
-        .mockResolvedValueOnce({ data: { listServers: [] } })
+        .mockResolvedValueOnce({ data: { ec2Discovery: [] } })
         .mockReturnValueOnce(mockSubscription);
 
       wrapper = mount(HomeView, {
@@ -298,7 +298,7 @@ describe('HomeView Server Creation Integration', () => {
       };
 
       mockGraphQLClient.graphql
-        .mockResolvedValueOnce({ data: { listServers: [] } })
+        .mockResolvedValueOnce({ data: { ec2Discovery: [] } })
         .mockReturnValueOnce(mockSubscription);
 
       wrapper = mount(HomeView, {
@@ -328,8 +328,8 @@ describe('HomeView Server Creation Integration', () => {
   describe('Snackbar Notifications', () => {
     it('should show success notification for server creation', async () => {
       mockGraphQLClient.graphql
-        .mockResolvedValueOnce({ data: { listServers: [] } })
-        .mockResolvedValueOnce({ data: { listServers: [{ id: 'new-server' }] } });
+        .mockResolvedValueOnce({ data: { ec2Discovery: [] } })
+        .mockResolvedValueOnce({ data: { ec2Discovery: [{ id: 'new-server' }] } });
 
       wrapper = mount(HomeView, {
         global: {

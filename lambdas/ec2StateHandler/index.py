@@ -220,7 +220,7 @@ def handle_scheduled_event():
         send_to_appsync(payload)
 
 def handler(event, context):
-    """Main handler for EventResponse Lambda."""
+    """Main handler for ec2StateHandler Lambda."""
     try:
         # Check if this is an EventBridge event
         if 'detail-type' not in event:

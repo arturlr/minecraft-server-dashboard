@@ -11,7 +11,7 @@ This specification defines a server action event history feature that allows use
 - **Action Types**: Operations performed on servers including start, stop, restart, config updates, IAM role fixes, and user management
 - **Event Status**: The state of an action event (QUEUED, PROCESSING, COMPLETED, FAILED)
 - **Event Timeline**: A visual representation showing the progression of events over time
-- **DynamoDB Table**: The ServerActionHistory table that stores all action event records
+- **DynamoDB Table**: The ec2ActionValidatorHistory table that stores all action event records
 - **TTL (Time To Live)**: Automatic expiration of old event records after a configured retention period
 
 ## Requirements
@@ -34,8 +34,8 @@ This specification defines a server action event history feature that allows use
 
 #### Acceptance Criteria
 
-1. WHEN a write operation is queued to SQS THEN the ServerAction Lambda SHALL create an event record in the ServerActionHistory table with status "QUEUED"
-2. WHEN ServerActionProcessor begins processing an action THEN the system SHALL update the event record status to "PROCESSING" with a processing timestamp
+1. WHEN a write operation is queued to SQS THEN the ec2ActionValidator Lambda SHALL create an event record in the ec2ActionValidatorHistory table with status "QUEUED"
+2. WHEN ec2ActionWorker begins processing an action THEN the system SHALL update the event record status to "PROCESSING" with a processing timestamp
 3. WHEN an action completes successfully THEN the system SHALL update the event record status to "COMPLETED" with a completion timestamp
 4. WHEN an action fails THEN the system SHALL update the event record status to "FAILED" with a failure timestamp and error message
 5. WHEN creating an event record THEN the system SHALL include instanceId, action, userEmail, queuedAt timestamp, and a unique eventId
@@ -82,7 +82,7 @@ This specification defines a server action event history feature that allows use
 
 #### Acceptance Criteria
 
-1. WHEN viewing event history THEN the system SHALL subscribe to the onPutServerActionStatus GraphQL subscription
+1. WHEN viewing event history THEN the system SHALL subscribe to the onPutec2ActionValidatorStatus GraphQL subscription
 2. WHEN a status update is received via subscription THEN the system SHALL update the corresponding event in the displayed history
 3. WHEN a new action is initiated THEN the system SHALL add the new event to the top of the history list
 4. WHEN an event status changes THEN the system SHALL update the event's visual appearance (color, icon, status text)
@@ -106,8 +106,8 @@ This specification defines a server action event history feature that allows use
 
 #### Acceptance Criteria
 
-1. WHEN the GraphQL schema is defined THEN the system SHALL include a getServerActionHistory query that accepts instanceId and optional filters
-2. WHEN getServerActionHistory is called THEN the system SHALL return a list of ServerActionEvent objects for the specified instance
+1. WHEN the GraphQL schema is defined THEN the system SHALL include a getec2ActionValidatorHistory query that accepts instanceId and optional filters
+2. WHEN getec2ActionValidatorHistory is called THEN the system SHALL return a list of ec2ActionValidatorEvent objects for the specified instance
 3. WHEN optional filters are provided THEN the system SHALL filter results by action type, status, and date range
 4. WHEN no filters are provided THEN the system SHALL return all events for the instance ordered by queuedAt descending
 5. WHEN the query is executed THEN the system SHALL limit results to 100 events by default with pagination support

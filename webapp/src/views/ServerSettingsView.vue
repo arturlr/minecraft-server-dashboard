@@ -184,7 +184,7 @@ onMounted(() => {
   if (serverId.value) {
     serverStore.setSelectedServer(serverId.value)
     if (!server.value) {
-      serverStore.listServers()
+      serverStore.ec2Discovery()
     }
     loadConfig()
   }

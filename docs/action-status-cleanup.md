@@ -1,30 +1,30 @@
 # Action Status Cleanup
 
 ## Summary
-Removed the `ServerActionStatusTable` and related resolvers since action status was not being used by the frontend and was incorrectly configured to write to the wrong table.
+Removed the `ec2ActionValidatorStatusTable` and related resolvers since action status was not being used by the frontend and was incorrectly configured to write to the wrong table.
 
 ## Changes Made
 
 ### 1. DynamoDB (`cfn/templates/dynamodb.yaml`)
-- ❌ Removed `ServerActionStatusTable` resource
+- ❌ Removed `ec2ActionValidatorStatusTable` resource
 - ❌ Removed table exports
 
 ### 2. AppSync Configuration (`cfn/templates/lambdas.yaml`)
-- ❌ Removed `ServerActionStatusTable` data source
-- ❌ Removed `putServerActionStatusFunction` 
-- ❌ Removed `getServerActionStatusFunction`
-- ❌ Removed `putServerActionStatus` mutation resolver
-- ❌ Removed `getServerActionStatus` query resolver
+- ❌ Removed `ec2ActionValidatorStatusTable` data source
+- ❌ Removed `putec2ActionValidatorStatusFunction` 
+- ❌ Removed `getec2ActionValidatorStatusFunction`
+- ❌ Removed `putec2ActionValidatorStatus` mutation resolver
+- ❌ Removed `getec2ActionValidatorStatus` query resolver
 
 ### 3. GraphQL Schema (`appsync/schema.graphql`)
-- ✅ Kept `ServerActionStatus` type (for future use)
-- ✅ Kept `onPutServerActionStatus` subscription (for future use)
-- ❌ Commented out `putServerActionStatus` mutation
-- ❌ Commented out `getServerActionStatus` query
+- ✅ Kept `ec2ActionValidatorStatus` type (for future use)
+- ✅ Kept `onPutec2ActionValidatorStatus` subscription (for future use)
+- ❌ Commented out `putec2ActionValidatorStatus` mutation
+- ❌ Commented out `getec2ActionValidatorStatus` query
 
 ### 4. Lambda Functions
-- **`lambdas/serverAction/index.py`**: Simplified `send_status_to_appsync()` to only log status
-- **`lambdas/serverActionProcessor/index.py`**: Simplified `send_to_appsync()` to only log status
+- **`lambdas/ec2ActionValidator/index.py`**: Simplified `send_status_to_appsync()` to only log status
+- **`lambdas/ec2ActionWorker/index.py`**: Simplified `send_to_appsync()` to only log status
 
 ## Current Behavior
 
@@ -44,7 +44,7 @@ If you want to add real-time action status tracking later:
 
 1. **Recreate the table** with proper schema
 2. **Implement subscription broadcast** (no persistence needed)
-3. **Update frontend** to subscribe to `onPutServerActionStatus`
+3. **Update frontend** to subscribe to `onPutec2ActionValidatorStatus`
 4. **Show real-time status** like "Starting server..." → "Server started!"
 
 ## Monitoring

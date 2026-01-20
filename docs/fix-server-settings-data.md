@@ -13,7 +13,7 @@ The ServerSettings component was not displaying EC2 tag information correctly du
 ### 1. GraphQL Queries (`dashboard/src/graphql/queries.js`)
 **Fixed Issues:**
 - Updated `getServerConfig` query to include all new fields
-- Updated `listServers` query to include validation fields
+- Updated `ec2Discovery` query to include validation fields
 - Fixed `getServerUsers` query parameter name
 
 **Changes:**
@@ -34,7 +34,7 @@ query GetServerConfig($id: String!) {
 }
 `;
 
-// Added validation fields to listServers
+// Added validation fields to ec2Discovery
 configStatus
 configValid
 configWarnings

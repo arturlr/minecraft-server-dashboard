@@ -140,7 +140,7 @@ After completing all scenarios, verify:
    - Check browser console for GraphQL errors
 
 3. **Server list doesn't refresh**
-   - Check if listServers GraphQL query is working
+   - Check if ec2Discovery GraphQL query is working
    - Verify server store is properly updating
    - Check for subscription connection issues
 

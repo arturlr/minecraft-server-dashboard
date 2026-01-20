@@ -193,12 +193,12 @@ def check_user_authorization(self, user_sub, server_id, required_permission='rea
 
 ### 4. Updated Lambda Function Authorization
 
-#### 4.1 listServers Lambda
+#### 4.1 ec2Discovery Lambda
 - Replace `cognito_groups` check with DynamoDB membership query
 - Filter servers based on user's membership records
 - Include role information in server list response
 
-#### 4.2 serverAction Lambda  
+#### 4.2 ec2ActionValidator Lambda  
 - Replace group-based authorization with role-based permission checks
 - Validate required permission level for each operation
 - Update error messages to include role requirements
@@ -463,8 +463,8 @@ def check_user_authorization(self, user_sub, server_id, required_permission='rea
    - Test error responses for invalid operations
 
 5. **Lambda Function Integration Tests**
-   - Test listServers with DynamoDB membership filtering
-   - Test serverAction with role-based authorization
+   - Test ec2Discovery with DynamoDB membership filtering
+   - Test ec2ActionValidator with role-based authorization
    - Test all Lambda functions that use authorization
    - Test consistent error message formats across functions
 

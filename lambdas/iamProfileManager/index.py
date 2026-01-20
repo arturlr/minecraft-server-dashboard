@@ -178,7 +178,7 @@ def _extract_token(event):
 
 def _validate_arguments(event):
     """Validate and extract instance_id from arguments"""
-    # Check for direct invocation (from listServers)
+    # Check for direct invocation (from ec2Discovery)
     if 'instanceId' in event:
         return event['instanceId']
     
@@ -212,8 +212,8 @@ def _fix_iam_role(instance_id):
     return result.get("message")
 
 def handler(event, context):
-    """Main handler for fixServerRole Lambda"""
-    logger.info("fixServerRole Lambda invoked")
+    """Main handler for iamProfileManager Lambda"""
+    logger.info("iamProfileManager Lambda invoked")
     
     try:
         # Extract and validate inputs
@@ -223,14 +223,14 @@ def handler(event, context):
         # Skip authorization for internal invocations
         if token:
             user_attributes = _authenticate_user(token)
-            logger.info(f"Processing fixServerRole: instance={instance_id}, user={user_attributes['email']}")
+            logger.info(f"Processing iamProfileManager: instance={instance_id}, user={user_attributes['email']}")
             
             # Check authorization
             if not check_authorization(event, instance_id, user_attributes):
                 logger.error(f"User {user_attributes['email']} not authorized for {instance_id}")
                 return utl.response(401, {"err": "User not authorized"})
         else:
-            logger.info(f"Processing fixServerRole (internal): instance={instance_id}")
+            logger.info(f"Processing iamProfileManager (internal): instance={instance_id}")
         
         # Fix IAM role
         message = _fix_iam_role(instance_id)

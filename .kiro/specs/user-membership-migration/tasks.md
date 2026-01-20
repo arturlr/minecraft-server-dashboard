@@ -93,8 +93,8 @@ This implementation plan migrates user membership management from AWS Cognito us
   - **Property 16: Migration idempotency**
   - **Validates: Requirements 3.6**
 
-- [x] 7. Update listServers Lambda function
-  - Modify `lambdas/listServers/index.py` to use DynamoDB membership queries
+- [x] 7. Update ec2Discovery Lambda function
+  - Modify `lambdas/ec2Discovery/index.py` to use DynamoDB membership queries
   - Replace Cognito group filtering with membership-based server filtering
   - Update authorization logic to use role-based permissions
   - Ensure admin users can see all servers, others see only their assigned servers
@@ -108,8 +108,8 @@ This implementation plan migrates user membership management from AWS Cognito us
   - **Property 18: Membership-based access validation**
   - **Validates: Requirements 4.2**
 
-- [x] 8. Update serverAction Lambda function
-  - Modify `lambdas/serverAction/index.py` to use role-based authorization
+- [x] 8. Update ec2ActionValidator Lambda function
+  - Modify `lambdas/ec2ActionValidator/index.py` to use role-based authorization
   - Update `check_authorization` function to query DynamoDB membership
   - Implement role-based permission checking for different operations
   - Update `addUserToServer` to create DynamoDB membership records with default viewer role

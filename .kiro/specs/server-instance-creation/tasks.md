@@ -9,7 +9,7 @@
   - **Property 9: Shutdown parameter validation**
   - **Validates: Requirements 3.5**
 
-- [x] 2. Extend serverAction Lambda for server creation
+- [x] 2. Extend ec2ActionValidator Lambda for server creation
   - Add handle_create_server() function with admin authorization check
   - Implement input validation for server name, instance type, and shutdown configuration
   - Add SQS message queuing for createServer action
@@ -27,7 +27,7 @@
   - **Property 2: Admin-only access**
   - **Validates: Requirements 1.1**
 
-- [x] 3. Enhance serverActionProcessor Lambda for instance creation
+- [x] 3. Enhance ec2ActionWorker Lambda for instance creation
   - Add process_create_server() function to handle SQS messages
   - Integrate with existing ec2Helper.create_ec2_instance() method
   - Add CloudWatch alarm and EventBridge rule creation logic

@@ -89,7 +89,7 @@ def get_server_validation(instance_id):
     """Get stored server configuration validation from DynamoDB."""
     try:
         core_dyn = ddbHelper.CoreTableDyn()
-        # Get stored validation results from serverBootProcessor
+        # Get stored validation results from ec2BootWorker
         server_info = core_dyn.get_server_info(instance_id)
         
         if server_info:
@@ -102,7 +102,7 @@ def get_server_validation(instance_id):
                 'autoConfigured': server_info.get('autoConfigured', False)
             }
         
-        # Fallback if no server info found (server not processed by serverBootProcessor yet)
+        # Fallback if no server info found (server not processed by ec2BootWorker yet)
         return {
             'instanceId': instance_id,
             'configStatus': 'pending',

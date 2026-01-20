@@ -15,7 +15,7 @@ HomeView.vue (Refactored)
 ├── ServerTable.vue (New)
 │   ├── v-data-table (Vuetify)
 │   ├── ServerStatusChip.vue (New)
-│   └── ServerActionsMenu.vue (New)
+│   └── ec2ActionValidatorsMenu.vue (New)
 ├── ServerConfigDialog.vue (New)
 │   └── ServerSettings.vue (Existing - Reused)
 ├── ServerStatsDialog.vue (New)
@@ -48,7 +48,7 @@ HomeView.vue (Refactored)
                               │                               ▼
                               │                    ┌──────────────────┐
                               │                    │  GraphQL API     │
-                              │                    │  - listServers   │
+                              │                    │  - ec2Discovery   │
                               │                    │  - mutations     │
                               │                    │  - subscriptions │
                               │                    └──────────────────┘
@@ -97,7 +97,7 @@ HomeView.vue (Refactored)
 - `closeAllDialogs()` - Closes all open dialogs
 - `handleActionComplete(message, success)` - Shows snackbar notification
 - `refreshServerList()` - Reloads server list from API
-- `fixIamRole(serverId)` - Executes fixServerRole mutation for specified server
+- `fixIamRole(serverId)` - Executes iamProfileManager mutation for specified server
 
 **Lifecycle**:
 - `onMounted()` - Load server list, subscribe to state changes
@@ -271,7 +271,7 @@ HomeView.vue (Refactored)
 - `chipColor` - Returns color based on state (success/error/warning)
 - `chipIcon` - Returns icon based on state (play/stop/loading)
 
-### 5. ServerActionsMenu.vue (New Component)
+### 5. ec2ActionValidatorsMenu.vue (New Component)
 
 **Purpose**: Action buttons for each table row with power control as first action
 
@@ -519,7 +519,7 @@ No changes required to the existing Pinia store structure. The store already pro
 - `serversList` - Array of all servers
 - `serversDict` - Dictionary for quick lookup by ID
 - `selectedServerId` - Currently selected server
-- `listServers()` - Fetch all servers
+- `ec2Discovery()` - Fetch all servers
 - `updateServer()` - Update server state
 - `setSelectedServerId()` - Set selected server
 
@@ -591,7 +591,7 @@ subscription OnPutServerMetric($id: String!) {
 - Test icon mapping for each state
 - Test size variations
 
-**ServerActionsMenu.vue**:
+**ec2ActionValidatorsMenu.vue**:
 - Test button click emissions
 - Test tooltip display
 - Test disabled states based on IAM status
@@ -732,7 +732,7 @@ subscription OnPutServerMetric($id: String!) {
 ### Phase 1: Create New Components
 1. Build ServerTable.vue with mock data
 2. Build ServerStatusChip.vue
-3. Build ServerActionsMenu.vue
+3. Build ec2ActionValidatorsMenu.vue
 4. Test components in isolation
 
 ### Phase 2: Create Dialog Wrappers

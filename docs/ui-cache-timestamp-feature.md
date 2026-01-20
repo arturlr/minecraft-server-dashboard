@@ -168,6 +168,6 @@ aws logs filter-log-events \
 
 # Check for cache read errors
 aws logs filter-log-events \
-  --log-group-name /aws/lambda/eventResponse \
+  --log-group-name /aws/lambda/ec2StateHandler \
   --filter-pattern "Error reading cache"
 ```

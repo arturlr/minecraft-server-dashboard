@@ -2,7 +2,7 @@
 
 ## Overview
 
-This feature adds user management capabilities to the ServerTable component, allowing administrators to view and manage user access permissions for individual Minecraft servers. The implementation will consist of a new action button in the ServerActionsMenu component and a new UserManagementDialog component that handles the user interface for listing and adding users.
+This feature adds user management capabilities to the ServerTable component, allowing administrators to view and manage user access permissions for individual Minecraft servers. The implementation will consist of a new action button in the ec2ActionValidatorsMenu component and a new UserManagementDialog component that handles the user interface for listing and adding users.
 
 The feature leverages existing GraphQL infrastructure (`getServerUsers` query and `addUserToServer` mutation) and follows established patterns in the codebase for dialog-based interactions.
 
@@ -12,13 +12,13 @@ The feature leverages existing GraphQL infrastructure (`getServerUsers` query an
 
 ```
 ServerTable.vue (existing)
-  └── ServerActionsMenu.vue (modified)
+  └── ec2ActionValidatorsMenu.vue (modified)
         └── UserManagementDialog.vue (new)
 ```
 
 ### Data Flow
 
-1. **User clicks user management button** → Event emitted from ServerActionsMenu
+1. **User clicks user management button** → Event emitted from ec2ActionValidatorsMenu
 2. **ServerTable receives event** → Opens UserManagementDialog with server ID
 3. **Dialog opens** → Fetches users via getServerUsers GraphQL query
 4. **User adds new user** → Calls addUserToServer GraphQL mutation
@@ -29,12 +29,12 @@ ServerTable.vue (existing)
 - **GraphQL API**: Uses existing AppSync queries and mutations
 - **Amplify SDK**: Handles authentication and GraphQL requests
 - **Vuetify Components**: Uses v-dialog, v-list, v-text-field, v-btn for UI
-- **ServerActionsMenu**: Extended to include user management button
+- **ec2ActionValidatorsMenu**: Extended to include user management button
 - **ServerTable**: Manages dialog state and passes server context
 
 ## Components and Interfaces
 
-### 1. ServerActionsMenu.vue (Modified)
+### 1. ec2ActionValidatorsMenu.vue (Modified)
 
 **Purpose**: Add user management action button to existing menu
 
@@ -110,7 +110,7 @@ openUserManagement(serverId)     // Open dialog for specific server
 ```
 
 **New Event Handlers**:
-- Handle `open-users` event from ServerActionsMenu
+- Handle `open-users` event from ec2ActionValidatorsMenu
 - Pass server context to UserManagementDialog
 
 ## Data Models
@@ -213,7 +213,7 @@ openUserManagement(serverId)     // Open dialog for specific server
    - Verify error message after failed user addition
    - Verify user list refreshes after successful addition
 
-2. **ServerActionsMenu Component Tests**
+2. **ec2ActionValidatorsMenu Component Tests**
    - Verify user management button is rendered
    - Verify correct icon is used (mdi-account-multiple)
    - Verify click event emits 'open-users' event
@@ -221,7 +221,7 @@ openUserManagement(serverId)     // Open dialog for specific server
 3. **ServerTable Component Tests**
    - Verify dialog state management
    - Verify correct server context is passed to dialog
-   - Verify event handling from ServerActionsMenu
+   - Verify event handling from ec2ActionValidatorsMenu
 
 4. **Email Validation Tests**
    - Test valid email formats (standard, with plus sign, with subdomain)

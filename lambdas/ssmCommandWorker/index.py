@@ -149,7 +149,7 @@ def handler(event, context):
         "timeoutSeconds": 3600,
         "metadata": {
             "purpose": "bootstrap",
-            "requestedBy": "eventResponse",
+            "requestedBy": "ec2StateHandler",
             "timestamp": "2025-11-26T10:00:00Z"
         }
     }

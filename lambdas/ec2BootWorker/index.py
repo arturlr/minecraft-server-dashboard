@@ -92,7 +92,7 @@ def get_server_info_from_ec2(instance_id):
 def queue_bootstrap_server(instance_id):
     """
     Queue bootstrap SSM command for asynchronous execution.
-    The SSMCommandProcessor Lambda will handle retries and execution.
+    The ssmCommandWorker Lambda will handle retries and execution.
     
     Args:
         instance_id (str): EC2 instance ID

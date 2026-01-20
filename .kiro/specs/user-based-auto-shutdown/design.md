@@ -24,13 +24,13 @@ This design leverages existing AWS services (CloudWatch, EventBridge, EC2) and i
          │
          ▼
 ┌─────────────────┐
-│  serverAction   │
+│  ec2ActionValidator   │
 │    Lambda       │
 └────────┬────────┘
          │ SQS Message
          ▼
 ┌─────────────────┐
-│serverAction     │
+│ec2ActionValidator     │
 │  Processor      │
 │    Lambda       │
 └────────┬────────┘
@@ -54,8 +54,8 @@ This design leverages existing AWS services (CloudWatch, EventBridge, EC2) and i
 
 1. **Frontend (ServerSettings.vue)**: User configures threshold and evaluation period
 2. **AppSync API**: Validates and routes configuration request
-3. **serverAction Lambda**: Queues configuration update to SQS
-4. **serverActionProcessor Lambda**: Processes configuration, updates EC2 tags, creates/updates CloudWatch alarm
+3. **ec2ActionValidator Lambda**: Queues configuration update to SQS
+4. **ec2ActionWorker Lambda**: Processes configuration, updates EC2 tags, creates/updates CloudWatch alarm
 5. **EC2 Instance**: Runs cron job every minute to count connections
 6. **port_count.sh Script**: Counts TCP connections on port 25565, publishes to CloudWatch
 7. **CloudWatch Alarm**: Monitors UserCount metric, triggers EC2 stop when threshold breached
@@ -95,7 +95,7 @@ const serverConfigInput = reactive({
 // which triggers GraphQL mutation
 ```
 
-### Backend Component: serverActionProcessor Lambda
+### Backend Component: ec2ActionWorker Lambda
 
 **Purpose**: Processes configuration updates and manages CloudWatch alarms
 
@@ -460,7 +460,7 @@ Configuration is persisted as EC2 instance tags:
 The user-based auto-shutdown feature is **fully implemented** in the current codebase:
 
 ✅ **Frontend**: ServerSettings.vue supports Connections method with validation
-✅ **Backend**: serverActionProcessor handles configuration updates
+✅ **Backend**: ec2ActionWorker handles configuration updates
 ✅ **EC2 Helper**: update_alarm() creates CloudWatch alarms for Connections
 ✅ **Metric Collection**: port_count.sh script installed via bootstrap
 ✅ **CloudWatch Integration**: Alarms configured with correct parameters

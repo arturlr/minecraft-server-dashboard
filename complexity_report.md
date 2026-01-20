@@ -3,7 +3,7 @@
 
 ## Lambda Functions
 
-### lambdas/fixServerRole/index.py
+### lambdas/iamProfileManager/index.py
 - `check_authorization()` - **3/10** (Low) - Line 133
 - `_extract_token()` - **2/10** (Low) - Line 170
 - `_validate_arguments()` - **3/10** (Low) - Line 178
@@ -20,7 +20,7 @@
 ### lambdas/calculateMonthlyRuntime/index.py
 - `handler()` - **5/10** (Moderate) - Line 18
 
-### lambdas/listServers/index.py
+### lambdas/ec2Discovery/index.py
 - `create_default_config()` - **1/10** (Simple) - Line 30
 - `validate_shutdown_config()` - **8/10** (High) - Line 51
 - `apply_minecraft_config()` - **7/10** (Moderate) - Line 80
@@ -33,7 +33,7 @@
 - `build_server_response()` - **2/10** (Low) - Line 247
 - `handler()` - **5/10** (Moderate) - Line 292
 
-### lambdas/serverActionProcessor/index.py
+### lambdas/ec2ActionWorker/index.py
 - `_strip_leading_zeros()` - **10/10** (High) - Line 40
 - `_convert_day_of_week()` - **10/10** (High) - Line 68
 - `_convert_timezone_to_utc()` - **4/10** (Low) - Line 90
@@ -60,16 +60,16 @@
 - `handle_update_server_name()` - **7/10** (Moderate) - Line 672
 - `handler()` - **3/10** (Low) - Line 723
 
-### lambdas/getServerMetrics/index.py
+### lambdas/ec2MetricsHandler/index.py
 - `handler()` - **3/10** (Low) - Line 9
 - `get_metric_data()` - **5/10** (Moderate) - Line 102
 
-### lambdas/ssmCommandProcessor/index.py
+### lambdas/ssmCommandWorker/index.py
 - `check_instance_ready()` - **5/10** (Moderate) - Line 14
 - `send_ssm_command()` - **9/10** (High) - Line 47
 - `handler()` - **7/10** (Moderate) - Line 134
 
-### lambdas/serverAction/index.py
+### lambdas/ec2ActionValidator/index.py
 - `check_authorization()` - **6/10** (Moderate) - Line 28
 - `send_status_to_appsync()` - **1/10** (Simple) - Line 69
 - `_is_valid_cron()` - **4/10** (Low) - Line 89
@@ -88,11 +88,11 @@
 - `route_instance_operation()` - **10/10** (High) - Line 542
 - `handler()` - **9/10** (High) - Line 600
 
-### lambdas/getMonthlyCost/index.py
+### lambdas/ec2CostCalculator/index.py
 - `getUsageCost()` - **5/10** (Moderate) - Line 26
 - `handler()` - **10/10** (High) - Line 83
 
-### lambdas/eventResponse/index.py
+### lambdas/ec2StateHandler/index.py
 - `send_to_appsync()` - **1/10** (Simple) - Line 97
 - `schedule_event_response()` - **3/10** (Low) - Line 108
 - `get_metrics_data()` - **6/10** (Moderate) - Line 136

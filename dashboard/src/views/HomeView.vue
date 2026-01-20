@@ -108,16 +108,16 @@ async function fixIamRole(serverId) {
     // Execute with retry logic for network errors
     const result = await retryOperation(async () => {
       return await graphQlClient.graphql({
-        query: mutations.fixServerRole,
+        query: mutations.iamProfileManager,
         variables: { instanceId: serverId }
       });
     });
 
-    if (result.data.fixServerRole) {
+    if (result.data.iamProfileManager) {
       handleActionComplete('IAM role fixed successfully', true);
       // Refresh server list to update IAM status
       try {
-        await serverStore.listServers();
+        await serverStore.ec2Discovery();
       } catch (refreshError) {
         console.error('Error refreshing server list:', refreshError);
         // Don't show error to user since the main operation succeeded
@@ -162,7 +162,7 @@ function handleServerCreated() {
   handleActionComplete('Server creation completed! Refreshing server list...', true);
   
   // Refresh server list when a new server is created
-  serverStore.listServers().then(() => {
+  serverStore.ec2Discovery().then(() => {
     // Additional success feedback after refresh
     console.log('Server list refreshed after creation');
   }).catch((error) => {
@@ -182,7 +182,7 @@ function handleComponentError({ error, instance, info }) {
 onMounted(async () => {
   // Load server list with error handling
   try {
-    await serverStore.listServers();
+    await serverStore.ec2Discovery();
   } catch (error) {
     console.error('Error loading server list:', error);
     const errorMessage = parseGraphQLError(error);

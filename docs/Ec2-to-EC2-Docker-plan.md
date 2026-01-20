@@ -248,11 +248,11 @@ PK: SERVER#{ebs_volume_id}
 - Container discovery across instances
 
 ### Task 5: Server Action Processing
-**Objective**: Update serverActionProcessor for Docker operations with EBS volume IDs
+**Objective**: Update ec2ActionWorker for Docker operations with EBS volume IDs
 
 **Sub-tasks:**
 5.1. **Update Action Processing Logic**
-   - Modify `serverActionProcessor` to use EBS volume IDs
+   - Modify `ec2ActionWorker` to use EBS volume IDs
    - Replace EC2 operations with Docker container operations
    - Update action routing and parameter handling
    - Maintain backward compatibility during transition
@@ -294,7 +294,7 @@ PK: SERVER#{ebs_volume_id}
 - Error handling for Docker-specific issues
 
 ### Task 6: Server Discovery and Listing
-**Objective**: Update listServers for multi-instance Docker discovery with EBS volume mapping
+**Objective**: Update ec2Discovery for multi-instance Docker discovery with EBS volume mapping
 
 **Sub-tasks:**
 6.1. **Update User Permission Resolution**
@@ -356,7 +356,7 @@ PK: SERVER#{ebs_volume_id}
    - Add container-specific metrics (ContainerHealth)
 
 7.3. **Update Metric Collection Lambda**
-   - Modify `eventResponse` Lambda for Docker metrics
+   - Modify `ec2StateHandler` Lambda for Docker metrics
    - Update metric parsing for new dimensions
    - Add EBS volume ID extraction from metrics
    - Update GraphQL subscription publishing

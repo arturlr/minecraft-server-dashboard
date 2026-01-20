@@ -34,10 +34,10 @@ All ServerConfig GraphQL fields now stored in DynamoDB:
 **Infrastructure Changes:**
 - Added `SERVERS_TABLE_NAME` to Globals environment variables
 - Added `DynLayer` to Lambda functions:
-  - `ListServers`
-  - `ServerActionProcessor`
+  - `ec2Discovery`
+  - `ec2ActionWorker`
 - Added `DynamoDBCrudPolicy` for ServersTable access
-- Removed EC2 tag permissions (DeleteTags, CreateTags) from ServerActionProcessor
+- Removed EC2 tag permissions (DeleteTags, CreateTags) from ec2ActionWorker
 
 ### 4. EC2 Instance Creation (`layers/ec2Helper/ec2Helper.py`)
 **Enhanced:**

@@ -49,17 +49,17 @@ export const useServerStore = defineStore("server", {
     },
 
     actions: {
-        async listServers() {
+        async ec2Discovery() {
             try {
-                console.group("listServers");
+                console.group("ec2Discovery");
 
                 this.loading = true
 
                 const results = await client.graphql({
-                    query: queries.listServers
+                    query: queries.ec2Discovery
                 });
 
-                if (results.data.listServers === null || results.data.listServers.length === 0) {
+                if (results.data.ec2Discovery === null || results.data.ec2Discovery.length === 0) {
                     console.warn("No servers found");
                     console.groupEnd();
                     this.loading = false
@@ -69,7 +69,7 @@ export const useServerStore = defineStore("server", {
                 // Populating serversDict and serversList
                 this.serversDict = {};
                 this.serversList = [];
-                results.data.listServers.forEach(({ id, name, memSize, diskSize, vCpus, state, initStatus, iamStatus, publicIp, launchTime, runningMinutes, runningMinutesCacheTimestamp, groupMembers }) => {
+                results.data.ec2Discovery.forEach(({ id, name, memSize, diskSize, vCpus, state, initStatus, iamStatus, publicIp, launchTime, runningMinutes, runningMinutesCacheTimestamp, groupMembers }) => {
                     const server = { id, name, memSize, diskSize, vCpus, state, initStatus, iamStatus, publicIp, launchTime, runningMinutes, runningMinutesCacheTimestamp, groupMembers };
                     this.serversDict[id] = server;
                     this.serversList.push(server);
@@ -77,10 +77,10 @@ export const useServerStore = defineStore("server", {
 
                 console.groupEnd();
                 this.loading = false
-                return results.data.listServers;
+                return results.data.ec2Discovery;
 
             } catch (error) {
-                console.error('Error in listServers:', error);
+                console.error('Error in ec2Discovery:', error);
                 const errorMessage = parseGraphQLError(error);
                 console.error('Parsed error:', errorMessage);
                 this.loading = false

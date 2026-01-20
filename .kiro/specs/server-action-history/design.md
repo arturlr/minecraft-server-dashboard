@@ -25,29 +25,29 @@ The Server Action History feature provides users with a comprehensive, chronolog
        ▼                         ▼
 ┌──────────────┐         ┌──────────────────┐
 │ Lambda       │         │  DynamoDB        │
-│ Resolvers    │◄────────┤  ServerAction    │
+│ Resolvers    │◄────────┤  ec2ActionValidator    │
 └──────────────┘         │  History Table   │
        ▲                 └──────────────────┘
        │
        │ Write Events
        │
 ┌──────────────────────────────────┐
-│  ServerAction Lambda             │
+│  ec2ActionValidator Lambda             │
 │  (Creates QUEUED events)         │
 └──────────────────────────────────┘
        ▲
        │
 ┌──────────────────────────────────┐
-│  ServerActionProcessor Lambda    │
+│  ec2ActionWorker Lambda    │
 │  (Updates event status)          │
 └──────────────────────────────────┘
 ```
 
 ### Data Flow
 
-1. **Event Creation**: When ServerAction Lambda queues an action to SQS, it creates a new event record in ServerActionHistory table with status "QUEUED"
-2. **Event Updates**: ServerActionProcessor Lambda updates the event record as it processes the action (PROCESSING → COMPLETED/FAILED)
-3. **Real-time Sync**: Status updates are sent to AppSync via putServerActionStatus mutation, triggering subscriptions
+1. **Event Creation**: When ec2ActionValidator Lambda queues an action to SQS, it creates a new event record in ec2ActionValidatorHistory table with status "QUEUED"
+2. **Event Updates**: ec2ActionWorker Lambda updates the event record as it processes the action (PROCESSING → COMPLETED/FAILED)
+3. **Real-time Sync**: Status updates are sent to AppSync via putec2ActionValidatorStatus mutation, triggering subscriptions
 4. **Frontend Display**: Vue component queries event history on mount and subscribes to real-time updates
 5. **Automatic Cleanup**: DynamoDB TTL automatically deletes events older than 365 days
 
@@ -55,7 +55,7 @@ The Server Action History feature provides users with a comprehensive, chronolog
 
 ### Backend Components
 
-#### 1. DynamoDB Table: ServerActionHistory
+#### 1. DynamoDB Table: ec2ActionValidatorHistory
 
 **Purpose**: Store all server action events with automatic expiration
 
@@ -92,7 +92,7 @@ Global Secondary Index:
 - Get specific event: GetItem by eventId
 - Update event status: UpdateItem by eventId
 
-#### 2. Lambda Function: Enhanced ServerAction
+#### 2. Lambda Function: Enhanced ec2ActionValidator
 
 **Purpose**: Create event records when queueing actions
 
@@ -100,7 +100,7 @@ Global Secondary Index:
 ```python
 def create_event_record(instance_id, action, user_email, parameters=None):
     """
-    Create a new event record in ServerActionHistory table
+    Create a new event record in ec2ActionValidatorHistory table
     
     Args:
         instance_id: EC2 instance ID
@@ -128,13 +128,13 @@ def create_event_record(instance_id, action, user_email, parameters=None):
     if parameters:
         item['parameters'] = parameters
     
-    dynamodb.put_item(TableName='ServerActionHistory', Item=item)
+    dynamodb.put_item(TableName='ec2ActionValidatorHistory', Item=item)
     return event_id
 ```
 
 **Integration Point**: Call `create_event_record()` after successfully queueing message to SQS
 
-#### 3. Lambda Function: Enhanced ServerActionProcessor
+#### 3. Lambda Function: Enhanced ec2ActionWorker
 
 **Purpose**: Update event records as actions progress
 
@@ -142,7 +142,7 @@ def create_event_record(instance_id, action, user_email, parameters=None):
 ```python
 def update_event_status(event_id, status, error_message=None):
     """
-    Update event status in ServerActionHistory table
+    Update event status in ec2ActionValidatorHistory table
     
     Args:
         event_id: UUID of event to update
@@ -169,7 +169,7 @@ def update_event_status(event_id, status, error_message=None):
             expr_attr_values[':error'] = error_message
     
     dynamodb.update_item(
-        TableName='ServerActionHistory',
+        TableName='ec2ActionValidatorHistory',
         Key={'eventId': event_id},
         UpdateExpression=update_expr,
         ExpressionAttributeNames=expr_attr_names,
@@ -194,7 +194,7 @@ def update_event_status(event_id, status, error_message=None):
 
 **New Type**:
 ```graphql
-type ServerActionEvent @aws_iam @aws_cognito_user_pools {
+type ec2ActionValidatorEvent @aws_iam @aws_cognito_user_pools {
     eventId: ID!
     instanceId: String!
     action: String!
@@ -216,7 +216,7 @@ type ServerActionEvent @aws_iam @aws_cognito_user_pools {
 #   {"state": "running", "timestamp": 1700000045}
 # ]
 
-input ServerActionEventFilter {
+input ec2ActionValidatorEventFilter {
     actionTypes: [String]
     statuses: [String]
     startDate: AWSTimestamp
@@ -227,30 +227,30 @@ input ServerActionEventFilter {
 **New Query**:
 ```graphql
 type Query {
-    getServerActionHistory(
+    getec2ActionValidatorHistory(
         instanceId: String!
-        filter: ServerActionEventFilter
+        filter: ec2ActionValidatorEventFilter
         limit: Int
         nextToken: String
-    ): ServerActionHistoryConnection @aws_cognito_user_pools
+    ): ec2ActionValidatorHistoryConnection @aws_cognito_user_pools
 }
 
-type ServerActionHistoryConnection {
-    items: [ServerActionEvent]
+type ec2ActionValidatorHistoryConnection {
+    items: [ec2ActionValidatorEvent]
     nextToken: String
 }
 ```
 
-**Lambda Resolver**: New Lambda function `getServerActionHistory` that:
+**Lambda Resolver**: New Lambda function `getec2ActionValidatorHistory` that:
 1. Validates user authorization for the instance
-2. Queries ServerActionHistory table using instanceId-queuedAt-index
+2. Queries ec2ActionValidatorHistory table using instanceId-queuedAt-index
 3. Applies optional filters (action types, statuses, date range)
 4. Calculates duration for completed events
 5. Returns paginated results (default 100, max 500)
 
 ### Frontend Components
 
-#### 1. Vue Component: ServerActionHistory.vue
+#### 1. Vue Component: ec2ActionValidatorHistory.vue
 
 **Purpose**: Display event history for a specific server
 
@@ -276,12 +276,12 @@ type ServerActionHistoryConnection {
 **Methods**:
 ```javascript
 async loadHistory() {
-  // Query getServerActionHistory with current filters
+  // Query getec2ActionValidatorHistory with current filters
 }
 
 subscribeToUpdates() {
-  // Subscribe to both onPutServerActionStatus and onChangeState for this server
-  // onPutServerActionStatus: Updates event status (QUEUED/PROCESSING/COMPLETED/FAILED)
+  // Subscribe to both onPutec2ActionValidatorStatus and onChangeState for this server
+  // onPutec2ActionValidatorStatus: Updates event status (QUEUED/PROCESSING/COMPLETED/FAILED)
   // onChangeState: Updates event with EC2 state transitions (pending/running/stopping/stopped)
   // Update matching event in events array when any update received
   // Store intermediate states in event.intermediateStates array for timeline visualization
@@ -406,18 +406,18 @@ applyFilters() {
 
 **ServerSettings.vue Enhancement**:
 - Add a tab or section for "Action History"
-- Include `<ServerActionHistory :server-id="serverId" />` component
+- Include `<ec2ActionValidatorHistory :server-id="serverId" />` component
 
 **ServerStatsDialog.vue Enhancement**:
 - Add "History" tab alongside "Stats" and "Charts"
-- Display ServerActionHistory component in history tab
+- Display ec2ActionValidatorHistory component in history tab
 
 ## Data Models
 
-### ServerActionEvent Model
+### ec2ActionValidatorEvent Model
 
 ```typescript
-interface ServerActionEvent {
+interface ec2ActionValidatorEvent {
   eventId: string;           // UUID
   instanceId: string;        // EC2 instance ID
   action: ActionType;        // Enum: start, stop, restart, config, fixRole, addUser
@@ -452,7 +452,7 @@ enum EventStatus {
 ### Filter Model
 
 ```typescript
-interface ServerActionEventFilter {
+interface ec2ActionValidatorEventFilter {
   actionTypes?: ActionType[];
   statuses?: EventStatus[];
   startDate?: number;  // Unix timestamp
@@ -529,7 +529,7 @@ interface ServerActionEventFilter {
 *For any* status update received via subscription (including intermediate statuses from EC2 state changes), if an event with matching instanceId and action exists in the displayed list, that event SHALL be updated with the new status information
 **Validates: Requirements 6.2**
 
-**Note**: This property ensures that all GraphQL status updates (from both `onPutServerActionStatus` and `onChangeState` subscriptions) are reflected in the event history, providing complete visibility into the action lifecycle including EC2 state transitions (pending → running, stopping → stopped, etc.).
+**Note**: This property ensures that all GraphQL status updates (from both `onPutec2ActionValidatorStatus` and `onChangeState` subscriptions) are reflected in the event history, providing complete visibility into the action lifecycle including EC2 state transitions (pending → running, stopping → stopped, etc.).
 
 ### Property 17: New event positioning
 *For any* newly created event, it SHALL appear at index 0 in the displayed event list (top position)
@@ -544,11 +544,11 @@ interface ServerActionEventFilter {
 **Validates: Requirements 7.5**
 
 ### Property 20: Query result structure
-*For any* valid getServerActionHistory query, the result SHALL be a list where each item conforms to the ServerActionEvent type structure
+*For any* valid getec2ActionValidatorHistory query, the result SHALL be a list where each item conforms to the ec2ActionValidatorEvent type structure
 **Validates: Requirements 8.2**
 
 ### Property 21: Unfiltered query completeness
-*For any* getServerActionHistory query with no filters, all events for the specified instanceId SHALL be returned, ordered by queuedAt descending
+*For any* getec2ActionValidatorHistory query with no filters, all events for the specified instanceId SHALL be returned, ordered by queuedAt descending
 **Validates: Requirements 8.4**
 
 ### Property 22: Current user display
@@ -619,7 +619,7 @@ interface ServerActionEventFilter {
 ### Frontend Error Scenarios
 
 1. **Query Failure**
-   - **Scenario**: getServerActionHistory query fails
+   - **Scenario**: getec2ActionValidatorHistory query fails
    - **Handling**: Display error message, provide retry button
    - **User Impact**: "Unable to load event history. Please try again."
 
@@ -797,7 +797,7 @@ We will use **Hypothesis** (Python) for backend property tests and **fast-check*
 
 2. **Deployment Order**:
    - Deploy DynamoDB table first
-   - Deploy Lambda updates (ServerAction, ServerActionProcessor)
+   - Deploy Lambda updates (ec2ActionValidator, ec2ActionWorker)
    - Deploy GraphQL schema and resolvers
    - Deploy frontend updates
    - No downtime required
@@ -805,7 +805,7 @@ We will use **Hypothesis** (Python) for backend property tests and **fast-check*
 3. **Rollback Plan**:
    - If issues occur, disable event creation in Lambda (feature flag)
    - Frontend gracefully handles empty event history
-   - Can delete ServerActionHistory table if needed (no dependencies)
+   - Can delete ec2ActionValidatorHistory table if needed (no dependencies)
 
 ## Dependencies
 
@@ -830,7 +830,7 @@ We will use **Hypothesis** (Python) for backend property tests and **fast-check*
 ### Internal Dependencies
 
 - `utilHelper.check_authorization()`: Verify user access to server
-- `ServerActionStatus` subscription: Reuse existing subscription infrastructure
+- `ec2ActionValidatorStatus` subscription: Reuse existing subscription infrastructure
 - Server store (`dashboard/src/stores/server.js`): Add event history methods
 
 ## Future Enhancements

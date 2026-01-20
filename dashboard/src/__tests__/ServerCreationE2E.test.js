@@ -30,12 +30,12 @@ describe('Server Creation End-to-End Integration', () => {
       expect(serverStore.serversList).toHaveLength(0);
       expect(serverStore.serversDict).toEqual({});
 
-      // Step 2: Mock initial listServers call (empty)
+      // Step 2: Mock initial ec2Discovery call (empty)
       mockGraphQLClient.graphql.mockResolvedValueOnce({
-        data: { listServers: [] }
+        data: { ec2Discovery: [] }
       });
 
-      await serverStore.listServers();
+      await serverStore.ec2Discovery();
       expect(serverStore.serversList).toHaveLength(0);
 
       // Step 3: Simulate server creation process
@@ -43,7 +43,7 @@ describe('Server Creation End-to-End Integration', () => {
       const newServerId = 'i-1234567890abcdef0';
       const newServerName = 'my-minecraft-server';
 
-      // Step 4: Mock listServers call after creation (includes new server)
+      // Step 4: Mock ec2Discovery call after creation (includes new server)
       const newServer = {
         id: newServerId,
         name: newServerName,
@@ -61,11 +61,11 @@ describe('Server Creation End-to-End Integration', () => {
       };
 
       mockGraphQLClient.graphql.mockResolvedValueOnce({
-        data: { listServers: [newServer] }
+        data: { ec2Discovery: [newServer] }
       });
 
       // Step 5: Simulate server list refresh after creation (triggered by server-created event)
-      await serverStore.listServers();
+      await serverStore.ec2Discovery();
 
       // Step 6: Verify new server appears in list
       expect(serverStore.serversList).toHaveLength(1);
@@ -143,10 +143,10 @@ describe('Server Creation End-to-End Integration', () => {
       ];
 
       mockGraphQLClient.graphql.mockResolvedValueOnce({
-        data: { listServers: existingServers }
+        data: { ec2Discovery: existingServers }
       });
 
-      await serverStore.listServers();
+      await serverStore.ec2Discovery();
       expect(serverStore.serversList).toHaveLength(2);
 
       // Step 2: Add new server after creation
@@ -168,11 +168,11 @@ describe('Server Creation End-to-End Integration', () => {
 
       const allServers = [...existingServers, newServer];
       mockGraphQLClient.graphql.mockResolvedValueOnce({
-        data: { listServers: allServers }
+        data: { ec2Discovery: allServers }
       });
 
       // Step 3: Refresh server list
-      await serverStore.listServers();
+      await serverStore.ec2Discovery();
 
       // Step 4: Verify all servers are present
       expect(serverStore.serversList).toHaveLength(3);
@@ -191,17 +191,17 @@ describe('Server Creation End-to-End Integration', () => {
     it('should handle server creation failure gracefully', async () => {
       // Step 1: Initial state
       mockGraphQLClient.graphql.mockResolvedValueOnce({
-        data: { listServers: [] }
+        data: { ec2Discovery: [] }
       });
 
-      await serverStore.listServers();
+      await serverStore.ec2Discovery();
       expect(serverStore.serversList).toHaveLength(0);
 
       // Step 2: Simulate server list refresh failure after creation attempt
       mockGraphQLClient.graphql.mockRejectedValueOnce(new Error('Network error'));
 
       // Step 3: Attempt to refresh server list
-      await expect(serverStore.listServers()).rejects.toThrow('Network error');
+      await expect(serverStore.ec2Discovery()).rejects.toThrow('Network error');
 
       // Step 4: Verify store state remains consistent
       expect(serverStore.loading).toBe(false);

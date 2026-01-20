@@ -8,7 +8,7 @@ A generic, asynchronous system for executing SSM documents on EC2 instances with
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ Any Lambda (eventResponse, serverAction, etc.)             │
+│ Any Lambda (ec2StateHandler, ec2ActionValidator, etc.)             │
 │ - Calls ssmHelper.queue_ssm_command()                      │
 └────────────────────┬────────────────────────────────────────┘
                      │
@@ -22,7 +22,7 @@ A generic, asynchronous system for executing SSM documents on EC2 instances with
                      │
                      ▼
 ┌─────────────────────────────────────────────────────────────┐
-│ Lambda: SSMCommandProcessor                                 │
+│ Lambda: ssmCommandWorker                                 │
 │ - Checks instance readiness (10 attempts, 30s intervals)   │
 │ - Sends SSM command when ready                              │
 │ - Updates status in logs                                    │
@@ -46,7 +46,7 @@ A generic, asynchronous system for executing SSM documents on EC2 instances with
 - Message retention: 14 days
 - For manual investigation of failed commands
 
-### 2. Lambda: SSMCommandProcessor
+### 2. Lambda: ssmCommandWorker
 
 **Timeout:** 900 seconds (15 minutes)
 **Retry Logic:** 10 attempts with 30-second intervals
@@ -119,7 +119,7 @@ ssm_helper.queue_powershell_script(
   "timeoutSeconds": 3600,
   "metadata": {
     "purpose": "custom-task",
-    "requestedBy": "eventResponse",
+    "requestedBy": "ec2StateHandler",
     "queuedAt": "2025-11-26T10:00:00Z"
   }
 }
@@ -130,7 +130,7 @@ ssm_helper.queue_powershell_script(
 ### Example 1: Bootstrap New Instance
 
 ```python
-# In eventResponse Lambda
+# In ec2StateHandler Lambda
 import ssmHelper
 
 ssm_helper = ssmHelper.SSMHelper()
@@ -219,9 +219,9 @@ ssm_helper.queue_ssm_command(
 
 ### CloudWatch Logs
 
-**SSMCommandProcessor Logs:**
+**ssmCommandWorker Logs:**
 ```
-/aws/lambda/msd-dev-ssmCommandProcessor
+/aws/lambda/msd-dev-ssmCommandWorker
 ```
 
 **Key Log Messages:**
@@ -271,7 +271,7 @@ SSMCommandDLQAlarm:
 **Resolution:**
 ```bash
 # Check Lambda logs
-aws logs tail /aws/lambda/msd-dev-ssmCommandProcessor --follow
+aws logs tail /aws/lambda/msd-dev-ssmCommandWorker --follow
 
 # Check queue attributes
 aws sqs get-queue-attributes \
@@ -343,7 +343,7 @@ aws ec2 describe-instances \
 
 ### IAM Permissions
 
-**SSMCommandProcessor Lambda needs:**
+**ssmCommandWorker Lambda needs:**
 ```yaml
 - ssm:SendCommand
 - ssm:GetCommandInvocation
