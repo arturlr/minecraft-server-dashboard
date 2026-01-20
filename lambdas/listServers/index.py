@@ -39,8 +39,7 @@ def get_user_instances(user_sub, app_value):
             return user_instances
         
         # Get user server memberships
-        user_data = core_dyn.get_user_permissions(user_sub)
-        user_memberships = user_data.get('server_roles', [])
+        user_memberships = core_dyn.list_user_servers(user_sub)
         
         if not user_memberships:
             logger.info(f"User has no server memberships: {user_sub}")

@@ -175,6 +175,23 @@ class CoreTableDyn:
         response = self.table.get_item(Key={'PK': f'USER#{user_id}', 'SK': 'ADMIN'})
         return 'Item' in response
 
+    def list_user_servers(self, user_id):
+        """List all servers a user has access to."""
+        response = self.table.query(
+            KeyConditionExpression=Key('PK').eq(f'USER#{user_id}') & Key('SK').begins_with('SERVER#')
+        )
+        
+        servers = []
+        for item in response.get('Items', []):
+            server_id = item['SK'].replace('SERVER#', '')
+            servers.append({
+                'serverId': server_id,
+                'role': item.get('role'),
+                'permissions': item.get('permissions', [])
+            })
+        
+        return servers
+
     def list_server_members(self, server_id):
         """List all members of a server using GSI."""
         response = self.table.query(
