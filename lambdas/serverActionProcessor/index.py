@@ -737,8 +737,10 @@ def handler(event, context):
                 #                      context={'operation': 'handler', 'message_id': message_id},
                 #                      error='Message processing failed')
                 # Message will be retried or sent to DLQ based on SQS configuration
+                logger.error('SQS INTERNAL_ERROR')
             else:
                 logger.info(f"Message processing SUCCESS: messageId={message_id}")
+                return None
                 
         except Exception as e:
             # ErrorHandler.log_error('INTERNAL_ERROR',
