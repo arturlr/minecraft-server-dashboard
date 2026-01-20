@@ -844,6 +844,8 @@ def handler(event, context):
         if not event.get("arguments"):
             logger.error("No arguments found in the event")
             return utl.response(400, {"err": "No arguments found in the event"})
+
+        logger.info(event)
         
         # Handle special operations (no instance ID required)
         field_name = event["info"]["fieldName"].lower()
@@ -866,7 +868,7 @@ def handler(event, context):
         logger.info("Received instanceId: %s", instance_id)
         logger.info("Received field name: %s for user %s", event["info"]["fieldName"], user_attributes["email"])
         
-        # Route instance operations
+        # Route instance operations        
         return route_instance_operation(event, instance_id, user_attributes)
         
     except Exception as e:

@@ -720,6 +720,7 @@ Resources:
       Layers:
         - !Ref Ec2Layer
         - !Ref DdbLayer
+        - !Ref SsmLayer
       Events:
         EC2StateChange:
           Type: EventBridgeRule
