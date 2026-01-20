@@ -12,7 +12,7 @@ Globals:
     Environment:
       Variables:
         CORE_TABLE_NAME:
-          Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTableName"   
+          Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTable"   
         TAG_APP_VALUE: !Ref AppValue
         APP_NAME: !Ref ProjectName
         ENVIRONMENT_NAME: !Ref EnvironmentName
@@ -86,9 +86,9 @@ Resources:
               Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-LogAuditTable"
           CoreTable:
             TableName:
-              Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTableName"
+              Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTable"
             TableArn:
-              Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTableName"
+              Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTable"
         Lambda:
           ListServersDataSource:
             FunctionArn: !GetAtt ListServers.Arn
@@ -524,7 +524,7 @@ Resources:
                 - dynamodb:UpdateItem
                 - dynamodb:Query
               Resource:
-                Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTableName"
+                Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTable"
       Environment:
         Variables:
           APPSYNC_URL: !GetAtt GraphQLAPI.GraphQLUrl
@@ -585,12 +585,19 @@ Resources:
         - arn:aws:iam::aws:policy/AmazonCognitoReadOnly
         - SSMParameterReadPolicy:
             ParameterName: !Sub "${ProjectName}*"
-        - DynamoDBCrudPolicy:
-            TableName:
-              Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTableName"
-        - DynamoDBCrudPolicy:
-            TableName:
-              Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-LogAuditTableName"
+        - Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+                - dynamodb:UpdateItem
+                - dynamodb:DeleteItem
+                - dynamodb:Query
+                - dynamodb:Scan
+              Resource:
+                - Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTable"
+                - Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-LogAuditTable"
         - Version: "2012-10-17" # Policy Document
           Statement:
             - Effect: Allow
@@ -626,9 +633,18 @@ Resources:
         - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
         - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess
         - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
-        - DynamoDBCrudPolicy:
-            TableName:
-              Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTableName"
+        - Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+                - dynamodb:UpdateItem
+                - dynamodb:DeleteItem
+                - dynamodb:Query
+                - dynamodb:Scan
+              Resource:
+                Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTable"
         - Version: "2012-10-17"
           Statement:
             - Effect: Allow
@@ -746,7 +762,7 @@ Resources:
                 - dynamodb:UpdateItem
                 - dynamodb:Query
               Resource:
-                Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTableName"
+                Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTable"
       Environment:
         Variables:
           APPSYNC_URL: !GetAtt GraphQLAPI.GraphQLUrl
@@ -773,12 +789,19 @@ Resources:
         - arn:aws:iam::aws:policy/AmazonCognitoReadOnly
         - SSMParameterReadPolicy:
             ParameterName: !Sub "${ProjectName}*"        
-        - DynamoDBCrudPolicy:
-            TableName:
-              Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTableName"
-        - DynamoDBCrudPolicy:
-            TableName:
-              Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-LogAuditTableName"
+        - Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+                - dynamodb:UpdateItem
+                - dynamodb:DeleteItem
+                - dynamodb:Query
+                - dynamodb:Scan
+              Resource:
+                - Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTable"
+                - Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-LogAuditTable"
         - Version: "2012-10-17" # Policy Document
           Statement:
             - Effect: Allow
@@ -880,9 +903,18 @@ Resources:
         - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
         - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
         - arn:aws:iam::aws:policy/AWSCloudTrail_ReadOnlyAccess
-        - DynamoDBCrudPolicy:
-            TableName:
-              Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTableName"
+        - Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+                - dynamodb:UpdateItem
+                - dynamodb:DeleteItem
+                - dynamodb:Query
+                - dynamodb:Scan
+              Resource:
+                Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTable"
 
   SSMCommandProcessor:
     Type: AWS::Serverless::Function
