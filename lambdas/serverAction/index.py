@@ -8,7 +8,7 @@ import authHelper
 import ec2Helper
 import utilHelper
 import ddbHelper
-from errorHandler import ErrorHandler
+# from errorHandler import ErrorHandler
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -454,10 +454,12 @@ def handle_add_user_to_server(instance_id, user_email, user_attributes):
         user_info = auth.find_user_by_email(user_email)
         
         if user_info is None:
-            ErrorHandler.log_error('USER_NOT_FOUND',
-                                 context={'operation': 'add_user_to_server', 'user_email': user_email, 'instance_id': instance_id},
-                                 email=user_email)
-            return ErrorHandler.create_error_response(404, 'USER_NOT_FOUND', email=user_email)
+            # ErrorHandler.log_error('USER_NOT_FOUND',
+            #                      context={'operation': 'add_user_to_server', 'user_email': user_email, 'instance_id': instance_id},
+            #                      email=user_email)
+            # return ErrorHandler.create_error_response(404, 'USER_NOT_FOUND', email=user_email)
+            logger.error('USER_NOT_FOUND')
+            return None
         
         user_sub = user_info['sub']
         logger.info(f"User found in Cognito: email={user_email}, sub={user_sub}")
@@ -486,20 +488,26 @@ def handle_add_user_to_server(instance_id, user_email, user_attributes):
         except ValueError as e:
             # Handle membership already exists error
             if "already exists" in str(e):
-                ErrorHandler.log_error('MEMBERSHIP_ALREADY_EXISTS',
-                                     context={'operation': 'add_user_to_server', 'user_email': user_email, 'instance_id': instance_id})
-                return ErrorHandler.create_error_response(409, 'MEMBERSHIP_ALREADY_EXISTS')
+                # ErrorHandler.log_error('MEMBERSHIP_ALREADY_EXISTS',
+                #                      context={'operation': 'add_user_to_server', 'user_email': user_email, 'instance_id': instance_id})
+                # return ErrorHandler.create_error_response(409, 'MEMBERSHIP_ALREADY_EXISTS')
+                logger.error('MEMBERSHIP_ALREADY_EXISTS')
+                return None
             else:
-                ErrorHandler.log_error('VALIDATION_ERROR',
-                                     context={'operation': 'add_user_to_server', 'user_email': user_email, 'instance_id': instance_id},
-                                     exception=e, error=str(e))
-                return ErrorHandler.create_error_response(400, 'VALIDATION_ERROR', error=str(e))
+                # ErrorHandler.log_error('VALIDATION_ERROR',
+                #                      context={'operation': 'add_user_to_server', 'user_email': user_email, 'instance_id': instance_id},
+                #                      exception=e, error=str(e))
+                # return ErrorHandler.create_error_response(400, 'VALIDATION_ERROR', error=str(e))
+                logger.error('VALIDATION_ERROR')
+                return None
         
     except Exception as e:
-        ErrorHandler.log_error('INTERNAL_ERROR',
-                             context={'operation': 'add_user_to_server', 'user_email': user_email, 'instance_id': instance_id},
-                             exception=e, error=str(e))
-        return ErrorHandler.create_error_response(500, 'INTERNAL_ERROR', error=str(e))    
+        # ErrorHandler.log_error('INTERNAL_ERROR',
+        #                      context={'operation': 'add_user_to_server', 'user_email': user_email, 'instance_id': instance_id},
+        #                      exception=e, error=str(e))
+        # return ErrorHandler.create_error_response(500, 'INTERNAL_ERROR', error=str(e))    
+        logger.error('INTERNAL_ERROR')
+        return None
 
 def handle_update_user_role(instance_id, user_id, new_role, requesting_user_attributes):
     """
@@ -526,22 +534,25 @@ def handle_update_user_role(instance_id, user_id, new_role, requesting_user_attr
         
         if not (requesting_user_access and requesting_user_access['role'] == 'admin') and not is_global_admin:
             logger.warning(f"Unauthorized role update attempt: requester={requesting_user_email}")
-            return ErrorHandler.create_error_response(403, 'INSUFFICIENT_PERMISSIONS', 
-                                                    error="Insufficient permissions. Admin role required.")
+            # return ErrorHandler.create_error_response(403, 'INSUFFICIENT_PERMISSIONS', 
+            #                                         error="Insufficient permissions. Admin role required.")
+            return None
         
         # Step 2: Prevent users from modifying their own admin role (lockout protection)
         if user_id == requesting_user_sub and requesting_user_access and requesting_user_access['role'] == 'admin' and new_role != 'admin':
             logger.warning(f"Self-admin-role modification blocked: user={requesting_user_email}")
-            return ErrorHandler.create_error_response(403, 'SELF_ADMIN_ROLE_PROTECTION', 
-                                                    error="Cannot modify your own admin role to prevent lockout")
+            # return ErrorHandler.create_error_response(403, 'SELF_ADMIN_ROLE_PROTECTION', 
+            #                                         error="Cannot modify your own admin role to prevent lockout")
+            return None
         
         # Step 3: Update the user's role
         try:
             # Get current membership to preserve email
             current_membership = core_dyn.check_user_server_access(user_id, instance_id)
-            if not current_membership:
-                return ErrorHandler.create_error_response(404, 'MEMBERSHIP_NOT_FOUND', 
-                                                        error="User membership not found")
+            # if not current_membership:
+            #     return ErrorHandler.create_error_response(404, 'MEMBERSHIP_NOT_FOUND', 
+            #                                             error="User membership not found")
+            return None
             
             # Create new membership with updated role
             permissions_map = {'admin': ['read', 'write', 'delete', 'manage_users'], 'moderator': ['read', 'write', 'restart'], 'viewer': ['read']}
@@ -568,15 +579,17 @@ def handle_update_user_role(instance_id, user_id, new_role, requesting_user_attr
         except ValueError as e:
             if "not found" in str(e):
                 logger.error(f"User membership not found for role update: user={user_id}, instance={instance_id}")
-                return ErrorHandler.create_error_response(404, 'USER_MEMBERSHIP_NOT_FOUND', 
-                                                        error=f"User membership not found for server {instance_id}")
+                # return ErrorHandler.create_error_response(404, 'USER_MEMBERSHIP_NOT_FOUND', 
+                #                                         error=f"User membership not found for server {instance_id}")
+                return None
             else:
                 logger.error(f"Validation error updating role: {str(e)}")
-                return ErrorHandler.create_error_response(400, 'VALIDATION_ERROR', error=str(e))
+                # return ErrorHandler.create_error_response(400, 'VALIDATION_ERROR', error=str(e))
+                return None
         
     except Exception as e:
         logger.error(f"Error updating user role: user={user_id}, instance={instance_id}, error={str(e)}", exc_info=True)
-        return ErrorHandler.create_error_response(500, 'INTERNAL_ERROR', error=f"An unexpected error occurred: {str(e)}")
+        # return ErrorHandler.create_error_response(500, 'INTERNAL_ERROR', error=f"An unexpected error occurred: {str(e)}")
 
 def handle_remove_user_from_server(instance_id, user_id, requesting_user_attributes):
     """
@@ -602,8 +615,9 @@ def handle_remove_user_from_server(instance_id, user_id, requesting_user_attribu
         
         if not (requesting_user_access and requesting_user_access['role'] == 'admin') and not is_global_admin:
             logger.warning(f"Unauthorized user removal attempt: requester={requesting_user_email}")
-            return ErrorHandler.create_error_response(403, 'INSUFFICIENT_PERMISSIONS', 
-                                                    error="Insufficient permissions. Admin role required.")
+            # return ErrorHandler.create_error_response(403, 'INSUFFICIENT_PERMISSIONS', 
+            #                                         error="Insufficient permissions. Admin role required.")
+            return None
         
         # Step 2: Prevent users from removing themselves if they're the only admin (lockout protection)
         if user_id == requesting_user_sub and requesting_user_access and requesting_user_access['role'] == 'admin':
@@ -612,8 +626,9 @@ def handle_remove_user_from_server(instance_id, user_id, requesting_user_attribu
             admin_members = [m for m in all_members if m.get('role') == 'admin']
             if len(admin_members) <= 1:
                 logger.warning(f"Self-removal blocked - only admin: user={requesting_user_email}")
-                return ErrorHandler.create_error_response(403, 'LAST_ADMIN_PROTECTION', 
-                                                        error="Cannot remove yourself as you are the only admin for this server")
+                # return ErrorHandler.create_error_response(403, 'LAST_ADMIN_PROTECTION', 
+                #                                         error="Cannot remove yourself as you are the only admin for this server")
+                return None
         
         # Step 3: Remove the user's membership
         try:
@@ -634,15 +649,18 @@ def handle_remove_user_from_server(instance_id, user_id, requesting_user_attribu
         except ValueError as e:
             if "not found" in str(e):
                 logger.error(f"User membership not found for removal: user={user_id}, instance={instance_id}")
-                return ErrorHandler.create_error_response(404, 'USER_MEMBERSHIP_NOT_FOUND', 
-                                                        error=f"User membership not found for server {instance_id}")
+                # return ErrorHandler.create_error_response(404, 'USER_MEMBERSHIP_NOT_FOUND', 
+                #                                         error=f"User membership not found for server {instance_id}")
+                return None
             else:
-                logger.error(f"Validation error removing user: {str(e)}")
-                return ErrorHandler.create_error_response(400, 'VALIDATION_ERROR', error=str(e))
+                # logger.error(f"Validation error removing user: {str(e)}")
+                # return ErrorHandler.create_error_response(400, 'VALIDATION_ERROR', error=str(e))
+                return None
         
     except Exception as e:
         logger.error(f"Error removing user from server: user={user_id}, instance={instance_id}, error={str(e)}", exc_info=True)
-        return ErrorHandler.create_error_response(500, 'INTERNAL_ERROR', error=f"An unexpected error occurred: {str(e)}")
+        return None
+        #return ErrorHandler.create_error_response(500, 'INTERNAL_ERROR', error=f"An unexpected error occurred: {str(e)}")
 
 def handle_get_server_config_old(instance_id):
     """Helper function to handle get server config action"""

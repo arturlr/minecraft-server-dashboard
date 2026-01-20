@@ -14,7 +14,7 @@ from botocore.auth import SigV4Auth
 from botocore.awsrequest import AWSRequest
 from botocore.httpsession import URLLib3Session
 from botocore.exceptions import ClientError
-from errorHandler import ErrorHandler
+# from errorHandler import ErrorHandler
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -338,24 +338,24 @@ def _parse_message(message_body):
         logger.info(f"Message parsed: action={message.get('action')}, instance={message.get('instanceId')}")
         return message
     except json.JSONDecodeError as e:
-        ErrorHandler.log_error('VALIDATION_ERROR',
-                             context={'operation': 'parse_message'},
-                             exception=e, error=str(e))
+        # ErrorHandler.log_error('VALIDATION_ERROR',
+        #                      context={'operation': 'parse_message'},
+        #                      exception=e, error=str(e))
         return None
 
 def _validate_message(message):
     """Validate required message fields"""
     if 'action' not in message:
-        ErrorHandler.log_error('VALIDATION_ERROR',
-                             context={'operation': 'validate_message'},
-                             error='Missing action field')
+        # ErrorHandler.log_error('VALIDATION_ERROR',
+        #                      context={'operation': 'validate_message'},
+        #                      error='Missing action field')
         return False
     
     action = message['action'].lower().strip()
     if action != 'createserver' and 'instanceId' not in message:
-        ErrorHandler.log_error('VALIDATION_ERROR',
-                             context={'operation': 'validate_message', 'action': action},
-                             error='Missing instanceId field')
+        # ErrorHandler.log_error('VALIDATION_ERROR',
+        #                      context={'operation': 'validate_message', 'action': action},
+        #                      error='Missing instanceId field')
         return False
     
     return True
@@ -376,14 +376,14 @@ def _route_action(action, instance_id, arguments, message):
             try:
                 return handler()
             except Exception as e:
-                ErrorHandler.log_error('INTERNAL_ERROR',
-                                     context={'operation': 'route_action', 'action': action, 'instance_id': instance_id},
-                                     exception=e, error=str(e))
+                # ErrorHandler.log_error('INTERNAL_ERROR',
+                #                      context={'operation': 'route_action', 'action': action, 'instance_id': instance_id},
+                #                      exception=e, error=str(e))
                 return False
     
-    ErrorHandler.log_error('VALIDATION_ERROR',
-                         context={'operation': 'route_action', 'action': action, 'instance_id': instance_id},
-                         error=f'Unknown action: {action}')
+    # ErrorHandler.log_error('VALIDATION_ERROR',
+    #                      context={'operation': 'route_action', 'action': action, 'instance_id': instance_id},
+    #                      error=f'Unknown action: {action}')
     return False
 
 def _send_status_update(action, instance_id, status, message, user_email):
@@ -392,9 +392,9 @@ def _send_status_update(action, instance_id, status, message, user_email):
         send_to_appsync(action, instance_id, status, message, user_email)
         logger.info(f"Status sent: {status}")
     except Exception as e:
-        ErrorHandler.log_error('NETWORK_ERROR',
-                             context={'operation': 'send_status_update', 'action': action, 'instance_id': instance_id},
-                             exception=e, error=str(e))
+        # ErrorHandler.log_error('NETWORK_ERROR',
+        #                      context={'operation': 'send_status_update', 'action': action, 'instance_id': instance_id},
+        #                      exception=e, error=str(e))
 
 def process_server_action(message_body):
     """Process server action from SQS message"""
@@ -732,14 +732,15 @@ def handler(event, context):
             success = process_server_action(record['body'])
             
             if not success:
-                ErrorHandler.log_error('INTERNAL_ERROR',
-                                     context={'operation': 'handler', 'message_id': message_id},
-                                     error='Message processing failed')
+                # ErrorHandler.log_error('INTERNAL_ERROR',
+                #                      context={'operation': 'handler', 'message_id': message_id},
+                #                      error='Message processing failed')
                 # Message will be retried or sent to DLQ based on SQS configuration
             else:
                 logger.info(f"Message processing SUCCESS: messageId={message_id}")
                 
         except Exception as e:
-            ErrorHandler.log_error('INTERNAL_ERROR',
-                                 context={'operation': 'handler', 'message_id': message_id},
-                                 exception=e, error=str(e))
+            # ErrorHandler.log_error('INTERNAL_ERROR',
+            #                      context={'operation': 'handler', 'message_id': message_id},
+            #                      exception=e, error=str(e))
+            return None
