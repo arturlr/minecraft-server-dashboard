@@ -395,6 +395,7 @@ def _send_status_update(action, instance_id, status, message, user_email):
         # ErrorHandler.log_error('NETWORK_ERROR',
         #                      context={'operation': 'send_status_update', 'action': action, 'instance_id': instance_id},
         #                      exception=e, error=str(e))
+        return None
 
 def process_server_action(message_body):
     """Process server action from SQS message"""

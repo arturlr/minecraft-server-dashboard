@@ -836,7 +836,7 @@ def handler(event, context):
         
         # Validate token and get user
         try:
-            user_attributes = authHelper.validate_user_token(token, auth)
+            user_attributes auth.process_token(token)
         except ValueError as e:
             return utl.response(401, {"err": str(e)})
         

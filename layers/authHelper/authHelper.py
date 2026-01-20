@@ -275,16 +275,19 @@ class Auth:
             # ErrorHandler.log_error('VALIDATION_ERROR',
             #                      context={'operation': 'find_user_by_email', 'email': email},
             #                      exception=e, error=str(e))
+            logger.error(str(e))
             return None
         except self.cognito_idp.exceptions.TooManyRequestsException:
             # ErrorHandler.log_error('NETWORK_ERROR',
             #                      context={'operation': 'find_user_by_email', 'email': email},
             #                      error='Rate limit exceeded when querying Cognito')
+            logger.error('Rate limit exceeded when querying Cognito')
             return None
         except Exception as e:
             # ErrorHandler.log_error('INTERNAL_ERROR',
             #                      context={'operation': 'find_user_by_email', 'email': email},
             #                      exception=e, error=str(e))
+            logger.error(str(e))
             return None
     
     def get_user_by_sub(self, user_sub):
@@ -341,16 +344,19 @@ class Auth:
             # ErrorHandler.log_error('VALIDATION_ERROR',
             #                      context={'operation': 'get_user_by_sub', 'user_sub': user_sub},
             #                      exception=e, error=str(e))
+            logger.error(str(e))
             return None
         except self.cognito_idp.exceptions.TooManyRequestsException:
             # ErrorHandler.log_error('NETWORK_ERROR',
             #                      context={'operation': 'get_user_by_sub', 'user_sub': user_sub},
             #                      error='Rate limit exceeded when querying Cognito')
+            logger.error('Rate limit exceeded when querying Cognito')
             return None
         except Exception as e:
             # ErrorHandler.log_error('INTERNAL_ERROR',
             #                      context={'operation': 'get_user_by_sub', 'user_sub': user_sub},
             #                      exception=e, error=str(e))
+            logger.error(str(e))
             return None
     
     def list_groups_for_user(self, username):
