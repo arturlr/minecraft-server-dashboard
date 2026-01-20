@@ -316,15 +316,15 @@ def send_to_appsync(action, instance_id, status, message=None, user_email=None):
         # Sign the request
         SigV4Auth(credentials, 'appsync', aws_region).add_auth(request)
         
-        # Send request
+        # Send request using prepared request
         http_session = URLLib3Session()
-        response = http_session.send(request)
+        response = http_session.send(request.prepare())
         
-        if response['status_code'] == 200:
+        if response.status_code == 200:
             logger.info(f"Status sent to AppSync: {status}")
             return True
         else:
-            logger.error(f"AppSync request failed: {response['status_code']} - {response['body']}")
+            logger.error(f"AppSync request failed: {response.status_code} - {response.content}")
             return False
             
     except Exception as e:

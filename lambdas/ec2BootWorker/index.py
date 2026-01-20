@@ -65,7 +65,7 @@ def get_server_info_from_ec2(instance_id):
         
         # Check if it's a Minecraft server
         tags = {tag['Key']: tag['Value'] for tag in instance.get('Tags', [])}
-        if tags.get('app') != os.getenv('TAG_APP_VALUE'):
+        if tags.get('App') != os.getenv('TAG_APP_VALUE'):
             return None
         
         return {
