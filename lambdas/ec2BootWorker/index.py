@@ -68,15 +68,16 @@ def get_server_info_from_ec2(instance_id):
         if tags.get('App') != os.getenv('TAG_APP_VALUE'):
             return None
         
-        return {
+        launch_time = instance.get('LaunchTime')
+        public_ip = instance.get('PublicIpAddress')
+        
+        server_info = {
             'id': instance_id,
             'name': tags.get('Name', instance_id),
             'state': instance['State']['Name'],
             'vCpus': instance.get('CpuOptions', {}).get('CoreCount', 0),
-            'memSize': 0,  # Would need instance type lookup
-            'diskSize': 0,  # Would need EBS volume lookup
-            'launchTime': instance.get('LaunchTime', '').isoformat() if instance.get('LaunchTime') else '',
-            'publicIp': instance.get('PublicIpAddress', ''),
+            'memSize': 0,
+            'diskSize': 0,
             'initStatus': 'pending',
             'iamStatus': 'checking',
             'configStatus': 'validating',
@@ -85,6 +86,14 @@ def get_server_info_from_ec2(instance_id):
             'configErrors': [],
             'autoConfigured': False
         }
+        
+        # Add optional fields only if they have values
+        if launch_time:
+            server_info['launchTime'] = launch_time.isoformat()
+        if public_ip:
+            server_info['publicIp'] = public_ip
+            
+        return server_info
     except Exception as e:
         logger.error(f"Error getting server info from EC2: {str(e)}")
         return None
