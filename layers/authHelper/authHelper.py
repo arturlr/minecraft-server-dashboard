@@ -5,7 +5,7 @@ import time
 import requests
 from jose import jwk, jwt
 from jose.utils import base64url_decode
-from errorHandler import ErrorHandler
+# from errorHandler import ErrorHandler
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -254,9 +254,9 @@ class Auth:
             
             # Verify the user has all required attributes
             if not all(key in user_attrs for key in ['sub', 'email']):
-                ErrorHandler.log_error('VALIDATION_ERROR',
-                                     context={'operation': 'find_user_by_email', 'email': email},
-                                     error='User found but missing required attributes')
+                # ErrorHandler.log_error('VALIDATION_ERROR',
+                #                      context={'operation': 'find_user_by_email', 'email': email},
+                #                      error='User found but missing required attributes')
                 return None
             
             # Get full name from attributes
@@ -272,19 +272,19 @@ class Auth:
             }
             
         except self.cognito_idp.exceptions.InvalidParameterException as e:
-            ErrorHandler.log_error('VALIDATION_ERROR',
-                                 context={'operation': 'find_user_by_email', 'email': email},
-                                 exception=e, error=str(e))
+            # ErrorHandler.log_error('VALIDATION_ERROR',
+            #                      context={'operation': 'find_user_by_email', 'email': email},
+            #                      exception=e, error=str(e))
             return None
         except self.cognito_idp.exceptions.TooManyRequestsException:
-            ErrorHandler.log_error('NETWORK_ERROR',
-                                 context={'operation': 'find_user_by_email', 'email': email},
-                                 error='Rate limit exceeded when querying Cognito')
+            # ErrorHandler.log_error('NETWORK_ERROR',
+            #                      context={'operation': 'find_user_by_email', 'email': email},
+            #                      error='Rate limit exceeded when querying Cognito')
             return None
         except Exception as e:
-            ErrorHandler.log_error('INTERNAL_ERROR',
-                                 context={'operation': 'find_user_by_email', 'email': email},
-                                 exception=e, error=str(e))
+            # ErrorHandler.log_error('INTERNAL_ERROR',
+            #                      context={'operation': 'find_user_by_email', 'email': email},
+            #                      exception=e, error=str(e))
             return None
     
     def get_user_by_sub(self, user_sub):
@@ -320,9 +320,9 @@ class Auth:
             
             # Verify the user has all required attributes
             if not all(key in user_attrs for key in ['sub', 'email']):
-                ErrorHandler.log_error('VALIDATION_ERROR',
-                                     context={'operation': 'get_user_by_sub', 'user_sub': user_sub},
-                                     error='User found but missing required attributes')
+                # ErrorHandler.log_error('VALIDATION_ERROR',
+                #                      context={'operation': 'get_user_by_sub', 'user_sub': user_sub},
+                #                      error='User found but missing required attributes')
                 return None
             
             # Get full name from attributes
@@ -338,19 +338,19 @@ class Auth:
             }
             
         except self.cognito_idp.exceptions.InvalidParameterException as e:
-            ErrorHandler.log_error('VALIDATION_ERROR',
-                                 context={'operation': 'get_user_by_sub', 'user_sub': user_sub},
-                                 exception=e, error=str(e))
+            # ErrorHandler.log_error('VALIDATION_ERROR',
+            #                      context={'operation': 'get_user_by_sub', 'user_sub': user_sub},
+            #                      exception=e, error=str(e))
             return None
         except self.cognito_idp.exceptions.TooManyRequestsException:
-            ErrorHandler.log_error('NETWORK_ERROR',
-                                 context={'operation': 'get_user_by_sub', 'user_sub': user_sub},
-                                 error='Rate limit exceeded when querying Cognito')
+            # ErrorHandler.log_error('NETWORK_ERROR',
+            #                      context={'operation': 'get_user_by_sub', 'user_sub': user_sub},
+            #                      error='Rate limit exceeded when querying Cognito')
             return None
         except Exception as e:
-            ErrorHandler.log_error('INTERNAL_ERROR',
-                                 context={'operation': 'get_user_by_sub', 'user_sub': user_sub},
-                                 exception=e, error=str(e))
+            # ErrorHandler.log_error('INTERNAL_ERROR',
+            #                      context={'operation': 'get_user_by_sub', 'user_sub': user_sub},
+            #                      exception=e, error=str(e))
             return None
     
     def list_groups_for_user(self, username):
