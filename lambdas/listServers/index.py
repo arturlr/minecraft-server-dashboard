@@ -14,11 +14,13 @@ logger.setLevel(logging.INFO)
 ec2_client = boto3.client('ec2')
 ec2 = boto3.resource('ec2')
 cognito_idp = boto3.client('cognito-idp')
+lambda_client = boto3.client('lambda')
 ENCODING = 'utf-8'
 
 appValue = os.getenv('TAG_APP_VALUE')
 cognito_pool_id = os.getenv('COGNITO_USER_POOL_ID')
 servers_table_name = os.getenv('SERVERS_TABLE_NAME')
+fix_server_role_lambda = os.getenv('FIX_SERVER_ROLE_LAMBDA_ARN')
 
 auth = authHelper.Auth(cognito_pool_id)
 ec2_utils = ec2Helper.Ec2Utils()
@@ -130,6 +132,19 @@ def fetch_parallel_data(instances):
     
     return instance_types, instance_status, config_validation
 
+def auto_fix_iam_if_needed(instance_id, iam_status):
+    """Automatically trigger IAM fix if status is not 'ok'."""
+    if iam_status != 'ok' and fix_server_role_lambda:
+        try:
+            logger.info(f"Auto-fixing IAM for instance {instance_id}")
+            lambda_client.invoke(
+                FunctionName=fix_server_role_lambda,
+                InvocationType='Event',  # Async invocation
+                Payload=f'{{"instanceId": "{instance_id}"}}'
+            )
+        except Exception as e:
+            logger.error(f"Failed to trigger IAM fix for {instance_id}: {str(e)}")
+
 def build_server_response(server, instance_types, instance_status, config_validation, user_email):
     """Build individual server response object."""
     instance_id = server['InstanceId']
@@ -141,6 +156,10 @@ def build_server_response(server, instance_types, instance_status, config_valida
     status = instance_status_future.result()
     config_validation_future = next(future for future in config_validation if future.result()['instanceId'] == instance_id)
     validation = config_validation_future.result()
+
+    # Auto-fix IAM if needed
+    iam_status = status['iamStatus'].lower()
+    auto_fix_iam_if_needed(instance_id, iam_status)
 
     # Extract server details
     instance_name = next((tag['Value'] for tag in server['Tags'] if tag['Key'] == 'Name'), 'Undefined')
@@ -164,7 +183,7 @@ def build_server_response(server, instance_types, instance_status, config_valida
         'diskSize': volume.size,
         'publicIp': public_ip,
         'initStatus': status['initStatus'].lower(),
-        'iamStatus': status['iamStatus'].lower(),
+        'iamStatus': 'fixing' if iam_status != 'ok' else 'ok',
         'launchTime': pst_launch_time.strftime("%m/%d/%Y - %H:%M:%S"),
         'runningMinutes': str(running_time_data['minutes']),
         'runningMinutesCacheTimestamp': running_time_data['timestamp'] or '',

@@ -172,12 +172,17 @@ def _extract_token(event):
     """Extract authorization token from event"""
     try:
         return event['request']['headers']['authorization']
-    except KeyError as e:
-        missing_key = str(e).strip("'")
-        raise ValueError(f"Missing {missing_key} in request")
+    except KeyError:
+        # No token for internal invocations
+        return None
 
 def _validate_arguments(event):
     """Validate and extract instance_id from arguments"""
+    # Check for direct invocation (from listServers)
+    if 'instanceId' in event:
+        return event['instanceId']
+    
+    # Check for AppSync invocation
     arguments = event.get("arguments")
     if not arguments:
         raise ValueError("No arguments found in the event")
@@ -214,14 +219,18 @@ def handler(event, context):
         # Extract and validate inputs
         token = _extract_token(event)
         instance_id = _validate_arguments(event)
-        user_attributes = _authenticate_user(token)
         
-        logger.info(f"Processing fixServerRole: instance={instance_id}, user={user_attributes['email']}")
-        
-        # Check authorization
-        if not check_authorization(event, instance_id, user_attributes):
-            logger.error(f"User {user_attributes['email']} not authorized for {instance_id}")
-            return utl.response(401, {"err": "User not authorized"})
+        # Skip authorization for internal invocations
+        if token:
+            user_attributes = _authenticate_user(token)
+            logger.info(f"Processing fixServerRole: instance={instance_id}, user={user_attributes['email']}")
+            
+            # Check authorization
+            if not check_authorization(event, instance_id, user_attributes):
+                logger.error(f"User {user_attributes['email']} not authorized for {instance_id}")
+                return utl.response(401, {"err": "User not authorized"})
+        else:
+            logger.info(f"Processing fixServerRole (internal): instance={instance_id}")
         
         # Fix IAM role
         message = _fix_iam_role(instance_id)
