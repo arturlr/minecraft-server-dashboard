@@ -588,14 +588,14 @@ class Ec2Utils:
                  
     def describe_instance_status(self, instance_id):
         logger.info(f"------- describe_instance_status: {instance_id}") 
-        iamStatus = 'Fail'
-        initStatus = 'Fail'
+        iamStatus = 'fail'
+        initStatus = 'fail'
 
         statusRsp = self.ec2_client.describe_instance_status(InstanceIds=[instance_id])
 
         if not statusRsp["InstanceStatuses"]:
-            instanceStatus =  "Fail" 
-            systemStatus = "Fail" 
+            instanceStatus =  "fail" 
+            systemStatus = "fail" 
         else:
             instanceStatus = statusRsp["InstanceStatuses"][0]["InstanceStatus"]["Status"]
             systemStatus = statusRsp["InstanceStatuses"][0]["SystemStatus"]["Status"]
@@ -603,6 +603,7 @@ class Ec2Utils:
         if instanceStatus == 'ok' and systemStatus == 'ok':
             initStatus = 'ok'
         
+        # Check IAM profile regardless of instance state
         iamProfile = self.describe_iam_profile(instance_id,"associated")
         if iamProfile is not None and iamProfile['Arn'] == self.ec2InstanceProfileArn:
             iamStatus = 'ok'

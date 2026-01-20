@@ -7,7 +7,7 @@ import logging
 import time
 import re
 from typing import Dict, Any, Optional
-from .errorHandler import ErrorHandler
+#from .errorHandler import ErrorHandler
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -166,38 +166,38 @@ class Utils:
                 logger.info(f"Using legacy authorization check: user={user_email}, instance={instance_id}, groups={cognito_groups}")
                 
                 # Log authorization attempt for legacy pattern
-                ErrorHandler.log_authorization_attempt(
-                    user_sub='legacy_user',
-                    server_id=instance_id,
-                    required_permission='legacy_check',
-                    success=False,
-                    reason='Using legacy Cognito groups authorization'
-                )
+                # ErrorHandler.log_authorization_attempt(
+                #     user_sub='legacy_user',
+                #     server_id=instance_id,
+                #     required_permission='legacy_check',
+                #     success=False,
+                #     reason='Using legacy Cognito groups authorization'
+                # )
                 
                 # Check if user is admin using old method
                 if self.admin_group_name in cognito_groups:
-                    ErrorHandler.log_authorization_attempt(
-                        user_sub='legacy_user',
-                        server_id=instance_id,
-                        required_permission='legacy_check',
-                        user_role='admin_group',
-                        success=True,
-                        reason='Admin group membership'
-                    )
+                    # ErrorHandler.log_authorization_attempt(
+                    #     user_sub='legacy_user',
+                    #     server_id=instance_id,
+                    #     required_permission='legacy_check',
+                    #     user_role='admin_group',
+                    #     success=True,
+                    #     reason='Admin group membership'
+                    # )
                     return True, "admin_group"
                     
                 # Check if user is in instance-specific group
                 if cognito_groups:
                     for group in cognito_groups:
                         if group == instance_id:
-                            ErrorHandler.log_authorization_attempt(
-                                user_sub='legacy_user',
-                                server_id=instance_id,
-                                required_permission='legacy_check',
-                                user_role='instance_group',
-                                success=True,
-                                reason='Instance group membership'
-                            )
+                            # ErrorHandler.log_authorization_attempt(
+                            #     user_sub='legacy_user',
+                            #     server_id=instance_id,
+                            #     required_permission='legacy_check',
+                            #     user_role='instance_group',
+                            #     success=True,
+                            #     reason='Instance group membership'
+                            # )
                             return True, "instance_group"
                 
                 # Check if user is the owner based on instance tags
@@ -210,29 +210,29 @@ class Utils:
                             
                             for tag in tags:
                                 if tag['Key'] == 'Owner' and tag['Value'] == user_email:
-                                    ErrorHandler.log_authorization_attempt(
-                                        user_sub='legacy_user',
-                                        server_id=instance_id,
-                                        required_permission='legacy_check',
-                                        user_role='instance_owner',
-                                        success=True,
-                                        reason='Instance owner tag match'
-                                    )
+                                    # ErrorHandler.log_authorization_attempt(
+                                    #     user_sub='legacy_user',
+                                    #     server_id=instance_id,
+                                    #     required_permission='legacy_check',
+                                    #     user_role='instance_owner',
+                                    #     success=True,
+                                    #     reason='Instance owner tag match'
+                                    # )
                                     return True, "instance_owner"
                     except Exception as e:
                         logger.warning(f"Error checking owner tag: {str(e)}")
-                        ErrorHandler.log_error('INTERNAL_ERROR', 
-                                             context={'operation': 'check_owner_tag', 'instance_id': instance_id},
-                                             exception=e, error=str(e))
+                        # ErrorHandler.log_error('INTERNAL_ERROR', 
+                        #                      context={'operation': 'check_owner_tag', 'instance_id': instance_id},
+                        #                      exception=e, error=str(e))
                 
                 # Not authorized - log the failure
-                ErrorHandler.log_authorization_attempt(
-                    user_sub='legacy_user',
-                    server_id=instance_id,
-                    required_permission='legacy_check',
-                    success=False,
-                    reason='No matching groups or owner tag'
-                )
+                # ErrorHandler.log_authorization_attempt(
+                #     user_sub='legacy_user',
+                #     server_id=instance_id,
+                #     required_permission='legacy_check',
+                #     success=False,
+                #     reason='No matching groups or owner tag'
+                # )
                 return False, "unauthorized"
                 
             else:
@@ -261,14 +261,14 @@ class Utils:
                     is_authorized, user_role, auth_reason = auth.check_user_permission(user_sub, server_id, required_permission)
                     
                     # Log the authorization attempt
-                    ErrorHandler.log_authorization_attempt(
-                        user_sub=user_sub,
-                        server_id=server_id,
-                        required_permission=required_permission,
-                        user_role=user_role,
-                        success=is_authorized,
-                        reason=auth_reason
-                    )
+                    # ErrorHandler.log_authorization_attempt(
+                    #     user_sub=user_sub,
+                    #     server_id=server_id,
+                    #     required_permission=required_permission,
+                    #     user_role=user_role,
+                    #     success=is_authorized,
+                    #     reason=auth_reason
+                    # )
                     
                     if is_authorized:
                         logger.info(f"Authorization granted: user={user_sub}, server={server_id}, role={user_role}")
@@ -282,9 +282,9 @@ class Utils:
                     logger.error(f"Authorization check failed: error={error_msg}")
                     
                     # Log the error with context
-                    ErrorHandler.log_error('AUTHORIZATION_FAILED',
-                                         context={'user_sub': user_sub, 'server_id': server_id, 'required_permission': required_permission},
-                                         exception=e, reason=str(e))
+                    # ErrorHandler.log_error('AUTHORIZATION_FAILED',
+                    #                      context={'user_sub': user_sub, 'server_id': server_id, 'required_permission': required_permission},
+                    #                      exception=e, reason=str(e))
                     
                     return False, None, error_msg
                     
@@ -293,9 +293,9 @@ class Utils:
             logger.error(f"Authorization check failed: error={error_msg}")
             
             # Log the error
-            ErrorHandler.log_error('AUTHORIZATION_FAILED',
-                                 context={'operation': 'check_user_authorization'},
-                                 exception=e, reason=str(e))
+            # ErrorHandler.log_error('AUTHORIZATION_FAILED',
+            #                      context={'operation': 'check_user_authorization'},
+            #                      exception=e, reason=str(e))
             
             # For backward compatibility, return the old format on error
             if isinstance(user_sub_or_groups, list):
