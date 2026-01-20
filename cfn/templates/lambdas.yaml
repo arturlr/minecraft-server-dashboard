@@ -34,7 +34,7 @@ Resources:
   ec2ActionValidatorQueue:
     Type: AWS::SQS::Queue
     Properties:
-      QueueName: !Sub "${ProjectName}-${EnvironmentName}-server-actions"
+      QueueName: !Sub "${ProjectName}-${EnvironmentName}-ec2-actions"
       VisibilityTimeout: 300
       MessageRetentionPeriod: 1209600
       RedrivePolicy:
@@ -44,13 +44,13 @@ Resources:
   ec2ActionValidatorDLQ:
     Type: AWS::SQS::Queue
     Properties:
-      QueueName: !Sub "${ProjectName}-${EnvironmentName}-server-actions-dlq"
+      QueueName: !Sub "${ProjectName}-${EnvironmentName}-ec2-actions-dlq"
       MessageRetentionPeriod: 1209600
 
   SSMCommandQueue:
     Type: AWS::SQS::Queue
     Properties:
-      QueueName: !Sub "${ProjectName}-${EnvironmentName}-ssm-commands"
+      QueueName: !Sub "${ProjectName}-${EnvironmentName}-ec2-ssm-commands"
       VisibilityTimeout: 900  # 15 minutes
       MessageRetentionPeriod: 86400  # 24 hours
       RedrivePolicy:
@@ -60,7 +60,7 @@ Resources:
   SSMCommandDLQ:
     Type: AWS::SQS::Queue
     Properties:
-      QueueName: !Sub "${ProjectName}-${EnvironmentName}-ssm-commands-dlq"
+      QueueName: !Sub "${ProjectName}-${EnvironmentName}-ec2-ssm-commands-dlq"
       MessageRetentionPeriod: 1209600  # 14 days
 
   GraphQLAPI:
