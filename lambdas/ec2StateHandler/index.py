@@ -7,7 +7,7 @@ from httpx_aws_auth import AwsSigV4Auth, AwsCredentials
 import ec2Helper
 import utilHelper
 import pytz
-from errorHandler import ErrorHandler
+# from errorHandler import ErrorHandler
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -93,9 +93,10 @@ def send_to_appsync(payload):
         )
         logger.info(response.json())
     except Exception as e:
-        ErrorHandler.log_error('NETWORK_ERROR',
-                             context={'operation': 'send_to_appsync'},
-                             exception=e, error=str(e))
+        # ErrorHandler.log_error('NETWORK_ERROR',
+        #                      context={'operation': 'send_to_appsync'},
+        #                      exception=e, error=str(e))
+        logger.error(str(e))
     
 def schedule_event_response():
     logger.info("------- schedule_event_response")
@@ -224,9 +225,10 @@ def handler(event, context):
     try:
         # Check if this is an EventBridge event
         if 'detail-type' not in event:
-            ErrorHandler.log_error('VALIDATION_ERROR',
-                                 context={'operation': 'handler'},
-                                 error='No detail-type found in event')
+            # ErrorHandler.log_error('VALIDATION_ERROR',
+            #                      context={'operation': 'handler'},
+            #                      error='No detail-type found in event')
+            logger.error("No detail-type found in event")
             return "No Event Found"
         
         detail_type = event['detail-type']
@@ -237,15 +239,17 @@ def handler(event, context):
         elif detail_type == "Scheduled Event":
             handle_scheduled_event()
         else:
-            ErrorHandler.log_error('VALIDATION_ERROR',
-                                 context={'operation': 'handler', 'detail_type': detail_type},
-                                 error=f'Unknown event type: {detail_type}')
+            # ErrorHandler.log_error('VALIDATION_ERROR',
+            #                      context={'operation': 'handler', 'detail_type': detail_type},
+            #                      error=f'Unknown event type: {detail_type}')
+            logger.error(f'Unknown event type: {detail_type}')
             return "No Event Found"
         
         return "Event Successfully processed"
         
     except Exception as e:
-        ErrorHandler.log_error('INTERNAL_ERROR',
-                             context={'operation': 'handler'},
-                             exception=e, error=str(e))
+        # ErrorHandler.log_error('INTERNAL_ERROR',
+        #                      context={'operation': 'handler'},
+        #                      exception=e, error=str(e))
+        logger.error(f"Error processing event: {str(e)}")
         return f"Error processing event: {str(e)}"
