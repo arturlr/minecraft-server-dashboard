@@ -41,9 +41,6 @@ class Utils:
             {'Name': 'InstanceId', 'Value': instance_id}
         ]
 
-        if metric_name == "cpu_usage_active":
-            dimensions.append({'Name': 'cpu', 'Value': "cpu-total"})
-
         try:
             response = cw_client.get_metric_statistics(
                 Namespace=namespace,

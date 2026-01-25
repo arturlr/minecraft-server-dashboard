@@ -116,8 +116,8 @@ def schedule_event_response():
     for instance in instances_running["Instances"]:
         instance_info = {
             'id': instance["InstanceId"],
-            'memStats': utl.get_metrics_data(instance["InstanceId"], 'CWAgent', 'mem_used_percent', 'Percent', 'Average', dt_start_time, dt_now, 60),
-            'cpuStats': utl.get_metrics_data(instance["InstanceId"], 'CWAgent', 'cpu_usage_active', 'Percent', 'Average', dt_start_time, dt_now, 60),
+            'memStats': utl.get_metrics_data(instance["InstanceId"], 'MinecraftDashboard', 'mem_usage', 'Percent', 'Average', dt_start_time, dt_now, 60),
+            'cpuStats': utl.get_metrics_data(instance["InstanceId"], 'MinecraftDashboard', 'cpu_usage', 'Percent', 'Average', dt_start_time, dt_now, 60),
             'networkStats': utl.get_metrics_data(instance["InstanceId"], 'MinecraftDashboard', 'transmit_bandwidth', 'Bytes/Second', 'Sum', dt_start_time, dt_now, 60),
             'activeUsers': utl.get_metrics_data(instance["InstanceId"], 'MinecraftDashboard', 'user_count', 'Count', 'Maximum', dt_start_time, dt_now, 60)
         }
