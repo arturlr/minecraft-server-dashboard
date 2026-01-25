@@ -82,8 +82,11 @@ def _format_schedule_expression(cron_expression, timezone='UTC'):
                     dow_parts.append(part)
             day_of_week = ','.join(dow_parts)
         
-        # EventBridge requires '?' for day when day_of_week is specified
-        if day_of_week != '*' and day_of_week != '?':
+        # EventBridge requires '?' for day when day_of_week is specified, or vice versa
+        # If both are '*', use '?' for day-of-month
+        if day_of_week == '*' and day == '*':
+            day = '?'
+        elif day_of_week != '*' and day_of_week != '?':
             day = '?'
         
         # Build 6-field EventBridge cron (add year)

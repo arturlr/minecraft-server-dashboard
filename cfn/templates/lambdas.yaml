@@ -776,6 +776,10 @@ Resources:
                 - dynamodb:Scan
               Resource:
                 - Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTable"
+                - Fn::Sub:
+                    - "${CoreTable}/index/*"
+                    - CoreTable:
+                        Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTable"
                 - Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-LogAuditTable"
         - Version: "2012-10-17" # Policy Document
           Statement:
