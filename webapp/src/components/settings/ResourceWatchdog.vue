@@ -58,8 +58,8 @@ watch(() => props.modelValue, (cfg) => {
   
   // If alarmThreshold > 0, CPU shutdown is enabled
   enabled.value = cfg.alarmThreshold > 0
-  threshold.value = cfg.alarmThreshold || 15
-  evaluationPeriod.value = cfg.alarmEvaluationPeriod || 10
+  threshold.value = Math.round(cfg.alarmThreshold) || 15
+  evaluationPeriod.value = Math.round(cfg.alarmEvaluationPeriod) || 10
   
   setTimeout(() => { isUpdatingFromProps = false }, 0)
 }, { immediate: true })

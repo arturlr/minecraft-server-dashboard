@@ -119,7 +119,7 @@ export const useServerStore = defineStore("server", {
         }
       }
       
-      console.log('Updated history for', serverId, this.metricsHistory[serverId])
+      // console.log('Updated history for', serverId, this.metricsHistory[serverId])
     },
 
     subscribeToMetrics(serverId) {

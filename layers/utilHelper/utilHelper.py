@@ -34,7 +34,7 @@ class Utils:
         return ' '.join(capitalized_words)
     
     def get_metrics_data(self, instance_id, namespace, metric_name, unit, statistics, start_time, end_time, period=300):
-        logger.info(f"get_metrics_data: {metric_name} - {instance_id}")
+        logger.info(f"------- get_metrics_data: {metric_name} - {instance_id}")
         cw_client = boto3.client('cloudwatch')
 
         dimensions = [
@@ -71,9 +71,9 @@ class Utils:
                 })
             
             if len(datapoints) > 0:
-                print(f"Fetched {len(datapoints)} points for {metric_name}. First: {datapoints[0]}, Last: {datapoints[-1]}")
+                logger.info(f"Fetched {len(datapoints)} points for {metric_name}. First: {datapoints[0]}, Last: {datapoints[-1]}")
             else:
-                print(f"No datapoints found for {metric_name} in namespace {namespace} with dimensions {dimensions}")
+                logger.warning(f"No datapoints found for {metric_name} in namespace {namespace} with dimensions {dimensions}")
 
             return json.dumps(sorted(datapoints, key=lambda x: x['x']))
 
