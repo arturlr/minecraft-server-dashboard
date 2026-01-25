@@ -1,23 +1,48 @@
 <template>
-  <v-card color="surface" class="border-green overflow-hidden" border="thin" :class="{ 'opacity-80': !server.online }">
+  <v-card color="surface" class="border-green overflow-hidden" border="thin" :class="{ 'opacity-80': !isRunning }">
     <!-- Hero Image -->
-    <div class="server-hero" :style="{ backgroundImage: `url(${server.image})` }" :class="{ grayscale: !server.online }">
+    <div class="server-hero" :style="{ backgroundImage: `url(${server.image})` }" :class="{ grayscale: !isRunning }">
       <div class="hero-overlay" />
-      <v-chip :color="server.online ? 'primary' : 'grey'" variant="flat" size="small" class="status-badge">
-        <span v-if="server.online" class="status-dot pulse" />
+      <v-chip :color="statusColor" variant="flat" size="small" class="status-badge">
+        <v-progress-circular v-if="isTransitioning" indeterminate size="12" width="2" class="mr-2" />
+        <span v-else-if="isRunning" class="status-dot pulse" />
         <span v-else class="status-dot offline" />
-        {{ server.online ? 'ONLINE' : 'OFFLINE' }}
+        {{ statusText }}
       </v-chip>
     </div>
 
     <div class="pa-5 d-flex flex-column ga-5">
       <!-- Header -->
       <div class="d-flex justify-space-between align-start">
-        <div>
-          <h3 class="text-white text-h6 font-weight-bold">{{ server.name }}</h3>
-          <div class="d-flex align-center ga-2 mt-1">
-            <span class="material-symbols-outlined text-muted" style="font-size: 16px">lan</span>
-            <span class="text-muted text-body-2 font-mono">{{ server.ip }}</span>
+        <div class="d-flex align-center ga-3">
+          <div class="d-flex ga-2">
+            <v-btn 
+              icon 
+              variant="text"
+              :loading="actionLoading" 
+              :disabled="isDisabled" 
+              @click="isRunning ? handleStop() : handleStart()"
+            >
+              <span class="material-symbols-outlined" :style="{ color: isRunning ? '#ef4444' : '#13ec5b' }">power_settings_new</span>
+            </v-btn>
+            <v-btn 
+              icon 
+              color="secondary"
+              variant="tonal"
+              :disabled="!isRunning || isDisabled"
+            >
+              <span class="material-symbols-outlined">restart_alt</span>
+            </v-btn>
+          </div>
+          <div>
+            <h3 class="text-white text-h6 font-weight-bold">{{ server.name }}</h3>
+            <div v-if="isRunning" class="d-flex align-center ga-2 mt-1">
+              <span class="material-symbols-outlined text-muted" style="font-size: 16px">lan</span>
+              <span class="text-muted text-body-2 font-mono">{{ server.ip }}</span>
+              <v-btn icon variant="text" size="x-small" @click="copyIpAddress">
+                <span class="material-symbols-outlined" style="font-size: 14px">content_copy</span>
+              </v-btn>
+            </div>
           </div>
         </div>
         <v-btn icon variant="text" size="small" color="secondary" @click="$emit('settings', server)">
@@ -25,93 +50,79 @@
         </v-btn>
       </div>
 
-      <!-- CPU & Memory Charts -->
-      <v-row dense :class="{ 'opacity-50': !server.online }">
-        <v-col cols="6">
-          <div class="metric-card">
-            <div class="d-flex justify-space-between text-caption text-muted mb-2">
-              <div class="d-flex align-center ga-1">
-                <span class="material-symbols-outlined" style="font-size: 14px">memory</span>
-                <span>CPU ({{ cpu.toFixed(1) }}%)</span>
+      <!-- Running Instance Metrics -->
+      <template v-if="isRunning">
+        <!-- CPU & Memory Charts -->
+        <v-row dense>
+          <v-col cols="6">
+            <div class="metric-card">
+              <div class="d-flex justify-space-between text-caption text-muted mb-2">
+                <div class="d-flex align-center ga-1">
+                  <span class="material-symbols-outlined" style="font-size: 14px">memory</span>
+                  <span>CPU ({{ cpu.toFixed(1) }}%)</span>
+                </div>
+                <span v-if="lastUpdate" class="text-grey">{{ lastUpdate }}</span>
               </div>
-              <span v-if="lastUpdate" class="text-grey">{{ lastUpdate }}</span>
+              <SparkLine :data="history.cpu" :width="130" :height="36" color="#13ec5b" />
             </div>
-            <SparkLine :data="history.cpu" :width="130" :height="36" color="#13ec5b" />
-          </div>
-        </v-col>
-        <v-col cols="6">
-          <div class="metric-card">
-            <div class="d-flex justify-space-between text-caption text-muted mb-2">
-              <div class="d-flex align-center ga-1">
-                <span class="material-symbols-outlined" style="font-size: 14px">hard_drive</span>
-                <span>Memory ({{ memory.toFixed(1) }}%)</span>
+          </v-col>
+          <v-col cols="6">
+            <div class="metric-card">
+              <div class="d-flex justify-space-between text-caption text-muted mb-2">
+                <div class="d-flex align-center ga-1">
+                  <span class="material-symbols-outlined" style="font-size: 14px">hard_drive</span>
+                  <span>Memory ({{ memory.toFixed(1) }}%)</span>
+                </div>
               </div>
+              <SparkLine :data="history.mem" :width="130" :height="36" color="#a855f7" />
             </div>
-            <SparkLine :data="history.mem" :width="130" :height="36" color="#a855f7" />
-          </div>
-        </v-col>
-      </v-row>
+          </v-col>
+        </v-row>
 
-      <!-- Metrics -->
-      <v-row dense :class="{ 'opacity-50': !server.online }">
-        <v-col cols="6">
-          <div class="metric-card">
-            <div class="d-flex justify-space-between align-center text-muted mb-1">
-              <div class="d-flex align-center ga-1">
-                <span class="material-symbols-outlined" style="font-size: 14px">group</span>
-                <span class="text-uppercase text-caption">Players</span>
+        <!-- Metrics -->
+        <v-row dense>
+          <v-col cols="6">
+            <div class="metric-card">
+              <div class="d-flex justify-space-between align-center text-muted mb-1">
+                <div class="d-flex align-center ga-1">
+                  <span class="material-symbols-outlined" style="font-size: 14px">group</span>
+                  <span class="text-uppercase text-caption">Players</span>
+                </div>
+                <span class="text-white text-caption font-weight-bold">{{ players }}</span>
               </div>
-              <span class="text-white text-caption font-weight-bold">{{ players }}</span>
+              <SparkLine :data="history.players || []" :width="110" :height="24" color="#60a5fa" />
             </div>
-            <SparkLine :data="history.players || []" :width="110" :height="24" color="#60a5fa" />
-          </div>
-        </v-col>
-        <v-col cols="6">
-          <div class="metric-card">
-            <div class="d-flex justify-space-between align-center text-muted mb-1">
-              <div class="d-flex align-center ga-1">
-                <span class="material-symbols-outlined" style="font-size: 14px">network_check</span>
-                <span class="text-uppercase text-caption">Network</span>
+          </v-col>
+          <v-col cols="6">
+            <div class="metric-card">
+              <div class="d-flex justify-space-between align-center text-muted mb-1">
+                <div class="d-flex align-center ga-1">
+                  <span class="material-symbols-outlined" style="font-size: 14px">network_check</span>
+                  <span class="text-uppercase text-caption">Network</span>
+                </div>
+                <span class="text-white text-caption font-weight-bold">{{ networkRx }}</span>
               </div>
-              <span class="text-white text-caption font-weight-bold">{{ networkRx }}</span>
+              <SparkLine :data="history.net" :width="110" :height="24" color="#3b82f6" />
             </div>
-            <SparkLine :data="history.net" :width="110" :height="24" color="#3b82f6" />
+          </v-col>
+        </v-row>
+      </template>
+
+      <!-- Inactive Instance Info -->
+      <template v-else>
+        <div class="inactive-panel">
+          <div class="d-flex align-center justify-center ga-2 text-muted">
+            <span class="material-symbols-outlined">power_settings_new</span>
+            <span class="text-body-2">Server is currently offline</span>
           </div>
-        </v-col>
-      </v-row>
+          <div v-if="server.instanceType" class="text-center text-caption text-muted mt-2">
+            {{ server.instanceType }}
+          </div>
+        </div>
+      </template>
 
       <!-- Actions -->
       <v-divider class="border-green" />
-      <v-row dense>
-        <v-col cols="6" sm="3">
-          <v-btn v-if="server.online" block color="error" variant="tonal" :loading="actionLoading" :disabled="actionLoading" @click="handleStop">
-            <span class="material-symbols-outlined">stop_circle</span>
-            <span class="ml-1">STOP</span>
-          </v-btn>
-          <v-btn v-else block color="primary" class="glow-primary" :loading="actionLoading" :disabled="actionLoading" @click="handleStart">
-            <span class="material-symbols-outlined">play_arrow</span>
-            <span class="ml-1">START</span>
-          </v-btn>
-        </v-col>
-        <v-col cols="6" sm="3">
-          <v-btn block variant="tonal" color="secondary" :disabled="!server.online || actionLoading">
-            <span class="material-symbols-outlined" style="font-size: 18px">restart_alt</span>
-            <span class="ml-1 text-caption">Restart</span>
-          </v-btn>
-        </v-col>
-        <v-col cols="6" sm="3">
-          <v-btn block variant="tonal" color="secondary" :disabled="actionLoading">
-            <span class="material-symbols-outlined" style="font-size: 18px">schedule</span>
-            <span class="ml-1 text-caption">Schedule</span>
-          </v-btn>
-        </v-col>
-        <v-col cols="6" sm="3">
-          <v-btn block variant="tonal" color="secondary" :disabled="actionLoading">
-            <span class="material-symbols-outlined" style="font-size: 18px">speed</span>
-            <span class="ml-1 text-caption">Limits</span>
-          </v-btn>
-        </v-col>
-      </v-row>
     </div>
   </v-card>
 </template>
@@ -129,6 +140,34 @@ const props = defineProps({
 const emit = defineEmits(['start', 'stop', 'settings'])
 
 const actionLoading = ref(false)
+
+// Server state computed properties
+const serverState = computed(() => props.server.state || 'stopped')
+const isRunning = computed(() => serverState.value === 'running')
+const isTransitioning = computed(() => ['pending', 'stopping', 'shutting-down'].includes(serverState.value))
+const isDisabled = computed(() => actionLoading.value || isTransitioning.value)
+
+const statusText = computed(() => {
+  const stateMap = {
+    'running': 'ONLINE',
+    'stopped': 'OFFLINE',
+    'pending': 'STARTING',
+    'stopping': 'STOPPING',
+    'shutting-down': 'STOPPING'
+  }
+  return stateMap[serverState.value] || serverState.value.toUpperCase()
+})
+
+const statusColor = computed(() => {
+  const colorMap = {
+    'running': 'primary',
+    'stopped': 'grey',
+    'pending': 'warning',
+    'stopping': 'warning',
+    'shutting-down': 'warning'
+  }
+  return colorMap[serverState.value] || 'grey'
+})
 
 const cpu = computed(() => props.metrics?.cpuStats || props.server.cpu || 0)
 const memory = computed(() => props.metrics?.memStats || 0)
@@ -165,6 +204,12 @@ const handleStop = async () => {
     setTimeout(() => { actionLoading.value = false }, 2000)
   }
 }
+
+const copyIpAddress = async () => {
+  const port = props.server.port || '25565'
+  const address = `${props.server.ip}:${port}`
+  await navigator.clipboard.writeText(address)
+}
 </script>
 
 <style scoped lang="scss">
@@ -200,6 +245,12 @@ const handleStop = async () => {
   border: 1px solid rgba(255,255,255,0.05);
   border-radius: 8px;
   padding: 12px;
+}
+.inactive-panel {
+  background: rgba(0,0,0,0.2);
+  border: 1px solid rgba(255,255,255,0.05);
+  border-radius: 8px;
+  padding: 24px;
 }
 .font-mono { font-family: monospace; }
 </style>

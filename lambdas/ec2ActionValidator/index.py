@@ -825,6 +825,11 @@ def handler(event, context):
     Validates authorization and routes requests to appropriate handlers
     """
     try:
+        # Check if this is an EventBridge scheduled event (no auth required)
+        if "action" in event and "instanceId" in event and "source" in event:
+            logger.info(f"EventBridge scheduled event detected: action={event['action']}, instance={event['instanceId']}")
+            return handle_local_invocation(event, context)
+        
         # Handle local invocation or extract token
         try:
             token = utl.extract_auth_token(event)

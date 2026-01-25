@@ -102,6 +102,7 @@ const mapServer = (server) => ({
   id: server.id,
   name: server.name || server.id,
   ip: server.publicIp ? `${server.publicIp}:25565` : 'Not assigned',
+  state: server.state || 'stopped',
   online: server.state === 'running',
   cpu: server.cpuStats || 0,
   players: server.activeUsers || 0,

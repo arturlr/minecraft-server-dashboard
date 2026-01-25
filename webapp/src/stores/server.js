@@ -87,6 +87,8 @@ export const useServerStore = defineStore("server", {
       const memValues = parseStat(m.memStats)
       const netValues = parseStat(m.networkStats)
       
+      console.log('Processing metrics for', serverId, { cpuValues, memValues, netValues, activeUsers: m.activeUsers })
+      
       // Get latest value for current metrics
       const latestCpu = cpuValues.length ? cpuValues[cpuValues.length - 1] : 0
       const latestMem = memValues.length ? memValues[memValues.length - 1] : 0
@@ -102,17 +104,22 @@ export const useServerStore = defineStore("server", {
         }
       }
       
-      // Update history
+      // Update history - only add if we have new values
       const oldHistory = this.metricsHistory[serverId] || { cpu: [], mem: [], net: [], players: [] }
-      this.metricsHistory = {
-        ...this.metricsHistory,
-        [serverId]: {
-          cpu: [...oldHistory.cpu, ...cpuValues].slice(-10),
-          mem: [...oldHistory.mem, ...memValues].slice(-10),
-          net: [...oldHistory.net, ...netValues].slice(-10),
-          players: [...oldHistory.players, m.activeUsers || 0].slice(-10)
+      
+      if (cpuValues.length > 0 || memValues.length > 0 || netValues.length > 0) {
+        this.metricsHistory = {
+          ...this.metricsHistory,
+          [serverId]: {
+            cpu: [...oldHistory.cpu, ...cpuValues].slice(-30),
+            mem: [...oldHistory.mem, ...memValues].slice(-30),
+            net: [...oldHistory.net, ...netValues].slice(-30),
+            players: [...oldHistory.players, m.activeUsers || 0].slice(-30)
+          }
         }
       }
+      
+      console.log('Updated history for', serverId, this.metricsHistory[serverId])
     },
 
     subscribeToMetrics(serverId) {

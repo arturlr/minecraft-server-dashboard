@@ -122,7 +122,7 @@ const parseCron = (cron) => {
   if (parts.length < 5) return { time: '', days: [] }
   const minute = parts[0].padStart(2, '0')
   const hour = parts[1].padStart(2, '0')
-  const days = parts[4] === '*' ? [] : parts[4].split(',')
+  const days = parts[4] === '*' ? ['0','1','2','3','4','5','6'] : parts[4].split(',')
   return { time: `${hour}:${minute}`, days }
 }
 
