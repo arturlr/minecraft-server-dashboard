@@ -7,9 +7,9 @@ orbs:
 workflows:
   dev-pipeline:
     jobs:
-      - build-and-deploy-sam:
+      - build-and-deploy-backend:
           context: dev-aws
-          name: deploy-sam-dev
+          name: deploy-backend-dev
           stage: dev
           filters:
             branches:
@@ -19,16 +19,16 @@ workflows:
           name: deploy-frontend-dev
           stage: dev
           requires:
-            - deploy-sam-dev
+            - deploy-backend-dev
           filters:
             branches:
               only: dev
               
   prod-pipeline:
     jobs:
-      - build-and-deploy-sam:
+      - build-and-deploy-backend:
           context: prod-aws
-          name: deploy-sam-prod
+          name: deploy-backend-prod
           stage: prod
           filters:
             branches:
@@ -38,13 +38,13 @@ workflows:
           name: deploy-frontend-prod
           stage: prod
           requires:
-            - deploy-sam-prod
+            - deploy-backend-prod
           filters:
             branches:
               only: main
 
 jobs:
-  build-and-deploy-sam:
+  build-and-deploy-backend:
     docker:
       - image: cimg/python:3.13
     parameters:
