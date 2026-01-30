@@ -590,7 +590,7 @@ Resources:
       Environment:
         Variables:
           COGNITO_USER_POOL_ID:
-            Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CognitoUserPoolId"
+            Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-UserPoolId"
           CORE_TABLE_NAME:
             Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTable"
       Policies:

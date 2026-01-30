@@ -164,7 +164,7 @@ Outputs:
     Description: Cognito UserPool Id
     Value: !Ref CognitoUserPool
     Export:
-      Name: !Sub "${ProjectName}-${EnvironmentName}-CognitoUserPoolId"
+      Name: !Sub "${ProjectName}-${EnvironmentName}-UserPoolId"
 
   CognitoDomainName:
     Description: Cognito DomainName
