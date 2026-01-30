@@ -1,11 +1,22 @@
-import json
 import urllib.request
 import urllib.error
 import os
 import ipaddress
+import json
+import base64
 from ec2Helper import Ec2Utils
 from authHelper import Auth
 from utilHelper import Utils
+
+def create_minimal_token(user_sub, instance_id):
+    """Create minimal token with only sub and instance_id claims."""
+    payload = {
+        'sub': user_sub,
+        'instance_id': instance_id
+    }
+    # Base64 encode for simple transport
+    payload_json = json.dumps(payload)
+    return base64.b64encode(payload_json.encode()).decode()
 
 def is_safe_ip(ip_str):
     """Validate IP is not in dangerous ranges (localhost, private, etc)"""
@@ -50,8 +61,9 @@ def handler(event, context):
         
         user_sub = user_claims.get('sub')
         
-        # Check user authorization for this instance
-        if not utils.check_user_authorization(user_sub, instance_id):
+        # Check user authorization for this instance (requires read_server permission)
+        is_authorized, user_role, auth_reason = utils.check_user_authorization(user_sub, instance_id, 'read_server')
+        if not is_authorized:
             return {
                 'success': False,
                 'error': 'Forbidden'
@@ -90,10 +102,12 @@ def handler(event, context):
                 'error': 'Invalid IP address'
             }
         
-        # Fetch logs from msd-logs service with Cognito JWT token
-        url = f"http://{ip_address}:25566/logs?lines={lines}"
+        # Fetch logs from msd-logs service with minimal token
+        minimal_token = create_minimal_token(user_sub, instance_id)
+        log_service_port = os.environ.get('LOG_SERVICE_PORT', '25566')
+        url = f"http://{ip_address}:{log_service_port}/logs?lines={lines}"
         req = urllib.request.Request(url)
-        req.add_header('Authorization', f'Bearer {token}')
+        req.add_header('Authorization', f'Bearer {minimal_token}')
         
         try:
             with urllib.request.urlopen(req, timeout=10) as response:

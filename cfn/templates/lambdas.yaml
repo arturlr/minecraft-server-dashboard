@@ -12,7 +12,7 @@ Globals:
     Environment:
       Variables:
         CORE_TABLE_NAME:
-          Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTable"   
+          Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTableName"   
         TAG_APP_VALUE: !Ref AppValue
         APP_NAME: !Ref ProjectName
         ENVIRONMENT_NAME: !Ref EnvironmentName
@@ -592,7 +592,8 @@ Resources:
           COGNITO_USER_POOL_ID:
             Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-UserPoolId"
           CORE_TABLE_NAME:
-            Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTable"
+            Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTableName"
+          LOG_SERVICE_PORT: "25566"
       Policies:
         - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
         - arn:aws:iam::aws:policy/AmazonCognitoReadOnly

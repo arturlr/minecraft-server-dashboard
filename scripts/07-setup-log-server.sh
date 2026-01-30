@@ -33,6 +33,7 @@ After=network.target
 [Service]
 Type=simple
 User=root
+Environment="LOG_SERVICE_PORT=25566"
 ExecStart=/usr/local/bin/msd-logs
 Restart=always
 RestartSec=5
