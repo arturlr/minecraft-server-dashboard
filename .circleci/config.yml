@@ -93,7 +93,13 @@ jobs:
           name: Validate SAM template
           command: |
             cd cfn
-            sam validate
+            sam validate --lint
+            sam validate --template-file templates/lambdas.yaml --lint
+            sam validate --template-file templates/ec2.yaml --lint
+            sam validate --template-file templates/dynamodb.yaml --lint
+            sam validate --template-file templates/cognito.yaml --lint
+            sam validate --template-file templates/ssm.yaml --lint
+            sam validate --template-file templates/web.yaml --lint
       - run:
           name: Build SAM application
           no_output_timeout: 20m

@@ -572,6 +572,8 @@ Resources:
               Action:
                 - dynamodb:GetItem
                 - dynamodb:PutItem
+              Resource:
+                Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTableArn"
 
   getServerLogs:
     Type: AWS::Serverless::Function
@@ -600,34 +602,6 @@ Resources:
                 - dynamodb:Query
               Resource:
                 Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTableArn"
-                - dynamodb:UpdateItem
-                - dynamodb:DeleteItem
-                - dynamodb:Query
-                - dynamodb:Scan
-              Resource:
-                - Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTable"
-                - Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-LogAuditTable"
-        - Version: "2012-10-17"
-          Statement:
-            - Effect: Allow
-              Action:
-                - cloudwatch:PutMetricAlarm
-                - events:List*
-                - events:Describe*                
-              Resource: "*"
-        - Version: "2012-10-17"
-          Statement:
-            - Effect: Allow
-              Action:
-                - lambda:InvokeFunction
-              Resource: !GetAtt iamProfileManager.Arn
-      Environment:
-        Variables:
-          EC2_INSTANCE_PROFILE_ARN: 
-            Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-IAMEC2InstanceProfileArn"
-          COGNITO_USER_POOL_ID: 
-            Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-UserPoolId"
-          FIX_SERVER_ROLE_LAMBDA_ARN: !GetAtt iamProfileManager.Arn
 
   ec2ActionWorker:
     Type: AWS::Serverless::Function
