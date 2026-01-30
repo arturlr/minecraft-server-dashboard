@@ -67,6 +67,8 @@ jobs:
             curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
             source $HOME/.cargo/env
             rustup target add x86_64-unknown-linux-musl
+            sudo apt-get update
+            sudo apt-get install -y musl-tools
       - run:
           name: Build Rust binaries
           command: |
