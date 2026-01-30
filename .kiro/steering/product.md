@@ -5,6 +5,7 @@ The Minecraft Server Dashboard is a comprehensive web application that enables u
 ## Key Features
 - **Server Management**: Start, stop, restart Minecraft servers on EC2 instances with asynchronous processing
 - **Real-time Monitoring**: Live metrics for CPU, memory, network, and active players
+- **Log Streaming**: Real-time Minecraft server logs via HTTP API with JWT authentication
 - **Action Status Tracking**: Real-time updates on server action progress (processing/completed/failed)
 - **Cost Tracking**: Monthly cost analysis and optimization recommendations
 - **User Access Control**: Multi-user access with admin/user roles via Cognito
@@ -14,6 +15,7 @@ The Minecraft Server Dashboard is a comprehensive web application that enables u
 - **Configuration Validation**: Real-time validation of server settings with warnings and errors
 - **Configuration Management**: Server settings, startup commands, and scheduled operations
 - **Authentication**: Google OAuth integration via Amazon Cognito
+- **Systemd Integration**: Minecraft servers run as systemd services with auto-restart and proper logging
 
 ## Target Users
 - Minecraft server administrators

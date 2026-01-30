@@ -50,6 +50,9 @@ webapp/
 - **ec2ActionValidator/**: Validates and queues server control actions (start/stop/restart/config) to SQS for asynchronous processing
 - **ec2ActionWorker/**: Processes server control actions from SQS queue (start/stop/restart/config updates)
 - **iamProfileManager/**: Handles IAM instance profile management synchronously (associate/disassociate profiles)
+- **getServerLogs/**: Fetches Minecraft logs from msd-logs service with JWT authentication and authorization
+- **ec2ActionWorker/**: Processes server control actions from SQS queue (start/stop/restart/config updates)
+- **iamProfileManager/**: Handles IAM instance profile management synchronously (associate/disassociate profiles)
 
 ### Lambda Layers (`layers/`)
 - **authHelper/**: Cognito authentication utilities

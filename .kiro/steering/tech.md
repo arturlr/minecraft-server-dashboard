@@ -18,11 +18,22 @@
 - **Monitoring**: Amazon CloudWatch for metrics, logs, and alarms
 - **Scheduling**: Amazon EventBridge for scheduled server operations
 - **Content Delivery**: Amazon CloudFront
+- **Log Streaming**: Custom Rust service (msd-logs) on port 25566
+
+## Rust Services
+- **msd-metrics**: Collects and sends server metrics (CPU, memory, network, active users) to CloudWatch
+- **msd-logs**: HTTP server that streams Minecraft logs via journalctl with JWT authentication
+  - Listens on port 25566
+  - Validates JWT token format (Bearer token)
+  - Provides GET /logs?lines=N endpoint (max 1000 lines)
+  - Provides GET /health endpoint for monitoring
+  - Runs as systemd service with auto-restart
 
 ## Development Tools
 - **Package Manager**: npm
 - **Module System**: ES modules
 - **Environment**: Node.js with Vite dev server
+- **Rust Toolchain**: 1.70+ with musl target for static binaries
 
 ## Common Commands
 
@@ -49,6 +60,9 @@ npm run preview
 # Navigate to CloudFormation directory
 cd cfn
 
+# Validate templates with linting
+sam validate --lint
+
 # Build SAM application
 sam build
 
@@ -57,6 +71,17 @@ sam deploy --guided
 
 # Deploy with existing configuration
 sam deploy
+```
+
+### Rust Binary Building
+```bash
+# Build msd-metrics
+cd rust/msd-metrics
+cargo build --release --target x86_64-unknown-linux-musl
+
+# Build msd-logs
+cd rust/msd-logs
+cargo build --release --target x86_64-unknown-linux-musl
 ```
 
 ### Lambda Layer Building

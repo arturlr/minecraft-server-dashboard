@@ -575,7 +575,7 @@ Resources:
                 - dynamodb:GetItem
                 - dynamodb:PutItem
               Resource:
-                Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTableArn"
+                Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTable"
 
   getServerLogs:
     Type: AWS::Serverless::Function
@@ -603,7 +603,7 @@ Resources:
                 - dynamodb:GetItem
                 - dynamodb:Query
               Resource:
-                Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTableArn"
+                Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTable"
 
   ec2ActionWorker:
     Type: AWS::Serverless::Function
