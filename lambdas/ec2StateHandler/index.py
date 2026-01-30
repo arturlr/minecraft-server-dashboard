@@ -6,48 +6,49 @@ import httpx
 from httpx_aws_auth import AwsSigV4Auth, AwsCredentials 
 import ec2Helper
 import utilHelper
+import ddbHelper
 import pytz
-# from errorHandler import ErrorHandler
+from botocore.exceptions import ClientError
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-appsync = boto3.client('appsync')
 eb_client = boto3.client('events')
-
-ENCODING = 'utf-8'
 
 appValue = os.getenv('TAG_APP_VALUE')
 appName = os.getenv('APP_NAME') 
 envName = os.getenv('ENVIRONMENT_NAME')
-endpoint = os.getenv('APPSYNC_URL', None) 
+endpoint = os.getenv('APPSYNC_URL')
+
+if not endpoint:
+    raise ValueError("APPSYNC_URL environment variable not set")
+
 cognito_pool_id = os.getenv('COGNITO_USER_POOL_ID', None)
 
 utl = utilHelper.Utils()
 ec2_utils = ec2Helper.Ec2Utils()
+ddb = ddbHelper.CoreTableDyn()
 utc = pytz.utc
 pst = pytz.timezone('US/Pacific')
 
 scheduled_event_bridge_rule = utl.get_ssm_param(f"/{appName}/{envName}/scheduledrule")
 logger.info(f"Scheduled EventBridge Rule: {scheduled_event_bridge_rule}")
 
-boto3_session = boto3.Session()
-boto3_credentials = boto3_session.get_credentials()
-
-credentials = AwsCredentials(
-    access_key=boto3_credentials.access_key,
-    secret_key=boto3_credentials.secret_key,
-    session_token=boto3_credentials.token,
-)
-
-# Create an authenticated client
-httpxClient = httpx.Client(
-    auth=AwsSigV4Auth(
-        credentials=credentials,
-        region=boto3_session.region_name,
-        service='appsync',
+def get_appsync_client():
+    """Create AppSync client with fresh credentials."""
+    session = boto3.Session()
+    creds = session.get_credentials()
+    return httpx.Client(
+        auth=AwsSigV4Auth(
+            credentials=AwsCredentials(
+                access_key=creds.access_key,
+                secret_key=creds.secret_key,
+                session_token=creds.token,
+            ),
+            region=session.region_name,
+            service='appsync',
+        )
     )
-)
 
 putServerMetric = """
 mutation PutServerMetric($input: ServerMetricInput!) {
@@ -83,20 +84,14 @@ changeServerState = """
 
 def send_to_appsync(payload):
     logger.info("------- send_to_appsync")
+    headers = {"Content-Type": "application/json"}
+    client = get_appsync_client()
     try:
-        headers={"Content-Type": "application/json"}
-        # sending response to AppSync
-        response = httpxClient.post(
-            endpoint,
-            headers=headers,
-            json=payload
-        )
+        response = client.post(endpoint, headers=headers, json=payload)
+        response.raise_for_status()
         logger.info(response.json())
-    except Exception as e:
-        # ErrorHandler.log_error('NETWORK_ERROR',
-        #                      context={'operation': 'send_to_appsync'},
-        #                      exception=e, error=str(e))
-        logger.error(str(e))
+    finally:
+        client.close()
     
 def schedule_event_response():
     logger.info("------- schedule_event_response")
@@ -125,24 +120,44 @@ def schedule_event_response():
 
     return instances_payload
 
-def enable_scheduled_rule():    
-    logger.info("------- enable_scheduled_rule")
-    evtRule = eb_client.describe_rule(Name=scheduled_event_bridge_rule)
-    if evtRule["State"] == "DISABLED":                    
-        eb_client.enable_rule(Name=scheduled_event_bridge_rule)
-        logger.info("Enabled Evt Bridge Rule")
-
-def disable_scheduled_rule():
-    logger.info("------- disable_scheduled_rule")
-    # Check for instances running
-    instances_running = ec2_utils.list_servers_by_state("running")
+def manage_scheduled_rule(increment=True):
+    """Enable or disable scheduled rule based on atomic counter."""
+    logger.info(f"------- manage_scheduled_rule (increment={increment})")
     
-    if instances_running["TotalInstances"] == 0:  
-        logger.error("No Instances running. Disabling Scheduled Event")
-        evtRule = eb_client.describe_rule(Name=scheduled_event_bridge_rule)
-        if evtRule["State"] == "ENABLED":
+    try:
+        if increment:
+            response = ddb.table.update_item(
+                Key={'PK': 'InstanceCounter', 'SK': 'METADATA'},
+                UpdateExpression='ADD #count :inc',
+                ExpressionAttributeNames={'#count': 'count'},
+                ExpressionAttributeValues={':inc': 1},
+                ReturnValues='UPDATED_NEW'
+            )
+        else:
+            response = ddb.table.update_item(
+                Key={'PK': 'InstanceCounter', 'SK': 'METADATA'},
+                UpdateExpression='ADD #count :dec',
+                ConditionExpression='#count > :zero',
+                ExpressionAttributeNames={'#count': 'count'},
+                ExpressionAttributeValues={':dec': -1, ':zero': 0},
+                ReturnValues='UPDATED_NEW'
+            )
+        
+        new_count = int(response['Attributes']['count'])
+        logger.info(f"Instance counter: {new_count}")
+        
+        if new_count == 1 and increment:
+            eb_client.enable_rule(Name=scheduled_event_bridge_rule)
+            logger.info("Enabled EventBridge Rule (first instance)")
+        elif new_count == 0 and not increment:
             eb_client.disable_rule(Name=scheduled_event_bridge_rule)
-            logger.info("Disabled Evt Bridge Rule")
+            logger.info("Disabled EventBridge Rule (last instance)")
+            
+    except ClientError as e:
+        if e.response['Error']['Code'] == 'ConditionalCheckFailedException':
+            logger.warning("Counter already at 0, cannot decrement")
+        else:
+            raise
 
 def state_change_response(instance_id):
     logger.info("------- state_change_response: " + instance_id)
@@ -195,22 +210,14 @@ def handle_instance_state_change(event):
     logger.info("Found InstanceId: " + instance_id + ' at ' + state + ' state')
     
     if state == "running":
-        handle_instance_running(instance_id)
+        manage_scheduled_rule(increment=True)
     elif state == "stopped":
-        handle_instance_stopped()
+        manage_scheduled_rule(increment=False)
     
     # Send state change notification
     input_data = state_change_response(instance_id)
     payload = {"query": changeServerState, 'variables': {"input": input_data}}
     send_to_appsync(payload)
-
-def handle_instance_running(instance_id):
-    """Handle instance running state setup."""
-    enable_scheduled_rule()
-    
-def handle_instance_stopped():
-    """Handle instance stopped state cleanup."""
-    disable_scheduled_rule()
 
 def handle_scheduled_event():
     """Handle Scheduled Event notifications."""

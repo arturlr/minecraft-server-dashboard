@@ -15,14 +15,34 @@ Resources:
   SupportBucket:
     Type: AWS::S3::Bucket
     Properties:
-      AccessControl: Private
       PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
         RestrictPublicBuckets: true
       BucketEncryption:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
               SSEAlgorithm: AES256
     DeletionPolicy: Delete
+
+  SupportBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref SupportBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: DenyPublicAccess
+            Effect: Deny
+            Principal: "*"
+            Action: "s3:*"
+            Resource:
+              - !GetAtt SupportBucket.Arn
+              - !Sub "${SupportBucket.Arn}/*"
+            Condition:
+              Bool:
+                "aws:SecureTransport": "false"
 
   Ec2MinecraftDashboardInstanceRole:
     Type: "AWS::IAM::Role"

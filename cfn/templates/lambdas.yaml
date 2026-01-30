@@ -531,7 +531,9 @@ Resources:
           COGNITO_USER_POOL_ID: 
             Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-UserPoolId"
           BOOTSTRAP_SSM_DOC_NAME: !Ref BootstrapSSMDoc
-          SSM_COMMAND_QUEUE_URL: !Ref SSMCommandQueue          
+          SSM_COMMAND_QUEUE_URL: !Ref SSMCommandQueue
+          CORE_TABLE_NAME:
+            Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTableName"
 
   ec2MetricsHandler:
     Type: AWS::Serverless::Function 
