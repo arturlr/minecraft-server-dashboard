@@ -1,0 +1,12 @@
+[package]
+name = "msd-logs"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tiny_http = "0.12"
+jsonwebtoken = "9"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+reqwest = { version = "0.11", features = ["blocking", "json"] }
+base64 = "0.21"

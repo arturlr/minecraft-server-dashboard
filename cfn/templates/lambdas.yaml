@@ -98,6 +98,8 @@ Resources:
             FunctionArn: !GetAtt iamProfileManager.Arn
           ec2MetricsHandlerDataSource:
             FunctionArn: !GetAtt ec2MetricsHandler.Arn
+          getServerLogsDataSource:
+            FunctionArn: !GetAtt getServerLogs.Arn
       Functions:
         serverListFunction:
           Runtime:
@@ -122,6 +124,12 @@ Resources:
             Name: APPSYNC_JS
             Version: "1.0.0"
           DataSource: ec2MetricsHandlerDataSource
+          CodeUri: ../../appsync/resolvers/lambdaInvoker.js
+        getServerLogsFunction:
+          Runtime:
+            Name: APPSYNC_JS
+            Version: "1.0.0"
+          DataSource: getServerLogsDataSource
           CodeUri: ../../appsync/resolvers/lambdaInvoker.js
         putLogAuditFunction:
           Runtime:
@@ -258,6 +266,12 @@ Resources:
               Version: "1.0.0"
             Pipeline:
               - getLogAuditFunction
+          getServerLogs:
+            Runtime:
+              Name: APPSYNC_JS
+              Version: "1.0.0"
+            Pipeline:
+              - getServerLogsFunction
           ec2MetricsHandler:
             Runtime:
               Name: APPSYNC_JS
@@ -558,6 +572,34 @@ Resources:
               Action:
                 - dynamodb:GetItem
                 - dynamodb:PutItem
+
+  getServerLogs:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "${ProjectName}-${EnvironmentName}-getServerLogs"
+      CodeUri: ../../lambdas/getServerLogs/
+      Layers:
+        - !Ref AuthLayer
+        - !Ref Ec2Layer
+        - !Ref UtilLayer
+        - !Ref DdbLayer
+      Environment:
+        Variables:
+          COGNITO_USER_POOL_ID:
+            Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CognitoUserPoolId"
+          CORE_TABLE_NAME:
+            Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTable"
+      Policies:
+        - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
+        - arn:aws:iam::aws:policy/AmazonCognitoReadOnly
+        - Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:Query
+              Resource:
+                Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTableArn"
                 - dynamodb:UpdateItem
                 - dynamodb:DeleteItem
                 - dynamodb:Query

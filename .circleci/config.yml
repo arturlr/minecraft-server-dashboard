@@ -62,6 +62,23 @@ jobs:
       - aws-cli/setup
       - aws-sam/install
       - run:
+          name: Setup Rust
+          command: |
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+            source $HOME/.cargo/env
+            rustup target add x86_64-unknown-linux-musl
+      - run:
+          name: Build Rust binaries
+          command: |
+            source $HOME/.cargo/env
+            cd rust/msd-metrics
+            cargo build --release --target x86_64-unknown-linux-musl
+            cp target/x86_64-unknown-linux-musl/release/msd-metrics ../../
+            
+            cd ../msd-logs
+            cargo build --release --target x86_64-unknown-linux-musl
+            cp target/x86_64-unknown-linux-musl/release/msd-logs ../../
+      - run:
           name: Setup Python for SAM build
           command: |
             # Find the actual Python binary and create a symlink
@@ -147,6 +164,20 @@ jobs:
               echo "Uploading CloudWatch agent config to s3://$SUPPORT_BUCKET/"
               aws s3 cp amazon-cloudwatch-agent.json "s3://$SUPPORT_BUCKET/amazon-cloudwatch-agent.json"
             fi
+      - run:
+          name: Upload Rust binaries and scripts
+          command: |
+            SUPPORT_BUCKET=$(aws cloudformation describe-stacks \
+              --stack-name msd-<< parameters.stage >> \
+              --query 'Stacks[0].Outputs[?OutputKey==`SupportBucket`].OutputValue' \
+              --output text)
+            
+            echo "Uploading Rust binaries to s3://$SUPPORT_BUCKET/"
+            aws s3 cp msd-metrics "s3://$SUPPORT_BUCKET/msd-metrics"
+            aws s3 cp msd-logs "s3://$SUPPORT_BUCKET/msd-logs"
+            
+            echo "Uploading bootstrap scripts to s3://$SUPPORT_BUCKET/scripts/"
+            aws s3 sync scripts/ "s3://$SUPPORT_BUCKET/scripts/" --delete
       - save_cache:
           key: sam-cache-v2-{{ .Branch }}-{{ checksum "cfn/template.yaml" }}
           paths:

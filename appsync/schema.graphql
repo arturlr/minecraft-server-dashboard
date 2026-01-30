@@ -55,6 +55,14 @@ type LogAudit @aws_iam
 	createdAt: AWSDateTime
 }
 
+type ServerLogs @aws_iam
+@aws_cognito_user_pools {
+	success: Boolean!
+	logs: String
+	error: String
+	instanceId: String
+}
+
 input LogAuditInput {
 	id: ID!
 	actionUser: AWSEmail!
@@ -273,6 +281,8 @@ type Query {
 		@aws_cognito_user_pools
 	getLogAudit(id: String!): [LogAudit]
 		@aws_cognito_user_pools  
+	getServerLogs(instanceId: String!, lines: Int): ServerLogs
+		@aws_cognito_user_pools
 	# Query for historical server metrics
 	ec2MetricsHandler(id: String!): ServerMetric
 		@aws_cognito_user_pools

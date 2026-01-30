@@ -123,6 +123,43 @@ EOF
         echo -e "${YELLOW}CloudWatch agent will not be configured on EC2 instances${SET}"
     fi
     
+    # Upload Rust metrics binary to S3
+    echo ""
+    echo -e "${WHITE}---- Uploading Rust metrics binary ----${SET}"
+    
+    if [ -f "rust/msd-metrics/target/release/msd-metrics" ]; then
+        echo -e "Uploading msd-metrics binary to s3://${SupportBucket}/"
+        if aws s3 cp rust/msd-metrics/target/release/msd-metrics "s3://${SupportBucket}/msd-metrics" --region "$region"; then
+            echo -e "${GREEN}Rust metrics binary uploaded successfully${SET}"
+        else
+            echo -e "${YELLOW}Warning: Failed to upload Rust metrics binary${SET}"
+        fi
+    else
+        echo -e "${YELLOW}Warning: rust/msd-metrics/target/release/msd-metrics not found${SET}"
+        echo -e "${YELLOW}Build it first with: cd rust/msd-metrics && cargo build --release${SET}"
+    fi
+    
+    # Upload SSM scripts to S3
+    echo ""
+    echo -e "${WHITE}---- Uploading SSM scripts ----${SET}"
+    
+    if [ -d "scripts" ]; then
+        script_count=$(find scripts -name "*.sh" | wc -l)
+        if [ "$script_count" -gt 0 ]; then
+            echo -e "Uploading ${script_count} script(s) from scripts/ to s3://${SupportBucket}/scripts/"
+            if aws s3 sync scripts/ "s3://${SupportBucket}/scripts/" --exclude "*" --include "*.sh" --region "$region"; then
+                echo -e "${GREEN}SSM scripts uploaded successfully${SET}"
+            else
+                echo -e "${YELLOW}Warning: Failed to upload SSM scripts${SET}"
+            fi
+        else
+            echo -e "${YELLOW}No .sh files found in scripts/ directory${SET}"
+        fi
+    else
+        echo -e "${YELLOW}Warning: scripts/ directory not found${SET}"
+        echo -e "${YELLOW}Create it to store SSM bash scripts${SET}"
+    fi
+    
     echo ""
     echo -e "${GREEN}Configuration complete!${SET}"
     echo -e "Next steps:"

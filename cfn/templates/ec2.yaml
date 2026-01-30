@@ -53,7 +53,9 @@ Resources:
                   - "ssm:DescribeParameters"
                   - "ssm:PutParameter"
                   - "ssm:GetParameter"
-                Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/minecraft*"
+                Resource:
+                  - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/minecraft*"
+                  - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${ProjectName}/${EnvironmentName}/*"
         - PolicyName: dynamoDBServersTableAccess
           PolicyDocument:
             Version: "2012-10-17"

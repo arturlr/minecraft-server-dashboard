@@ -133,3 +133,14 @@ export const ec2MetricsHandler = /* GraphQL */ `
     }
   }
 `;
+
+export const GET_SERVER_LOGS = gql`
+  query GetServerLogs($instanceId: String!, $lines: Int) {
+    getServerLogs(instanceId: $instanceId, lines: $lines) {
+      success
+      logs
+      error
+      instanceId
+    }
+  }
+`;

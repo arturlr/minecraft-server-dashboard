@@ -14,58 +14,6 @@ Parameters:
 
 Resources:
 
-  MinecraftRunnerSSMDoc:
-    Type: AWS::SSM::Document
-    UpdateReplacePolicy: Delete
-    Properties:
-      DocumentType: Command
-      TargetType: /AWS::EC2::Instance
-      Name: !Sub "${ProjectName}-${EnvironmentName}-MinecraftRunnerSSMDoc"
-      Content:
-        schemaVersion: '2.2'
-        description: Run Minecraft server using instance tags
-        mainSteps:
-          - action: aws:runShellScript
-            name: RunMinecraftServer
-            inputs:
-              runCommand:
-                - '#!/bin/bash'
-                - |
-                  # Get instance ID
-                  INSTANCE_ID=$(ec2metadata --instance-id)
-                  REGION=$(ec2metadata --availability-zone | sed 's/[a-z]$//')
-                  
-                  # Get instance tags
-                  TAGS=$(aws ec2 describe-tags --filters "Name=resource-id,Values=$INSTANCE_ID" --region $REGION --output json)
-                  
-                  # Extract runCommand and workDir from tags
-                  RUN_COMMAND=$(echo $TAGS | jq -r '.Tags[] | select(.Key=="RunCommand") | .Value')
-                  WORK_DIR=$(echo $TAGS | jq -r '.Tags[] | select(.Key=="WorkDir") | .Value')
-                  
-                  # Log the values
-                  echo "Instance ID: $INSTANCE_ID"
-                  echo "Run Command: $RUN_COMMAND"
-                  echo "Work Directory: $WORK_DIR"
-                  
-                  # Check if both values are present
-                  if [ -z "$RUN_COMMAND" ] || [ -z "$WORK_DIR" ]; then
-                    echo "ERROR: RunCommand or WorkDir tag is missing"
-                    exit 1
-                  fi
-                  
-                  # Check if work directory exists
-                  if [ ! -d "$WORK_DIR" ]; then
-                    echo "Creating work directory: $WORK_DIR"
-                    mkdir -p "$WORK_DIR"
-                  fi
-                  
-                  # Change to work directory and run the command
-                  cd "$WORK_DIR"
-                  echo "Executing: $RUN_COMMAND"
-                  # Run in background with nohup to keep running after SSM session ends
-                  nohup $RUN_COMMAND > minecraft.log 2>&1 &
-                  echo "Minecraft server started in background"
-
   BootstrapSSMDoc:
     Type: AWS::SSM::Document
     UpdateReplacePolicy: Delete
@@ -76,348 +24,49 @@ Resources:
       Content:
         schemaVersion: '2.2'
         description: Bootstrap instance
+        parameters:
+          runCommand:
+            type: String
+            description: Minecraft server run command
         mainSteps:              
           - action: aws:runShellScript
-            name: installPackages
-            inputs:
-              runCommand:
-                - '#!/bin/bash'
-                - |
-                  # Define required packages list (used by all distributions)
-                  REQUIRED_PACKAGES=("jq" "zip" "unzip" "net-tools" "wget" "screen")
-                  
-                  # Function to detect the Linux distribution
-                  detect_distro() {
-                      if [ -f /etc/os-release ]; then
-                          . /etc/os-release
-                          DISTRO=$ID
-                      elif [ -f /etc/lsb-release ]; then
-                          . /etc/lsb-release
-                          DISTRO=$DISTRIB_ID
-                      elif [ -f /etc/debian_version ]; then
-                          DISTRO="debian"
-                      elif [ -f /etc/redhat-release ]; then
-                          DISTRO="rhel"
-                      else
-                          DISTRO=$(uname -s)
-                      fi
-                      echo $DISTRO
-                  }        
-
-                  # Function to install Java on Amazon Linux, RHEL, or CentOS
-                  install_java_rpm() {
-                      echo "Installing Java..."
-                      # For Amazon Linux 2023 and newer, use Corretto
-                      if [[ $(cat /etc/os-release | grep VERSION_ID) =~ "2023" ]]; then
-                          yum install -y java-21-amazon-corretto-headless
-                      # For Amazon Linux 2
-                      elif [[ $(cat /etc/os-release | grep VERSION_ID) =~ "2" ]]; then
-                          amazon-linux-extras install -y java-openjdk17
-                      # For RHEL/CentOS
-                      else
-                          yum install -y java-17-openjdk-headless
-                      fi
-                      
-                      if command -v java &> /dev/null; then
-                          echo "Java installed successfully: $(java -version 2>&1 | head -n 1)"
-                          return 0
-                      else
-                          echo "Failed to install Java"
-                          return 1
-                      fi
-                  }
-
-                  # Function to install Java on Ubuntu or Debian
-                  install_java_deb() {
-                      echo "Installing Java..."
-                      apt-get update
-                      apt-get install -y openjdk-21-jre-headless
-                      
-                      if command -v java &> /dev/null; then
-                          echo "Java installed successfully: $(java -version 2>&1 | head -n 1)"
-                          return 0
-                      else
-                          echo "Failed to install Java"
-                          return 1
-                      fi
-                  }
-
-                  # Main Java installation function
-                  install_java() {
-                      # Check if Java is already installed
-                      if command -v java &> /dev/null; then
-                          echo "Java is already installed: $(java -version 2>&1 | head -n 1)"
-                          return 0
-                      fi
-
-                      local distro=$(detect_distro)
-                      case $distro in
-                          amzn*|rhel*|centos*)
-                              install_java_rpm
-                              ;;
-                          ubuntu*|debian*)
-                              install_java_deb
-                              ;;
-                          *)
-                              echo "Unsupported distribution: $distro"
-                              return 1
-                              ;;
-                      esac
-                  }
-
-                  # Function to install CloudWatch agent on Amazon Linux, RHEL, or CentOS
-                  install_cloudwatch_rpm() {
-                      # Check if CloudWatch agent is already installed
-                      if rpm -q amazon-cloudwatch-agent &> /dev/null; then
-                          echo "CloudWatch agent is already installed"
-                          return 0
-                      fi
-
-                      # Install CloudWatch agent
-                      if yum install -y amazon-cloudwatch-agent; then
-                          # Verify installation was successful
-                          if rpm -q amazon-cloudwatch-agent &> /dev/null; then
-                              echo "CloudWatch agent installed successfully"
-                              return 0
-                          else
-                              echo "CloudWatch agent installation failed verification"
-                              return 1
-                          fi
-                      else
-                          echo "Failed to install CloudWatch agent"
-                          return 1
-                      fi
-                  }
-
-                  # Function to install CloudWatch agent on Ubuntu or Debian
-                  install_cloudwatch_deb() {
-                      # Check if CloudWatch agent is already installed
-                      if dpkg -l | grep -q "amazon-cloudwatch-agent"; then
-                          echo "CloudWatch agent is already installed"
-                          return 0
-                      fi
-
-                      # Update package list
-                      apt-get update
-
-                      # Check if wget is already installed
-                      if ! command -v wget &> /dev/null; then
-                          echo "Installing wget..."
-                          apt-get install -y wget
-                      else
-                          echo "wget is already installed"
-                      fi
-
-                      # Download and install CloudWatch agent
-                      if wget https://amazoncloudwatch-agent.s3.amazonaws.com/debian/amd64/latest/amazon-cloudwatch-agent.deb; then
-                          if dpkg -i -E ./amazon-cloudwatch-agent.deb; then
-                              rm amazon-cloudwatch-agent.deb
-                              echo "CloudWatch agent installed successfully"
-                          else
-                              echo "Failed to install CloudWatch agent"
-                              rm amazon-cloudwatch-agent.deb
-                              return 1
-                          fi
-                      else
-                          echo "Failed to download CloudWatch agent"
-                          return 1
-                      fi
-                  }
-
-                  install_required_packages() {
-                      local packages_to_install=()
-
-                      # Check each package
-                      for package in "${REQUIRED_PACKAGES[@]}"; do
-                          if ! dpkg -l | grep -q "^ii.*$package "; then
-                              echo "$package is not installed"
-                              packages_to_install+=("$package")
-                          else
-                              echo "$package is already installed"
-                          fi
-                      done
-
-                      # Install missing packages if any
-                      if [ ${#packages_to_install[@]} -gt 0 ]; then
-                          echo "Installing missing packages: ${packages_to_install[*]}"
-                          apt-get update
-                          if apt-get install -y "${packages_to_install[@]}"; then
-                              echo "Successfully installed missing packages"
-                              return 0
-                          else
-                              echo "Failed to install some packages"
-                              return 1
-                          fi
-                      else
-                          echo "All required packages are already installed"
-                          return 0
-                      fi
-                  }
-
-                  install_awscli() {
-                      if [ ! -f /usr/share/collectd/types.db ]; then
-                        sudo mkdir -p /usr/share/collectd
-                        sudo touch /usr/share/collectd/types.db
-                      fi
-                      if ! command -v aws >/dev/null 2>&1; then
-                        curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-                        unzip awscliv2.zip
-                        sudo ./aws/install
-                      echo "AWS CLI installed successfully"
-                      else
-                          echo "AWS CLI is already installed"
-                      fi 
-                  }
-
-                  # Main installation function
-                  install_packages() {
-                      local distro=$(detect_distro)
-                      case $distro in
-                          amzn*|rhel*|centos*)
-                              install_cloudwatch_rpm
-                              yum -y install "${REQUIRED_PACKAGES[@]}"
-                              ;;
-                          ubuntu*|debian*)
-                              install_cloudwatch_deb
-                              install_required_packages
-                              ;;
-                          *)
-                              echo "Unsupported distribution: $distro"
-                              exit 1
-                              ;;
-                      esac
-                  }
-
-                  # Calling the install packages                  
-                  install_packages
-                  install_awscli
-                  install_java
-
-                  echo "All packages installed successfully" 
-          - action: aws:runShellScript
-            name: CloudWatchStart
+            name: BootstrapInstance
             inputs:
               runCommand:
                 - !Sub |
                   #!/bin/bash
                   set -e
-
-                  # Clear any cached AWS credentials
-                  unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
-                  rm -rf ~/.aws/credentials ~/.aws/config 2>/dev/null || true
-                  
-                  # Get region from availability zone (strip the zone letter)
                   REGION=$(ec2metadata --availability-zone | sed 's/[a-z]$//')
                   
-                  # Download CloudWatch agent config from S3 using instance profile
-                  echo "Downloading CloudWatch agent configuration..."
-                  aws s3 cp s3://${SupportBucket}/amazon-cloudwatch-agent.json /tmp/amazon-cloudwatch-agent.json --region $REGION
+                  echo "=== Installing Packages ==="
+                  aws s3 cp s3://${SupportBucket}/scripts/01-install-packages.sh /tmp/install-packages.sh --region $REGION
+                  chmod +x /tmp/install-packages.sh
+                  /tmp/install-packages.sh
                   
-                  # Start CloudWatch agent with the config file
-                  echo "Starting CloudWatch agent..."
-                  sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
-                    -a fetch-config \
-                    -m ec2 \
-                    -s \
-                    -c file:/tmp/amazon-cloudwatch-agent.json
+                  echo "=== Setting up CloudWatch ==="
+                  aws s3 cp s3://${SupportBucket}/scripts/03-setup-cloudwatch.sh /tmp/setup-cloudwatch.sh --region $REGION
+                  chmod +x /tmp/setup-cloudwatch.sh
+                  /tmp/setup-cloudwatch.sh ${SupportBucket}
                   
-                  # Check status
-                  echo "Checking CloudWatch agent status..."
-                  sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -m ec2 -a status      
-
-          - action: aws:runShellScript
-            name: Metrics
-            inputs:
-              runCommand:
-                - |
-                  if [ ! -f /usr/local/bin/msd-metrics ]; then
-                    # Download msd-player-count 
-                    aws s3 cp s3://${SupportBucket}/msd-metrics /usr/local/bin/msd-metrics --region $REGION
-                    chmod +x /usr/local/bin/msd-metrics
-
-                    
-                  # Check if cron entry already exists before adding it
-                  if ! crontab -l 2>/dev/null | grep -qF "/usr/local/bin/msd-metrics"; then
-                    (crontab -l 2>/dev/null; echo "*/1 * * * * /usr/local/bin/msd-metrics >/dev/null 2>&1") | crontab -
-                    echo "metrics cron job added"
-                  else
-                    echo "metrics cron job already exists, skipping"
-                  fi
+                  echo "=== Setting up Metrics ==="
+                  aws s3 cp s3://${SupportBucket}/scripts/05-setup-metrics.sh /tmp/setup-metrics.sh --region $REGION
+                  chmod +x /tmp/setup-metrics.sh
+                  /tmp/setup-metrics.sh ${SupportBucket}
                   
-                  # Display current crontab
-                  echo ""
-                  echo "=== Current Crontab ==="
-                  crontab -l
-
-          
-          - action: aws:runShellScript
-            name: UpdateBootstrapStatus
-            inputs:
-              runCommand:
-                - !Sub |
-                  #!/bin/bash
-                  set -e
+                  echo "=== Setting up Log Server ==="
+                  aws s3 cp s3://${SupportBucket}/scripts/07-setup-log-server.sh /tmp/setup-log-server.sh --region $REGION
+                  chmod +x /tmp/setup-log-server.sh
+                  /tmp/setup-log-server.sh ${SupportBucket} ${ProjectName} ${EnvironmentName}
                   
-                  echo "=== Updating Bootstrap Status in DynamoDB ==="
+                  echo "=== Setting up Minecraft Service ==="
+                  aws s3 cp s3://${SupportBucket}/scripts/09-setup-minecraft-service.sh /tmp/setup-minecraft-service.sh --region $REGION
+                  chmod +x /tmp/setup-minecraft-service.sh
+                  /tmp/setup-minecraft-service.sh "{{ runCommand }}"
                   
-                  # Get instance ID and region
-                  INSTANCE_ID=$(ec2metadata --instance-id)
-                  REGION=$(ec2metadata --availability-zone | sed 's/[a-z]$//')
-                  TABLE_NAME="${ProjectName}-${EnvironmentName}-CoreTable"
-                  TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-                  
-                  # Verify CloudWatch agent is running
-                  /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -m ec2 -a status
-                  if /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -m ec2 -a status | jq -e '.status == "running"'; then
-                    echo "✓ CloudWatch agent is running"
-                  else
-                    echo "ERROR: CloudWatch agent may not be running"
-                    exit 1
-                  fi
-                  
-                  # Verify port count script exists and is executable
-                  if [ ! -x /usr/local/bin/port_count.sh ]; then
-                    echo "ERROR: Port count script not found or not executable"
-                    exit 1
-                  fi
-                  echo "✓ Port count script is configured"
-                  
-                  # Verify network monitor script exists and is executable
-                  if [ ! -x /usr/local/bin/network_monitor.sh ]; then
-                    echo "ERROR: Network monitor script not found or not executable"
-                    exit 1
-                  fi
-                  echo "✓ Network monitor script is configured"
-                  
-                  # Verify cron jobs are configured
-                  if ! crontab -l | grep -q "port_count.sh"; then
-                    echo "ERROR: Port count cron job not configured"
-                    exit 1
-                  fi
-                  echo "✓ Port count cron job is configured"
-                  
-                  if ! crontab -l | grep -q "network_monitor.sh"; then
-                    echo "ERROR: Network monitor cron job not configured"
-                    exit 1
-                  fi
-                  echo "✓ Network monitor cron job is configured"
-                  
-                  # Update DynamoDB to mark as bootstrapped
-                  echo "Updating DynamoDB table: $TABLE_NAME"
-                  aws dynamodb update-item \
-                    --table-name "$TABLE_NAME" \
-                    --key "{\"id\": {\"S\": \"$INSTANCE_ID\"}}" \
-                    --update-expression "SET isBootstrapComplete = :bootstrapped, updatedAt = :timestamp" \
-                    --expression-attribute-values "{\":bootstrapped\": {\"BOOL\": true}, \":timestamp\": {\"S\": \"$TIMESTAMP\"}}" \
-                    --region "$REGION"
-                  
-                  if [ $? -eq 0 ]; then
-                    echo "✓ Successfully marked instance as bootstrapped in DynamoDB"
-                    echo "Bootstrap process completed successfully!"
-                  else
-                    echo "ERROR: Failed to update DynamoDB"
-                    exit 1
-                  fi
+                  echo "=== Updating Bootstrap Status ==="
+                  aws s3 cp s3://${SupportBucket}/scripts/10-update-bootstrap-status.sh /tmp/update-bootstrap-status.sh --region $REGION
+                  chmod +x /tmp/update-bootstrap-status.sh
+                  /tmp/update-bootstrap-status.sh ${ProjectName} ${EnvironmentName}
 
   NotificationSenderEmailParameter:
     Type: AWS::SSM::Parameter
@@ -433,9 +82,3 @@ Outputs:
     Value: !Ref BootstrapSSMDoc
     Export:
       Name: !Sub "${ProjectName}-${EnvironmentName}-BootstrapSSMDoc"
-
-  MinecraftRunnerSSMDoc:
-    Description: Minecraft Runner SSM Document Name
-    Value: !Ref MinecraftRunnerSSMDoc
-    Export:
-      Name: !Sub "${ProjectName}-${EnvironmentName}-MinecraftRunnerSSMDoc"
