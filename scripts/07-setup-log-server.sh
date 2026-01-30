@@ -2,11 +2,9 @@
 set -e
 
 SUPPORT_BUCKET=$1
-PROJECT_NAME=$2
-ENVIRONMENT_NAME=$3
 
-if [ -z "$SUPPORT_BUCKET" ] || [ -z "$PROJECT_NAME" ] || [ -z "$ENVIRONMENT_NAME" ]; then
-    echo "Usage: $0 <support-bucket> <project-name> <environment-name>"
+if [ -z "$SUPPORT_BUCKET" ]; then
+    echo "Usage: $0 <support-bucket>"
     exit 1
 fi
 
@@ -27,13 +25,6 @@ else
   echo "✓ msd-logs binary already exists"
 fi
 
-# Get Cognito User Pool ID from SSM
-COGNITO_USER_POOL_ID=$(aws ssm get-parameter \
-  --name "/${PROJECT_NAME}/${ENVIRONMENT_NAME}/cognito-user-pool-id" \
-  --query 'Parameter.Value' \
-  --output text \
-  --region $REGION)
-
 cat > /etc/systemd/system/msd-logs.service <<EOF
 [Unit]
 Description=Minecraft Log Server
@@ -42,8 +33,6 @@ After=network.target
 [Service]
 Type=simple
 User=root
-Environment="AWS_REGION=$REGION"
-Environment="COGNITO_USER_POOL_ID=$COGNITO_USER_POOL_ID"
 ExecStart=/usr/local/bin/msd-logs
 Restart=always
 RestartSec=5

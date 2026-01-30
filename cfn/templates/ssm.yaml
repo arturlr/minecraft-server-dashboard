@@ -56,7 +56,7 @@ Resources:
                   echo "=== Setting up Log Server ==="
                   aws s3 cp s3://${SupportBucket}/scripts/07-setup-log-server.sh /tmp/setup-log-server.sh --region $REGION
                   chmod +x /tmp/setup-log-server.sh
-                  /tmp/setup-log-server.sh ${SupportBucket} ${ProjectName} ${EnvironmentName}
+                  /tmp/setup-log-server.sh ${SupportBucket}
                   
                   echo "=== Setting up Minecraft Service ==="
                   aws s3 cp s3://${SupportBucket}/scripts/09-setup-minecraft-service.sh /tmp/setup-minecraft-service.sh --region $REGION

@@ -167,14 +167,6 @@ Outputs:
     Export:
       Name: !Sub "${ProjectName}-${EnvironmentName}-CognitoUserPoolId"
 
-  CognitoUserPoolIdParameter:
-    Type: AWS::SSM::Parameter
-    Properties:
-      Name: !Sub "/${ProjectName}/${EnvironmentName}/cognito-user-pool-id"
-      Type: String
-      Value: !Ref CognitoUserPool
-      Description: Cognito User Pool ID for msd-logs authentication
-
   CognitoDomainName:
     Description: Cognito DomainName
     Value: !Ref UserPoolDomain
