@@ -30,8 +30,18 @@
               color="secondary"
               variant="tonal"
               :disabled="!isRunning || isDisabled"
+              @click="handleRestart"
             >
               <span class="material-symbols-outlined">restart_alt</span>
+            </v-btn>
+            <v-btn 
+              icon 
+              color="secondary"
+              variant="tonal"
+              :disabled="!isRunning || isDisabled"
+              @click="openLogsDialog"
+            >
+              <span class="material-symbols-outlined">description</span>
             </v-btn>
           </div>
           <div>
@@ -124,28 +134,78 @@
       <!-- Actions -->
       <v-divider class="border-green" />
     </div>
+
+    <!-- Logs Dialog -->
+    <v-dialog v-model="logsDialog" max-width="800">
+      <v-card>
+        <v-card-title class="d-flex justify-space-between align-center">
+          <span>Server Logs - {{ server.name }}</span>
+          <v-btn icon variant="text" @click="logsDialog = false">
+            <span class="material-symbols-outlined">close</span>
+          </v-btn>
+        </v-card-title>
+        <v-card-text>
+          <v-progress-linear v-if="logsLoading" indeterminate color="primary" />
+          <v-alert v-else-if="logsError" type="error" variant="tonal">
+            {{ logsError }}
+          </v-alert>
+          <pre v-else class="logs-content">{{ logs }}</pre>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn color="primary" variant="text" @click="fetchLogs">Refresh</v-btn>
+          <v-btn variant="text" @click="logsDialog = false">Close</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </v-card>
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
+import { useLazyQuery } from '@vue/apollo-composable'
 import SparkLine from '../common/SparkLine.vue'
+import { GET_SERVER_LOGS } from '@/graphql/queries'
 
 const props = defineProps({
   server: { type: Object, required: true },
   metrics: { type: Object, default: null },
-  history: { type: Object, default: () => ({ cpu: [], mem: [], net: [] }) }
+  history: { type: Object, default: () => ({ cpu: [], mem: [], net: [], players: [] }) }
 })
 
-const emit = defineEmits(['start', 'stop', 'settings'])
+const emit = defineEmits(['start', 'stop', 'restart', 'settings'])
 
 const actionLoading = ref(false)
+
+// Logs dialog state
+const logsDialog = ref(false)
+const logs = ref('')
+const logsLoading = ref(false)
+const logsError = ref(null)
+
+const { load: loadLogs } = useLazyQuery(GET_SERVER_LOGS)
 
 // Server state computed properties
 const serverState = computed(() => props.server.state || 'stopped')
 const isRunning = computed(() => serverState.value === 'running')
 const isTransitioning = computed(() => ['pending', 'stopping', 'shutting-down'].includes(serverState.value))
 const isDisabled = computed(() => actionLoading.value || isTransitioning.value)
+
+// Reset loading state when server finishes transitioning
+watch(isTransitioning, (transitioning) => {
+  if (!transitioning) {
+    actionLoading.value = false
+  }
+})
+
+// Cleanup logs when dialog closes
+watch(logsDialog, (isOpen) => {
+  if (!isOpen) {
+    logs.value = ''
+    logsError.value = null
+    logsLoading.value = false
+  }
+})
 
 const statusText = computed(() => {
   const stateMap = {
@@ -173,8 +233,9 @@ const cpu = computed(() => props.metrics?.cpuStats || props.server.cpu || 0)
 const memory = computed(() => props.metrics?.memStats || 0)
 const players = computed(() => props.metrics?.activeUsers ?? props.server.players ?? 0)
 const networkRx = computed(() => {
-  const net = props.history?.net || []
-  if (net.length === 0) return '0 KB/s'
+  const net = props.history?.net
+  if (!net || net.length === 0) return '0 KB/s'
+  
   const latest = net[net.length - 1] || 0
   if (latest > 1024 * 1024) return `${(latest / 1024 / 1024).toFixed(1)} MB/s`
   if (latest > 1024) return `${(latest / 1024).toFixed(1)} KB/s`
@@ -187,28 +248,72 @@ const lastUpdate = computed(() => {
   return `${Math.floor(diff / 60)}m ago`
 })
 
-const handleStart = async () => {
-  actionLoading.value = true
+const handleStart = () => {
   try {
-    await emit('start', props.server)
-  } finally {
-    setTimeout(() => { actionLoading.value = false }, 2000)
+    actionLoading.value = true
+    emit('start', props.server)
+  } catch (error) {
+    console.error('Failed to start server:', error)
+    actionLoading.value = false
   }
 }
 
-const handleStop = async () => {
-  actionLoading.value = true
+const handleStop = () => {
   try {
-    await emit('stop', props.server)
-  } finally {
-    setTimeout(() => { actionLoading.value = false }, 2000)
+    actionLoading.value = true
+    emit('stop', props.server)
+  } catch (error) {
+    console.error('Failed to stop server:', error)
+    actionLoading.value = false
+  }
+}
+
+const handleRestart = () => {
+  try {
+    actionLoading.value = true
+    emit('restart', props.server)
+  } catch (error) {
+    console.error('Failed to restart server:', error)
+    actionLoading.value = false
   }
 }
 
 const copyIpAddress = async () => {
-  const port = props.server.port || '25565'
-  const address = `${props.server.ip}:${port}`
-  await navigator.clipboard.writeText(address)
+  try {
+    const port = props.server.port || '25565'
+    const address = `${props.server.ip}:${port}`
+    await navigator.clipboard.writeText(address)
+  } catch (error) {
+    console.error('Failed to copy IP address:', error)
+  }
+}
+
+const fetchLogs = async () => {
+  logsLoading.value = true
+  logsError.value = null
+  logs.value = ''
+  
+  try {
+    const result = await loadLogs(GET_SERVER_LOGS, {
+      instanceId: props.server.id,
+      lines: 50
+    })
+    
+    if (result?.getServerLogs?.success) {
+      logs.value = result.getServerLogs.logs || 'No logs available'
+    } else {
+      logsError.value = result?.getServerLogs?.error || 'Failed to fetch logs'
+    }
+  } catch (error) {
+    logsError.value = error.message || 'Failed to fetch logs'
+  } finally {
+    logsLoading.value = false
+  }
+}
+
+const openLogsDialog = () => {
+  logsDialog.value = true
+  fetchLogs()
 }
 </script>
 
@@ -253,4 +358,17 @@ const copyIpAddress = async () => {
   padding: 24px;
 }
 .font-mono { font-family: monospace; }
+.logs-content {
+  background: #1e1e1e;
+  color: #d4d4d4;
+  padding: 16px;
+  border-radius: 4px;
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  max-height: 500px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
 </style>
