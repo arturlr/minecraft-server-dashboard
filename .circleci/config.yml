@@ -2,7 +2,7 @@ version: 2.1
 
 orbs:
   aws-cli: circleci/aws-cli@4.0
-  aws-sam: circleci/aws-sam-serverless@4.0
+  aws-sam: circleci/aws-sam-serverless@5.0
 
 workflows:
   dev-pipeline:
@@ -152,6 +152,7 @@ jobs:
             fi
             
             # Deploy with monitoring
+            export AWS_S3_USE_ARN_REGION=false
             sam deploy \
               --stack-name $STACK_NAME \
               --config-env << parameters.stage >> \
@@ -159,7 +160,8 @@ jobs:
               --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND \
               --parameter-overrides "ProjectName=msd EnvironmentName=<< parameters.stage >> AppValue=minecraft" \
               --no-confirm-changeset \
-              --no-fail-on-empty-changeset &
+              --no-fail-on-empty-changeset \
+              --disable-rollback &
             
             DEPLOY_PID=$!
             
