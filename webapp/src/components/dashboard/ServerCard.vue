@@ -163,9 +163,11 @@
 
 <script setup>
 import { computed, ref, watch } from 'vue'
-import { useLazyQuery } from '@vue/apollo-composable'
+import { generateClient } from 'aws-amplify/api'
 import SparkLine from '../common/SparkLine.vue'
 import { GET_SERVER_LOGS } from '@/graphql/queries'
+
+const client = generateClient()
 
 const props = defineProps({
   server: { type: Object, required: true },
@@ -182,8 +184,6 @@ const logsDialog = ref(false)
 const logs = ref('')
 const logsLoading = ref(false)
 const logsError = ref(null)
-
-const { load: loadLogs } = useLazyQuery(GET_SERVER_LOGS)
 
 // Server state computed properties
 const serverState = computed(() => props.server.state || 'stopped')
@@ -294,15 +294,18 @@ const fetchLogs = async () => {
   logs.value = ''
   
   try {
-    const result = await loadLogs(GET_SERVER_LOGS, {
-      instanceId: props.server.id,
-      lines: 50
+    const result = await client.graphql({
+      query: GET_SERVER_LOGS,
+      variables: {
+        instanceId: props.server.id,
+        lines: 50
+      }
     })
     
-    if (result?.getServerLogs?.success) {
-      logs.value = result.getServerLogs.logs || 'No logs available'
+    if (result?.data?.getServerLogs?.success) {
+      logs.value = result.data.getServerLogs.logs || 'No logs available'
     } else {
-      logsError.value = result?.getServerLogs?.error || 'Failed to fetch logs'
+      logsError.value = result?.data?.getServerLogs?.error || 'Failed to fetch logs'
     }
   } catch (error) {
     logsError.value = error.message || 'Failed to fetch logs'
