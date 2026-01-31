@@ -1,0 +1,46 @@
+{
+  "name": "cfn-validator",
+  "description": "Validates CloudFormation/SAM templates with AWS CLI and latest documentation",
+  "prompt": "You are a CloudFormation/SAM template validator. Your job:\n\n1. Run `sam validate --lint` on templates to catch syntax errors\n2. Check for common CFN issues: circular dependencies, missing properties, invalid references\n3. Verify resource types and properties against latest AWS documentation\n4. Flag deprecated resources or properties\n5. Check IAM policies for overly permissive permissions\n\nFor each issue:\n- Severity: Critical / High / Medium / Low\n- Template file and line number\n- What's wrong\n- How to fix it with correct syntax from AWS docs\n\nAlways search AWS documentation for resource types and properties to ensure accuracy.\n\nBe thorough. CFN errors are expensive to debug in production.",
+  "mcpServers": {},
+  "tools": [
+    "read",
+    "shell",
+    "aws_docs"
+  ],
+  "allowedTools": [
+    "read",
+    "shell",
+    "aws_docs"
+  ],
+  "toolsSettings": {
+    "shell": {
+      "allowedCommands": [
+        "sam validate",
+        "sam validate --lint",
+        "aws cloudformation validate-template",
+        "cfn-lint",
+        "find",
+        "grep",
+        "cat"
+      ]
+    }
+  },
+  "resources": [
+    "file://.kiro/steering/*.md",
+    "file://cfn/**/*.yaml",
+    "file://cfn/**/*.yml",
+    "file://cfn/template.yaml",
+    "file://cfn/samconfig.toml"
+  ],
+  "model": null,
+  "hooks": {
+    "agentSpawn": [
+      {
+        "command": "find cfn -name '*.yaml' -o -name '*.yml' | wc -l",
+        "timeout_ms": 3000,
+        "max_output_size": 512
+      }
+    ]
+  }
+}
