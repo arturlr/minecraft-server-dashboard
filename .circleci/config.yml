@@ -64,44 +64,37 @@ jobs:
       - run:
           name: Setup Rust
           command: |
-            # Check if Rust files changed
-            if git diff --name-only origin/main...HEAD | grep -q "^rust/"; then
-              echo "Rust files changed, setting up Rust toolchain"
-              curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-              source $HOME/.cargo/env
-              rustup target add x86_64-unknown-linux-musl
-              sudo apt-get update
-              sudo apt-get install -y musl-tools
-            else
-              echo "No Rust files changed, skipping Rust setup"
-            fi
+            echo "Rust files changed, setting up Rust toolchain"
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+            source $HOME/.cargo/env
+            rustup target add x86_64-unknown-linux-musl
+            sudo apt-get update
+            sudo apt-get install -y musl-tools
       - run:
           name: Build Rust binaries
           command: |
-            # Check if Rust files changed
-            if git diff --name-only origin/main...HEAD | grep -q "^rust/"; then
-              echo "Building Rust binaries"
-              source $HOME/.cargo/env
-              cd rust/msd-metrics
-              cargo build --release --target x86_64-unknown-linux-musl
-              cp target/x86_64-unknown-linux-musl/release/msd-metrics ../../
-              
-              cd ../msd-logs
-              cargo build --release --target x86_64-unknown-linux-musl
-              cp target/x86_64-unknown-linux-musl/release/msd-logs ../../
-            else
-              echo "No Rust files changed, skipping build"
-              # Download existing binaries from S3 if they exist
-              SUPPORT_BUCKET=$(aws cloudformation describe-stacks \
-                --stack-name msd-<< parameters.stage >> \
-                --query 'Stacks[0].Outputs[?OutputKey==`SupportBucket`].OutputValue' \
-                --output text 2>/dev/null || echo "")
-              
-              if [ -n "$SUPPORT_BUCKET" ]; then
-                echo "Downloading existing binaries from S3"
-                aws s3 cp s3://$SUPPORT_BUCKET/msd-metrics ./msd-metrics 2>/dev/null || echo "msd-metrics not found in S3"
-                aws s3 cp s3://$SUPPORT_BUCKET/msd-logs ./msd-logs 2>/dev/null || echo "msd-logs not found in S3"
-              fi
+            echo "Building Rust binaries"
+            source $HOME/.cargo/env
+            cd rust/msd-metrics
+            cargo build --release --target x86_64-unknown-linux-musl
+            cp target/x86_64-unknown-linux-musl/release/msd-metrics ../../
+            
+            cd ../msd-logs
+            cargo build --release --target x86_64-unknown-linux-musl
+            cp target/x86_64-unknown-linux-musl/release/msd-logs ../../
+
+            SUPPORT_BUCKET=$(aws cloudformation describe-stacks \
+              --stack-name msd-<< parameters.stage >> \
+              --query 'Stacks[0].Outputs[?OutputKey==`SupportBucket`].OutputValue' \
+              --output text)
+
+            if [ -n "$SUPPORT_BUCKET" ]; then
+              echo "Downloading existing binaries from S3"
+              aws s3 cp s3://$SUPPORT_BUCKET/msd-metrics ./msd-metrics 2>/dev/null || echo "msd-metrics not found in S3"
+              aws s3 cp s3://$SUPPORT_BUCKET/msd-logs ./msd-logs 2>/dev/null || echo "msd-logs not found in S3"
+
+              echo "Uploading bootstrap scripts to s3://$SUPPORT_BUCKET/scripts/"
+              aws s3 sync scripts/ "s3://$SUPPORT_BUCKET/scripts/" --delete
             fi
       - run:
           name: Setup Python for SAM build
@@ -197,20 +190,7 @@ jobs:
               echo "Uploading CloudWatch agent config to s3://$SUPPORT_BUCKET/"
               aws s3 cp amazon-cloudwatch-agent.json "s3://$SUPPORT_BUCKET/amazon-cloudwatch-agent.json"
             fi
-      - run:
-          name: Upload Rust binaries and scripts
-          command: |
-            SUPPORT_BUCKET=$(aws cloudformation describe-stacks \
-              --stack-name msd-<< parameters.stage >> \
-              --query 'Stacks[0].Outputs[?OutputKey==`SupportBucket`].OutputValue' \
-              --output text)
-            
-            echo "Uploading Rust binaries to s3://$SUPPORT_BUCKET/"
-            aws s3 cp msd-metrics "s3://$SUPPORT_BUCKET/msd-metrics"
-            aws s3 cp msd-logs "s3://$SUPPORT_BUCKET/msd-logs"
-            
-            echo "Uploading bootstrap scripts to s3://$SUPPORT_BUCKET/scripts/"
-            aws s3 sync scripts/ "s3://$SUPPORT_BUCKET/scripts/" --delete
+
       - save_cache:
           key: sam-cache-v2-{{ .Branch }}-{{ checksum "cfn/template.yaml" }}
           paths:

@@ -134,7 +134,7 @@ export const ec2MetricsHandler = /* GraphQL */ `
   }
 `;
 
-export const GET_SERVER_LOGS = gql`
+export const GET_SERVER_LOGS = `
   query GetServerLogs($instanceId: String!, $lines: Int) {
     getServerLogs(instanceId: $instanceId, lines: $lines) {
       success

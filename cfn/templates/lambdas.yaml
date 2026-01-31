@@ -13,6 +13,8 @@ Globals:
       Variables:
         CORE_TABLE_NAME:
           Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTableName"   
+        COGNITO_USER_POOL_ID:
+          Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-UserPoolId"
         TAG_APP_VALUE: !Ref AppValue
         APP_NAME: !Ref ProjectName
         ENVIRONMENT_NAME: !Ref EnvironmentName
