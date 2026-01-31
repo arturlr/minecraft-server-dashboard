@@ -93,8 +93,17 @@ jobs:
               aws s3 cp s3://$SUPPORT_BUCKET/msd-metrics ./msd-metrics 2>/dev/null || echo "msd-metrics not found in S3"
               aws s3 cp s3://$SUPPORT_BUCKET/msd-logs ./msd-logs 2>/dev/null || echo "msd-logs not found in S3"
 
-              echo "Uploading bootstrap scripts to s3://$SUPPORT_BUCKET/scripts/"
-              aws s3 sync scripts/ "s3://$SUPPORT_BUCKET/scripts/" --delete
+              echo "Current directory: $(pwd)"
+              echo "Checking for scripts directory..."
+              if [ -d "$CIRCLE_WORKING_DIRECTORY/scripts" ]; then
+                echo "Uploading bootstrap scripts to s3://$SUPPORT_BUCKET/scripts/"
+                aws s3 sync "$CIRCLE_WORKING_DIRECTORY/scripts/" "s3://$SUPPORT_BUCKET/scripts/" --delete
+              elif [ -d "scripts" ]; then
+                echo "Uploading bootstrap scripts to s3://$SUPPORT_BUCKET/scripts/"
+                aws s3 sync scripts/ "s3://$SUPPORT_BUCKET/scripts/" --delete
+              else
+                echo "Scripts directory not found, skipping upload"
+              fi
             fi
       - run:
           name: Setup Python for SAM build
