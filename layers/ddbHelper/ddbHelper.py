@@ -4,7 +4,7 @@ import os
 from datetime import datetime, timezone
 from botocore.exceptions import ClientError
 from boto3.dynamodb.conditions import Key
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -297,7 +297,7 @@ class CoreTableDyn:
                 return None
             try:
                 return Decimal(str(value))
-            except (ValueError, decimal.InvalidOperation):
+            except (ValueError, InvalidOperation):
                 return None
         return value
 

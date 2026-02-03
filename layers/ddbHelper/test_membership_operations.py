@@ -6,9 +6,8 @@ Tests CRUD operations for user membership records with role-based access control
 import sys
 import os
 import unittest
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 from botocore.exceptions import ClientError
-from datetime import datetime, timezone
 from hypothesis import given, strategies as st, settings
 
 # Mock environment variables before importing

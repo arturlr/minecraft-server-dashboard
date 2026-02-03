@@ -340,7 +340,7 @@ def _parse_message(message_body):
         message = json.loads(message_body)
         logger.info(f"Message parsed: action={message.get('action')}, instance={message.get('instanceId')}")
         return message
-    except json.JSONDecodeError as e:
+    except json.JSONDecodeError:
         # ErrorHandler.log_error('VALIDATION_ERROR',
         #                      context={'operation': 'parse_message'},
         #                      exception=e, error=str(e))
@@ -378,7 +378,7 @@ def _route_action(action, instance_id, arguments, message):
         if action in actions:
             try:
                 return handler()
-            except Exception as e:
+            except Exception:
                 # ErrorHandler.log_error('INTERNAL_ERROR',
                 #                      context={'operation': 'route_action', 'action': action, 'instance_id': instance_id},
                 #                      exception=e, error=str(e))
@@ -394,7 +394,7 @@ def _send_status_update(action, instance_id, status, message, user_email):
     try:
         send_to_appsync(action, instance_id, status, message, user_email)
         logger.info(f"Status sent: {status}")
-    except Exception as e:
+    except Exception:
         # ErrorHandler.log_error('NETWORK_ERROR',
         #                      context={'operation': 'send_status_update', 'action': action, 'instance_id': instance_id},
         #                      exception=e, error=str(e))
@@ -745,7 +745,7 @@ def handler(event, context):
                 logger.info(f"Message processing SUCCESS: messageId={message_id}")
                 return None
                 
-        except Exception as e:
+        except Exception:
             # ErrorHandler.log_error('INTERNAL_ERROR',
             #                      context={'operation': 'handler', 'message_id': message_id},
             #                      exception=e, error=str(e))

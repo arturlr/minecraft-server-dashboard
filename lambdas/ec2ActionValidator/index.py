@@ -501,7 +501,7 @@ def handle_add_user_to_server(instance_id, user_email, user_attributes):
                 logger.error('VALIDATION_ERROR')
                 return None
         
-    except Exception as e:
+    except Exception:
         # ErrorHandler.log_error('INTERNAL_ERROR',
         #                      context={'operation': 'add_user_to_server', 'user_email': user_email, 'instance_id': instance_id},
         #                      exception=e, error=str(e))
