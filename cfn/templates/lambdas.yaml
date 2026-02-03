@@ -461,7 +461,6 @@ Resources:
         - !Ref DdbLayer
         - !Ref UtilLayer
         - !Ref Ec2Layer
-        - !Ref ErrorLayer
       Events:
         EC2StateTrigger:
           Type: CloudWatchEvent 
