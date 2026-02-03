@@ -1,69 +1,61 @@
 <template>
   <div>
-    <div class="d-flex flex-wrap align-center justify-space-between ga-4 mb-5 pb-3 border-b border-green">
-      <div class="d-flex align-center ga-2">
-        <span class="material-symbols-outlined text-primary">security</span>
-        <h3 class="text-white text-h6 font-weight-bold">Access Control</h3>
-      </div>
-      <div class="d-flex ga-3">
+    <div class="section-header">
+      <span class="material-symbols-outlined">security</span>
+      <h3>Access Control</h3>
+      <div class="header-actions">
         <v-text-field
           v-model="search"
-          placeholder="Search members..."
-          prepend-inner-icon="mdi-magnify"
+          placeholder="Search..."
           density="compact"
+          variant="outlined"
           hide-details
-          bg-color="surface"
-          style="width: 250px"
+          style="width: 200px"
         />
-        <v-btn color="primary" variant="tonal">
-          <span class="material-symbols-outlined mr-2" style="font-size: 18px">person_add</span>
-          Invite
+        <v-btn variant="outlined" size="small">
+          <span class="material-symbols-outlined" style="font-size: 18px">person_add</span>
         </v-btn>
       </div>
     </div>
 
-    <v-card color="surface-variant" class="border-green" border="thin">
-      <v-progress-linear v-if="loading" indeterminate color="primary" />
-      <v-table class="bg-transparent">
+    <div class="members-table">
+      <v-progress-linear v-if="loading" indeterminate color="#171717" />
+      <table>
         <thead>
-          <tr class="bg-surface">
-            <th class="text-muted text-uppercase text-caption">User</th>
-            <th class="text-muted text-uppercase text-caption">Role</th>
-            <th class="text-muted text-uppercase text-caption d-none d-md-table-cell">Email</th>
-            <th class="text-muted text-uppercase text-caption text-right">Actions</th>
+          <tr>
+            <th>User</th>
+            <th>Role</th>
+            <th>Email</th>
+            <th></th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="member in filteredMembers" :key="member.id" class="member-row">
+          <tr v-for="member in filteredMembers" :key="member.id">
             <td>
-              <div class="d-flex align-center ga-3 py-2">
-                <v-avatar size="36" color="primary" variant="tonal">
-                  <span class="font-weight-bold">{{ (member.fullName || member.email)[0].toUpperCase() }}</span>
-                </v-avatar>
+              <div class="user-cell">
+                <div class="user-avatar">{{ (member.fullName || member.email)[0].toUpperCase() }}</div>
                 <div>
-                  <p class="text-white text-body-2 font-weight-bold">{{ member.fullName || 'User' }}</p>
-                  <p class="text-muted text-caption">{{ member.email }}</p>
+                  <div class="user-name">{{ member.fullName || 'User' }}</div>
+                  <div class="user-email">{{ member.email }}</div>
                 </div>
               </div>
             </td>
             <td>
-              <v-chip color="primary" variant="tonal" size="small">Member</v-chip>
+              <span class="role-badge">Member</span>
             </td>
-            <td class="d-none d-md-table-cell">
-              <span class="text-muted text-caption">{{ member.email }}</span>
-            </td>
-            <td class="text-right">
-              <v-btn icon variant="text" size="small" color="secondary">
+            <td class="email-col">{{ member.email }}</td>
+            <td class="actions-col">
+              <v-btn icon variant="text" size="small">
                 <span class="material-symbols-outlined">more_vert</span>
               </v-btn>
             </td>
           </tr>
           <tr v-if="!loading && members.length === 0">
-            <td colspan="4" class="text-center text-muted py-8">No members found</td>
+            <td colspan="4" class="empty-state">No members found</td>
           </tr>
         </tbody>
-      </v-table>
-    </v-card>
+      </table>
+    </div>
   </div>
 </template>
 
@@ -101,6 +93,107 @@ const loadMembers = async () => {
 onMounted(loadMembers)
 </script>
 
-<style scoped lang="scss">
-.member-row:hover { background: rgba(255,255,255,0.03); }
+<style scoped>
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #e5e5e5;
+}
+.section-header .material-symbols-outlined {
+  font-size: 20px;
+  color: #171717;
+}
+.section-header h3 {
+  font-size: 16px;
+  font-weight: 500;
+  color: #171717;
+  margin: 0;
+  flex: 1;
+}
+.header-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+.members-table {
+  border: 1px solid #e5e5e5;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.members-table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.members-table th {
+  text-align: left;
+  padding: 12px 16px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #a3a3a3;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  background: #fafafa;
+  border-bottom: 1px solid #e5e5e5;
+}
+.members-table td {
+  padding: 12px 16px;
+  border-bottom: 1px solid #f5f5f5;
+}
+.members-table tbody tr:last-child td {
+  border-bottom: none;
+}
+.members-table tbody tr:hover {
+  background: #fafafa;
+}
+.user-cell {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.user-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: #171717;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 500;
+  font-size: 14px;
+}
+.user-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: #171717;
+}
+.user-email {
+  font-size: 12px;
+  color: #737373;
+}
+.role-badge {
+  display: inline-block;
+  padding: 4px 12px;
+  background: #f5f5f5;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #171717;
+}
+.email-col {
+  color: #737373;
+  font-size: 13px;
+}
+.actions-col {
+  text-align: right;
+}
+.empty-state {
+  text-align: center;
+  padding: 48px 16px !important;
+  color: #a3a3a3;
+  font-size: 13px;
+}
 </style>

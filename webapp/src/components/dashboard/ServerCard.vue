@@ -5,6 +5,7 @@
         <div class="d-flex align-center ga-2 mb-1">
           <span class="status-dot" :class="statusClass" />
           <span class="server-name">{{ server.name }}</span>
+          <span class="status-badge" :class="statusClass">{{ statusText }}</span>
         </div>
         <div v-if="isRunning" class="server-ip">{{ server.ip }}</div>
       </div>
@@ -15,7 +16,7 @@
           variant="text"
           :loading="actionLoading" 
           :disabled="isDisabled" 
-          @click="isRunning ? handleStop() : handleStart()"
+          @click="isRunning ? confirmStop = true : confirmStart = true"
         >
           <span class="material-symbols-outlined">power_settings_new</span>
         </v-btn>
@@ -55,8 +56,32 @@
     </template>
 
     <div v-else class="offline-state">
-      Server offline
+      {{ statusText }}
     </div>
+
+    <v-dialog v-model="confirmStart" max-width="400">
+      <v-card>
+        <v-card-title>Start Server?</v-card-title>
+        <v-card-text>Start {{ server.name }}?</v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="confirmStart = false">Cancel</v-btn>
+          <v-btn color="#171717" @click="handleStart">Start</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <v-dialog v-model="confirmStop" max-width="400">
+      <v-card>
+        <v-card-title>Stop Server?</v-card-title>
+        <v-card-text>Stop {{ server.name }}? Active players will be disconnected.</v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="confirmStop = false">Cancel</v-btn>
+          <v-btn color="error" @click="handleStop">Stop</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </v-card>
 </template>
 
@@ -73,6 +98,8 @@ const props = defineProps({
 const emit = defineEmits(['start', 'stop', 'restart', 'settings'])
 
 const actionLoading = ref(false)
+const confirmStart = ref(false)
+const confirmStop = ref(false)
 
 const serverState = computed(() => props.server.state || 'stopped')
 const isRunning = computed(() => serverState.value === 'running')
@@ -83,6 +110,17 @@ const statusClass = computed(() => {
   if (isRunning.value) return 'online'
   if (isTransitioning.value) return 'warning'
   return 'offline'
+})
+
+const statusText = computed(() => {
+  const stateMap = {
+    'running': 'Running',
+    'stopped': 'Stopped',
+    'pending': 'Starting',
+    'stopping': 'Stopping',
+    'shutting-down': 'Shutting down'
+  }
+  return stateMap[serverState.value] || serverState.value
 })
 
 watch(isTransitioning, (transitioning) => {
@@ -102,11 +140,13 @@ const networkRx = computed(() => {
 })
 
 const handleStart = () => {
+  confirmStart.value = false
   actionLoading.value = true
   emit('start', props.server)
 }
 
 const handleStop = () => {
+  confirmStop.value = false
   actionLoading.value = true
   emit('stop', props.server)
 }
@@ -170,5 +210,25 @@ const handleStop = () => {
   text-align: center;
   font-size: 13px;
   color: #a3a3a3;
+}
+.status-badge {
+  font-size: 11px;
+  font-weight: 500;
+  padding: 4px 8px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.status-badge.online {
+  background: #dcfce7;
+  color: #166534;
+}
+.status-badge.warning {
+  background: #fef3c7;
+  color: #92400e;
+}
+.status-badge.offline {
+  background: #f5f5f5;
+  color: #737373;
 }
 </style>

@@ -70,41 +70,41 @@ jobs:
             rustup target add x86_64-unknown-linux-musl
             sudo apt-get update
             sudo apt-get install -y musl-tools
-      - run:
-          name: Build Rust binaries
-          command: |
-            echo "Building Rust binaries"
-            source $HOME/.cargo/env
-            cd rust/msd-metrics
-            cargo build --release --target x86_64-unknown-linux-musl
-            cp target/x86_64-unknown-linux-musl/release/msd-metrics ../../
+      # - run:
+      #     name: Build Rust binaries
+      #     command: |
+      #       echo "Building Rust binaries"
+      #       source $HOME/.cargo/env
+      #       cd rust/msd-metrics
+      #       cargo build --release --target x86_64-unknown-linux-musl
+      #       cp target/x86_64-unknown-linux-musl/release/msd-metrics ../../
             
-            cd ../msd-logs
-            cargo build --release --target x86_64-unknown-linux-musl
-            cp target/x86_64-unknown-linux-musl/release/msd-logs ../../
+      #       cd ../msd-logs
+      #       cargo build --release --target x86_64-unknown-linux-musl
+      #       cp target/x86_64-unknown-linux-musl/release/msd-logs ../../
 
-            SUPPORT_BUCKET=$(aws cloudformation describe-stacks \
-              --stack-name msd-<< parameters.stage >> \
-              --query 'Stacks[0].Outputs[?OutputKey==`SupportBucket`].OutputValue' \
-              --output text)
+      #       SUPPORT_BUCKET=$(aws cloudformation describe-stacks \
+      #         --stack-name msd-<< parameters.stage >> \
+      #         --query 'Stacks[0].Outputs[?OutputKey==`SupportBucket`].OutputValue' \
+      #         --output text)
 
-            if [ -n "$SUPPORT_BUCKET" ]; then
-              echo "Downloading existing binaries from S3"
-              aws s3 cp s3://$SUPPORT_BUCKET/msd-metrics ./msd-metrics 2>/dev/null || echo "msd-metrics not found in S3"
-              aws s3 cp s3://$SUPPORT_BUCKET/msd-logs ./msd-logs 2>/dev/null || echo "msd-logs not found in S3"
+      #       if [ -n "$SUPPORT_BUCKET" ]; then
+      #         echo "Downloading existing binaries from S3"
+      #         aws s3 cp s3://$SUPPORT_BUCKET/msd-metrics ./msd-metrics 2>/dev/null || echo "msd-metrics not found in S3"
+      #         aws s3 cp s3://$SUPPORT_BUCKET/msd-logs ./msd-logs 2>/dev/null || echo "msd-logs not found in S3"
 
-              echo "Current directory: $(pwd)"
-              echo "Checking for scripts directory..."
-              if [ -d "$CIRCLE_WORKING_DIRECTORY/scripts" ]; then
-                echo "Uploading bootstrap scripts to s3://$SUPPORT_BUCKET/scripts/"
-                aws s3 sync "$CIRCLE_WORKING_DIRECTORY/scripts/" "s3://$SUPPORT_BUCKET/scripts/" --delete
-              elif [ -d "scripts" ]; then
-                echo "Uploading bootstrap scripts to s3://$SUPPORT_BUCKET/scripts/"
-                aws s3 sync scripts/ "s3://$SUPPORT_BUCKET/scripts/" --delete
-              else
-                echo "Scripts directory not found, skipping upload"
-              fi
-            fi
+      #         echo "Current directory: $(pwd)"
+      #         echo "Checking for scripts directory..."
+      #         if [ -d "$CIRCLE_WORKING_DIRECTORY/scripts" ]; then
+      #           echo "Uploading bootstrap scripts to s3://$SUPPORT_BUCKET/scripts/"
+      #           aws s3 sync "$CIRCLE_WORKING_DIRECTORY/scripts/" "s3://$SUPPORT_BUCKET/scripts/" --delete
+      #         elif [ -d "scripts" ]; then
+      #           echo "Uploading bootstrap scripts to s3://$SUPPORT_BUCKET/scripts/"
+      #           aws s3 sync scripts/ "s3://$SUPPORT_BUCKET/scripts/" --delete
+      #         else
+      #           echo "Scripts directory not found, skipping upload"
+      #         fi
+      #       fi
       - run:
           name: Setup Python for SAM build
           command: |

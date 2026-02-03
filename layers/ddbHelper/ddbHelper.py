@@ -68,9 +68,16 @@ class CoreTableDyn:
             'PK': f'SERVER#{instance_id}',
             'SK': 'METADATA',
             'Type': 'Server',
-            **{k: self._to_decimal(v) if isinstance(v, (int, float)) else v 
-               for k, v in server_info.items() if k != 'id' and v is not None}
         }
+        
+        # Add fields, converting numbers to Decimal
+        for k, v in server_info.items():
+            if k == 'id' or v is None:
+                continue
+            if isinstance(v, (int, float)):
+                item[k] = self._to_decimal(v)
+            else:
+                item[k] = v
         
         self.table.put_item(Item=item)
         return {'ResponseMetadata': {'HTTPStatusCode': 200}}
@@ -285,7 +292,13 @@ class CoreTableDyn:
         if value is None:
             return None
         if isinstance(value, (int, float)):
-            return Decimal(str(value))
+            # Handle special float values
+            if isinstance(value, float) and (value != value or value == float('inf') or value == float('-inf')):
+                return None
+            try:
+                return Decimal(str(value))
+            except (ValueError, decimal.InvalidOperation):
+                return None
         return value
 
     @staticmethod

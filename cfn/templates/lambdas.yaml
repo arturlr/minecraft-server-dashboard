@@ -458,6 +458,7 @@ Resources:
       CodeUri: ../../lambdas/ec2StateHandler/
       Layers:
         - !Ref AuthLayer
+        - !Ref DdbLayer
         - !Ref UtilLayer
         - !Ref Ec2Layer
         - !Ref ErrorLayer

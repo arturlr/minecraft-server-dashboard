@@ -1,22 +1,21 @@
 <template>
   <AppLayout title="Dashboard">
+    <template #toolbar>
+      <v-text-field
+        v-model="search"
+        placeholder="Search servers..."
+        density="compact"
+        hide-details
+        style="width: 240px"
+      />
+    </template>
+
     <StatsCards 
       :online="onlineCount" 
       :total="servers.length" 
       :players="totalPlayers" 
       class="mb-12" 
     />
-
-    <div class="section-header">
-      <h2 class="section-title">Servers</h2>
-      <v-text-field
-        v-model="search"
-        placeholder="Search..."
-        density="compact"
-        hide-details
-        style="max-width: 240px"
-      />
-    </div>
 
     <v-progress-linear v-if="loading" indeterminate height="1" class="mb-8" />
 
@@ -26,12 +25,20 @@
           :server="mapServer(server)" 
           :metrics="serverStore.getMetricsById(server.id)"
           :history="serverStore.getMetricsHistory(server.id)"
-          @settings="goToSettings"
+          @settings="openSettings"
           @start="handleStart"
           @stop="handleStop"
         />
       </v-col>
     </v-row>
+
+    <v-dialog v-model="settingsDialog" max-width="1200px" scrollable>
+      <ServerSettingsDialog 
+        v-if="settingsDialog"
+        :server-id="selectedServerId"
+        @close="settingsDialog = false"
+      />
+    </v-dialog>
 
     <v-snackbar v-model="snackbar.show" :color="snackbar.color" :timeout="3000" location="bottom">
       {{ snackbar.text }}
@@ -41,15 +48,16 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
-import { useRouter } from 'vue-router'
 import { useServerStore } from '../stores/server'
 import AppLayout from '../components/layout/AppLayout.vue'
 import StatsCards from '../components/dashboard/StatsCards.vue'
 import ServerCard from '../components/dashboard/ServerCard.vue'
+import ServerSettingsDialog from '../components/dashboard/ServerSettingsDialog.vue'
 
-const router = useRouter()
 const serverStore = useServerStore()
 const search = ref('')
+const settingsDialog = ref(false)
+const selectedServerId = ref(null)
 
 const servers = computed(() => serverStore.servers)
 const loading = computed(() => serverStore.loading)
@@ -84,15 +92,14 @@ const showNotification = (text, color = 'success') => {
   snackbar.value = { show: true, text, color }
 }
 
-const goToSettings = (server) => {
-  serverStore.setSelectedServer(server.id)
-  router.push({ name: 'server-settings', params: { id: server.id } })
+const openSettings = (server) => {
+  selectedServerId.value = server.id
+  settingsDialog.value = true
 }
 
 const handleStart = async (server) => {
   try {
     await serverStore.startServer(server.id)
-    serverStore.updateServerState(server.id, 'pending')
     showNotification(`Starting ${server.name}...`)
   } catch (e) {
     showNotification('Failed to start server', 'error')
@@ -102,7 +109,6 @@ const handleStart = async (server) => {
 const handleStop = async (server) => {
   try {
     await serverStore.stopServer(server.id)
-    serverStore.updateServerState(server.id, 'stopping')
     showNotification(`Stopping ${server.name}...`)
   } catch (e) {
     showNotification('Failed to stop server', 'error')

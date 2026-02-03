@@ -1,87 +1,74 @@
 <template>
-  <v-card color="surface-variant" class="border-green pa-6 h-100 d-flex flex-column" border="thin">
-    <div class="d-flex justify-space-between align-start mb-4">
+  <div class="scheduler-card">
+    <div class="card-header">
       <div>
-        <h4 class="text-white text-body-1 font-weight-bold">Task Scheduler</h4>
-        <p class="text-muted text-body-2">Schedule automatic start/stop times.</p>
+        <div class="card-title">Task Scheduler</div>
+        <div class="card-subtitle">Automatic start/stop times</div>
       </div>
-      <v-switch v-model="enabled" color="primary" hide-details inset />
+      <v-switch v-model="enabled" color="primary" hide-details inset density="compact" />
     </div>
 
-    <div v-if="enabled" class="d-flex flex-column ga-5">
-      <!-- Start Schedule -->
-      <div class="schedule-section">
-        <label class="text-muted text-caption text-uppercase mb-2 d-block">Auto Start</label>
-        <v-row dense>
-          <v-col cols="6">
-            <v-text-field
-              v-model="startTime"
-              label="Time"
-              type="time"
-              bg-color="surface"
-              hide-details
-              density="compact"
-            />
-          </v-col>
-          <v-col cols="6">
-            <v-select
-              v-model="startDays"
-              label="Days"
-              :items="dayOptions"
-              multiple
-              chips
-              bg-color="surface"
-              hide-details
-              density="compact"
-            />
-          </v-col>
-        </v-row>
+    <div v-if="enabled" class="card-content">
+      <div class="schedule-group">
+        <div class="schedule-label">Auto Start</div>
+        <div class="schedule-inputs">
+          <v-text-field
+            v-model="startTime"
+            type="time"
+            variant="outlined"
+            density="compact"
+            hide-details
+          />
+          <v-select
+            v-model="startDays"
+            :items="dayOptions"
+            multiple
+            chips
+            variant="outlined"
+            density="compact"
+            hide-details
+            placeholder="Days"
+          />
+        </div>
       </div>
 
-      <!-- Stop Schedule -->
-      <div class="schedule-section">
-        <label class="text-muted text-caption text-uppercase mb-2 d-block">Auto Stop</label>
-        <v-row dense>
-          <v-col cols="6">
-            <v-text-field
-              v-model="stopTime"
-              label="Time"
-              type="time"
-              bg-color="surface"
-              hide-details
-              density="compact"
-            />
-          </v-col>
-          <v-col cols="6">
-            <v-select
-              v-model="stopDays"
-              label="Days"
-              :items="dayOptions"
-              multiple
-              chips
-              bg-color="surface"
-              hide-details
-              density="compact"
-            />
-          </v-col>
-        </v-row>
+      <div class="schedule-group">
+        <div class="schedule-label">Auto Stop</div>
+        <div class="schedule-inputs">
+          <v-text-field
+            v-model="stopTime"
+            type="time"
+            variant="outlined"
+            density="compact"
+            hide-details
+          />
+          <v-select
+            v-model="stopDays"
+            :items="dayOptions"
+            multiple
+            chips
+            variant="outlined"
+            density="compact"
+            hide-details
+            placeholder="Days"
+          />
+        </div>
       </div>
 
-      <!-- Timezone -->
       <v-select
         v-model="timezone"
-        label="Timezone"
         :items="timezones"
-        bg-color="surface"
-        hide-details
+        variant="outlined"
         density="compact"
+        hide-details
+        label="Timezone"
       />
     </div>
 
-    <div v-else class="flex-grow-1 d-flex align-center justify-center">
-      <p class="text-muted text-body-2">Enable to configure scheduled start/stop times</p>
+    <div v-else class="card-empty">
+      Disabled
     </div>
-  </v-card>
+  </div>
 </template>
 
 <script setup>
@@ -172,10 +159,54 @@ watch([enabled, startTime, startDays, stopTime, stopDays, timezone], () => {
 </script>
 
 <style scoped>
-.schedule-section {
-  padding: 12px;
-  background: rgba(0,0,0,0.2);
+.scheduler-card {
+  padding: 24px;
+  border: 1px solid #e5e5e5;
   border-radius: 8px;
-  border: 1px solid rgba(255,255,255,0.05);
+  height: 100%;
+}
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 24px;
+}
+.card-title {
+  font-size: 16px;
+  font-weight: 500;
+  color: #171717;
+  margin-bottom: 4px;
+}
+.card-subtitle {
+  font-size: 13px;
+  color: #737373;
+}
+.card-content {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.card-empty {
+  padding: 32px 0;
+  text-align: center;
+  font-size: 13px;
+  color: #a3a3a3;
+}
+.schedule-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.schedule-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: #a3a3a3;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.schedule-inputs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
 }
 </style>

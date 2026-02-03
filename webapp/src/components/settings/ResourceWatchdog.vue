@@ -1,42 +1,44 @@
 <template>
-  <v-card color="surface-variant" class="border-green pa-6" border="thin">
-    <div class="d-flex justify-space-between align-start mb-6">
+  <div class="watchdog-card">
+    <div class="card-header">
       <div>
-        <h4 class="text-white text-body-1 font-weight-bold">Resource Watchdog</h4>
-        <p class="text-muted text-body-2">Auto-shutdown when idle to save resources.</p>
+        <div class="card-title">Resource Watchdog</div>
+        <div class="card-subtitle">Auto-shutdown when idle</div>
       </div>
-      <v-switch v-model="enabled" color="primary" hide-details inset />
+      <v-switch v-model="enabled" color="primary" hide-details inset density="compact" />
     </div>
 
-    <div v-if="enabled" class="d-flex flex-column ga-6">
-      <div>
-        <div class="d-flex justify-space-between text-body-2 mb-2">
-          <span class="text-white">CPU Idle Threshold</span>
-          <span class="text-primary font-mono">{{ threshold }}%</span>
-        </div>
-        <v-slider 
-          v-model="threshold"
-          :min="1" 
-          :max="100" 
-          color="primary" 
-          track-color="#28392e" 
+    <div v-if="enabled" class="card-content">
+      <div class="setting-row">
+        <div class="setting-label">CPU Threshold</div>
+        <div class="setting-value">{{ threshold }}%</div>
+      </div>
+      <v-slider 
+        v-model="threshold"
+        :min="1" 
+        :max="100" 
+        color="#171717" 
+        track-color="#e5e5e5" 
+        hide-details 
+      />
+      
+      <div class="setting-row mt-4">
+        <div class="setting-label">Idle Duration</div>
+        <v-text-field 
+          v-model.number="evaluationPeriod"
+          type="number" 
+          suffix="min"
+          variant="outlined"
+          density="compact"
           hide-details 
         />
       </div>
-
-      <v-text-field 
-        v-model.number="evaluationPeriod"
-        label="Idle Duration (minutes)" 
-        type="number" 
-        bg-color="surface" 
-        hide-details 
-      />
     </div>
 
-    <div v-else class="text-center py-4">
-      <p class="text-muted text-body-2">CPU-based auto-shutdown is disabled</p>
+    <div v-else class="card-empty">
+      Disabled
     </div>
-  </v-card>
+  </div>
 </template>
 
 <script setup>
@@ -77,5 +79,52 @@ watch([enabled, threshold, evaluationPeriod], () => {
 </script>
 
 <style scoped>
-.font-mono { font-family: monospace; }
+.watchdog-card {
+  padding: 24px;
+  border: 1px solid #e5e5e5;
+  border-radius: 8px;
+  height: 100%;
+}
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 24px;
+}
+.card-title {
+  font-size: 16px;
+  font-weight: 500;
+  color: #171717;
+  margin-bottom: 4px;
+}
+.card-subtitle {
+  font-size: 13px;
+  color: #737373;
+}
+.card-content {
+  display: flex;
+  flex-direction: column;
+}
+.card-empty {
+  padding: 32px 0;
+  text-align: center;
+  font-size: 13px;
+  color: #a3a3a3;
+}
+.setting-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.setting-label {
+  font-size: 13px;
+  color: #737373;
+}
+.setting-value {
+  font-size: 14px;
+  font-weight: 500;
+  color: #171717;
+  font-family: monospace;
+}
 </style>

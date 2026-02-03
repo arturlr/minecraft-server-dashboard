@@ -1,21 +1,33 @@
 <template>
   <div>
-    <div class="d-flex align-center ga-2 mb-5 pb-3 border-b border-green">
-      <span class="material-symbols-outlined text-primary">tune</span>
-      <h3 class="text-white text-h6 font-weight-bold">General Properties</h3>
+    <div class="section-header">
+      <span class="material-symbols-outlined">tune</span>
+      <h3>General Properties</h3>
     </div>
 
-    <v-row>
-      <v-col cols="12" md="6">
-        <v-text-field v-model="form.runCommand" label="Run Command" bg-color="surface" placeholder="java -jar server.jar" />
-      </v-col>
-      <v-col cols="12" md="6">
-        <v-text-field v-model="form.workDir" label="Working Directory" bg-color="surface" placeholder="/home/minecraft" />
-      </v-col>
-      <v-col cols="12" md="6">
-        <v-text-field v-model="form.minecraftVersion" label="Minecraft Version" bg-color="surface" placeholder="1.20.4" />
-      </v-col>
-    </v-row>
+    <div class="properties-grid">
+      <v-text-field 
+        v-model="form.runCommand" 
+        label="Run Command" 
+        variant="outlined"
+        density="compact"
+        placeholder="java -jar server.jar" 
+      />
+      <v-text-field 
+        v-model="form.workDir" 
+        label="Working Directory" 
+        variant="outlined"
+        density="compact"
+        placeholder="/home/minecraft" 
+      />
+      <v-text-field 
+        v-model="form.minecraftVersion" 
+        label="Minecraft Version" 
+        variant="outlined"
+        density="compact"
+        placeholder="1.20.4" 
+      />
+    </div>
   </div>
 </template>
 
@@ -30,3 +42,29 @@ const form = computed({
   set: (val) => emit('update:modelValue', val)
 })
 </script>
+
+<style scoped>
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #e5e5e5;
+}
+.section-header .material-symbols-outlined {
+  font-size: 20px;
+  color: #171717;
+}
+.section-header h3 {
+  font-size: 16px;
+  font-weight: 500;
+  color: #171717;
+  margin: 0;
+}
+.properties-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+}
+</style>
