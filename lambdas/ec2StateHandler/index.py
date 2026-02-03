@@ -231,7 +231,7 @@ def state_change_response(instance_id):
             publicIp = instance_info["NetworkInterfaces"][0]["Association"]["PublicIp"]
 
     tags = {tag['Key']: tag['Value'] for tag in instance_info["Tags"]}
-    userEmail = tags.get("Owner", "unknown")
+    userEmail = tags.get("Owner")  # None if not present
     instanceName = tags.get("Name", "Undefined")
 
     # Converting to PST as the logs are in PST        
@@ -243,7 +243,6 @@ def state_change_response(instance_id):
     # building payload
     input = {
         "id": instance_id,
-        "userEmail": userEmail,
         "name": instanceName,
         "type": instance_info["InstanceType"],
         "state": instance_info["State"]["Name"].lower(),
@@ -254,6 +253,10 @@ def state_change_response(instance_id):
         "runningMinutes": runtime_data['minutes'],
         "runningMinutesCacheTimestamp": runtime_data.get('timestamp', '')
     }
+    
+    # Only include userEmail if it exists and is valid
+    if userEmail:
+        input["userEmail"] = userEmail
 
     return input
     
