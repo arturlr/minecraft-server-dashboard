@@ -7,7 +7,17 @@
           <span class="server-name">{{ server.name }}</span>
           <span class="status-badge" :class="statusClass">{{ statusText }}</span>
         </div>
-        <div v-if="isRunning" class="server-ip">{{ server.ip }}</div>
+        <div v-if="isRunning" class="server-ip-container">
+          <span class="server-ip">{{ server.ip }}</span>
+          <v-btn 
+            icon 
+            size="x-small"
+            variant="text"
+            @click="copyAddress"
+          >
+            <span class="material-symbols-outlined" style="font-size: 16px;">content_copy</span>
+          </v-btn>
+        </div>
       </div>
       <div class="server-actions">
         <v-btn 
@@ -33,6 +43,10 @@
     </div>
 
     <template v-if="isRunning">
+      <div v-if="shutdownPattern" class="shutdown-info">
+        <span class="material-symbols-outlined" style="font-size: 14px;">schedule</span>
+        <span>{{ shutdownPattern }}</span>
+      </div>
       <div class="metrics-grid">
         <div class="metric">
           <div class="metric-label">CPU</div>
@@ -92,7 +106,8 @@ import SparkLine from '../common/SparkLine.vue'
 const props = defineProps({
   server: { type: Object, required: true },
   metrics: { type: Object, default: null },
-  history: { type: Object, default: () => ({ cpu: [], mem: [], net: [], players: [] }) }
+  history: { type: Object, default: () => ({ cpu: [], mem: [], net: [], players: [] }) },
+  config: { type: Object, default: null }
 })
 
 const emit = defineEmits(['start', 'stop', 'restart', 'settings'])
@@ -100,6 +115,7 @@ const emit = defineEmits(['start', 'stop', 'restart', 'settings'])
 const actionLoading = ref(false)
 const confirmStart = ref(false)
 const confirmStop = ref(false)
+const copied = ref(false)
 
 const serverState = computed(() => props.server.state || 'stopped')
 const isRunning = computed(() => serverState.value === 'running')
@@ -150,6 +166,31 @@ const handleStop = () => {
   actionLoading.value = true
   emit('stop', props.server)
 }
+
+const copyAddress = async () => {
+  try {
+    await navigator.clipboard.writeText(props.server.ip)
+    copied.value = true
+    setTimeout(() => copied.value = false, 2000)
+  } catch (err) {
+    console.error('Failed to copy:', err)
+  }
+}
+
+const shutdownPattern = computed(() => {
+  if (!props.config) return null
+  
+  const patterns = []
+  if (props.config.alarmThreshold > 0) {
+    patterns.push(`CPU < ${props.config.alarmThreshold}%`)
+  }
+  if (props.config.stopScheduleExpression && props.config.stopScheduleExpression.trim()) {
+    patterns.push('Scheduled')
+  }
+  
+  console.log('Shutdown pattern for', props.server.name, ':', patterns, props.config)
+  return patterns.length > 0 ? `Auto-shutdown: ${patterns.join(' • ')}` : null
+})
 </script>
 
 <style scoped>
@@ -175,6 +216,11 @@ const handleStop = () => {
   font-size: 13px;
   color: #737373;
   font-family: monospace;
+}
+.server-ip-container {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   margin-top: 4px;
 }
 .server-actions {
@@ -230,5 +276,16 @@ const handleStop = () => {
 .status-badge.offline {
   background: #f5f5f5;
   color: #737373;
+}
+.shutdown-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #737373;
+  margin-bottom: 16px;
+  padding: 8px 12px;
+  background: #fafafa;
+  border-radius: 6px;
 }
 </style>

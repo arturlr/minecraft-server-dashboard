@@ -25,6 +25,7 @@
           :server="mapServer(server)" 
           :metrics="serverStore.getMetricsById(server.id)"
           :history="serverStore.getMetricsHistory(server.id)"
+          :config="serverConfigs[server.id]"
           @settings="openSettings"
           @start="handleStart"
           @stop="handleStop"
@@ -58,6 +59,7 @@ const serverStore = useServerStore()
 const search = ref('')
 const settingsDialog = ref(false)
 const selectedServerId = ref(null)
+const serverConfigs = ref({})
 
 const servers = computed(() => serverStore.servers)
 const loading = computed(() => serverStore.loading)
@@ -123,6 +125,14 @@ onMounted(() => {
 watch(() => serverStore.onlineServers, (onlineServers) => {
   onlineServers.forEach(server => {
     serverStore.subscribeToMetrics(server.id)
+    if (!serverConfigs.value[server.id]) {
+      serverStore.getServerConfig(server.id).then(config => {
+        console.log('Config for', server.id, config)
+        serverConfigs.value[server.id] = config
+      }).catch(err => {
+        console.error('Failed to fetch config for', server.id, err)
+      })
+    }
   })
 }, { immediate: true })
 

@@ -513,7 +513,9 @@ def _save_config_to_db(instance_id, arguments):
     if 'id' not in arguments:
         arguments['id'] = instance_id
     
+    logger.info(f"Saving config to DB: instance_id={instance_id}, arguments={arguments}")
     dyn.put_server_config(arguments)
+    logger.info(f"Config saved successfully to DB")
 
 def _configure_schedule_shutdown(instance_id, arguments):
     """Configure schedule-based shutdown"""

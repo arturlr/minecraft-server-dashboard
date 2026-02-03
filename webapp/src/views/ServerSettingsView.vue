@@ -185,10 +185,12 @@ const loadConfig = async () => {
 const saveConfig = async () => {
   saving.value = true
   try {
-    await serverStore.putServerConfig({
+    const configToSave = {
       id: serverId.value,
       ...config.value
-    })
+    }
+    console.log('Saving config:', configToSave)
+    await serverStore.putServerConfig(configToSave)
     snackbar.value = { show: true, text: 'Settings saved successfully', color: 'success' }
     setTimeout(() => router.push('/'), 1500)
   } catch (e) {
