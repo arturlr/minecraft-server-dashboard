@@ -576,6 +576,7 @@ Resources:
               Action:
                 - dynamodb:GetItem
                 - dynamodb:PutItem
+                - dynamodb:Query
               Resource:
                 Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTable"
 

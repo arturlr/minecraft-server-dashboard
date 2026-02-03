@@ -8,17 +8,28 @@ export default createVuetify({
   components,
   directives,
   theme: {
-    defaultTheme: 'dark',
+    defaultTheme: 'light',
     themes: {
+      light: {
+        colors: {
+          primary: '#10b981',
+          background: '#fafafa',
+          surface: '#ffffff',
+          'on-surface': '#171717',
+          secondary: '#737373',
+          error: '#dc2626',
+          info: '#3b82f6',
+          warning: '#f59e0b',
+        }
+      },
       dark: {
         colors: {
-          primary: '#13ec5b',
-          background: '#102216',
-          surface: '#1c2e24',
-          'surface-variant': '#15261d',
-          'on-surface': '#ffffff',
-          secondary: '#9db9a6',
-          error: '#ef4444',
+          primary: '#10b981',
+          background: '#171717',
+          surface: '#262626',
+          'on-surface': '#fafafa',
+          secondary: '#a3a3a3',
+          error: '#dc2626',
           info: '#3b82f6',
           warning: '#f59e0b',
         }
@@ -26,8 +37,8 @@ export default createVuetify({
     }
   },
   defaults: {
-    VBtn: { rounded: 'lg' },
-    VCard: { rounded: 'xl' },
+    VBtn: { rounded: 'lg', variant: 'flat', elevation: 0 },
+    VCard: { rounded: 'lg', elevation: 0 },
     VTextField: { variant: 'outlined', density: 'comfortable' },
     VSelect: { variant: 'outlined', density: 'comfortable' },
   }

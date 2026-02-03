@@ -1,12 +1,12 @@
 <template>
-  <div class="d-flex h-100">
+  <div class="app-layout">
     <AppSidebar />
-    <v-main class="bg-background">
-      <AppHeader :title="title" />
-      <div class="pa-6 pa-lg-10" style="max-width: 1600px; margin: 0 auto">
+    <div class="main-content">
+      <div class="content-wrapper">
+        <AppHeader :title="title" />
         <slot />
       </div>
-    </v-main>
+    </div>
   </div>
 </template>
 
@@ -16,3 +16,20 @@ import AppHeader from './AppHeader.vue'
 
 defineProps({ title: String })
 </script>
+
+<style scoped>
+.app-layout {
+  display: flex;
+  height: 100vh;
+  background: #fafafa;
+}
+.main-content {
+  flex: 1;
+  overflow-y: auto;
+}
+.content-wrapper {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 48px 48px;
+}
+</style>

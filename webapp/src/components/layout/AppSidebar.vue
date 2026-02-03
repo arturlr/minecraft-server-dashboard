@@ -1,70 +1,25 @@
 <template>
-  <v-navigation-drawer permanent width="256" color="#102216" class="border-green" border="e">
-    <div class="d-flex flex-column h-100 pa-4">
-      <div class="d-flex flex-column ga-6">
-        <!-- Logo -->
-        <div class="d-flex align-center ga-3 px-2">
-          <div class="d-flex align-center justify-center rounded-lg pa-2" style="background: rgba(19,236,91,0.2)">
-            <span class="material-symbols-outlined text-primary" style="font-size: 28px">dns</span>
-          </div>
-          <div>
-            <h1 class="text-white text-lg font-weight-bold">BlockNode</h1>
-            <p class="text-muted text-caption">Manager v2.4</p>
-          </div>
+  <div class="sidebar">
+    <div class="sidebar-header">
+      <div class="logo">MC</div>
+      <div class="logo-text">Minecraft Dashboard</div>
+    </div>
+
+    <nav class="nav">
+      <router-link to="/" custom v-slot="{ isActive, navigate }">
+        <div @click="navigate" :class="['nav-item', { active: isActive }]">
+          Dashboard
         </div>
+      </router-link>
+    </nav>
 
-        <!-- Navigation -->
-        <nav class="d-flex flex-column ga-2">
-          <router-link to="/" custom v-slot="{ isActive, navigate }">
-            <div @click="navigate" :class="['nav-item', { active: isActive }]">
-              <span class="material-symbols-outlined">dashboard</span>
-              <span>Dashboard</span>
-            </div>
-          </router-link>
-          <div class="nav-item">
-            <span class="material-symbols-outlined">group</span>
-            <span>Members</span>
-          </div>
-          <div class="nav-item">
-            <span class="material-symbols-outlined">settings_input_component</span>
-            <span>Global Settings</span>
-          </div>
-          <div class="nav-item">
-            <span class="material-symbols-outlined">terminal</span>
-            <span>Logs</span>
-          </div>
-        </nav>
-      </div>
-
-      <v-spacer />
-
-      <!-- User Profile -->
-      <div class="border-t border-green pt-4">
-        <v-menu>
-          <template #activator="{ props }">
-            <div v-bind="props" class="d-flex align-center ga-3 px-2 py-2 rounded-xl cursor-pointer user-profile">
-              <v-avatar size="40" color="primary" variant="tonal">
-                <span class="text-primary font-weight-bold">{{ userInitial }}</span>
-              </v-avatar>
-              <div class="flex-grow-1 overflow-hidden">
-                <p class="text-white text-body-2 font-weight-bold text-truncate">{{ userName }}</p>
-                <p class="text-muted text-caption text-truncate">{{ userRole }}</p>
-              </div>
-              <span class="material-symbols-outlined text-muted">expand_more</span>
-            </div>
-          </template>
-          <v-list density="compact" bg-color="surface">
-            <v-list-item @click="logout">
-              <template #prepend>
-                <span class="material-symbols-outlined mr-2">logout</span>
-              </template>
-              <v-list-item-title>Sign Out</v-list-item-title>
-            </v-list-item>
-          </v-list>
-        </v-menu>
+    <div class="sidebar-footer">
+      <div class="user-info">
+        <div class="user-name">{{ userName }}</div>
+        <button @click="logout" class="logout-btn">Sign out</button>
       </div>
     </div>
-  </v-navigation-drawer>
+  </div>
 </template>
 
 <script setup>
@@ -76,8 +31,6 @@ const router = useRouter()
 const userStore = useUserStore()
 
 const userName = computed(() => userStore.fullname || 'User')
-const userInitial = computed(() => userName.value[0]?.toUpperCase() || 'U')
-const userRole = computed(() => userStore.isAdmin ? 'Admin' : 'Member')
 
 const logout = async () => {
   await userStore.logout()
@@ -85,34 +38,84 @@ const logout = async () => {
 }
 </script>
 
-<style scoped lang="scss">
-.nav-item {
+<style scoped>
+.sidebar {
+  width: 200px;
+  height: 100vh;
+  border-right: 1px solid #e5e5e5;
+  display: flex;
+  flex-direction: column;
+  padding: 24px 0;
+  background: #ffffff;
+}
+.sidebar-header {
+  padding: 0 24px 24px;
+  border-bottom: 1px solid #e5e5e5;
+  margin-bottom: 24px;
+}
+.logo {
+  width: 32px;
+  height: 32px;
+  background: #171717;
+  color: white;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px;
-  border-radius: 12px;
-  cursor: pointer;
-  color: #9db9a6;
+  justify-content: center;
   font-size: 14px;
-  font-weight: 500;
-  transition: all 0.2s;
-
-  &:hover {
-    background: rgba(255,255,255,0.05);
-    color: white;
-  }
-
-  &.active {
-    background: rgba(19,236,91,0.1);
-    border: 1px solid rgba(19,236,91,0.2);
-    color: white;
-    font-weight: 700;
-    .material-symbols-outlined { color: #13ec5b; }
-  }
+  font-weight: 600;
+  border-radius: 4px;
+  margin-bottom: 8px;
 }
-
-.user-profile:hover {
-  background: rgba(255,255,255,0.05);
+.logo-text {
+  font-size: 13px;
+  font-weight: 500;
+  color: #171717;
+}
+.nav {
+  flex: 1;
+  padding: 0 16px;
+}
+.nav-item {
+  padding: 8px 12px;
+  font-size: 14px;
+  color: #737373;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.15s;
+}
+.nav-item:hover {
+  background: #fafafa;
+  color: #171717;
+}
+.nav-item.active {
+  background: #171717;
+  color: white;
+  font-weight: 500;
+}
+.sidebar-footer {
+  padding: 24px 24px 0;
+  border-top: 1px solid #e5e5e5;
+}
+.user-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.user-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: #171717;
+}
+.logout-btn {
+  font-size: 12px;
+  color: #737373;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+}
+.logout-btn:hover {
+  color: #171717;
 }
 </style>

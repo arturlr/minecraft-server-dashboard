@@ -1,24 +1,16 @@
 <template>
   <v-row>
     <v-col cols="12" sm="6">
-      <v-card color="surface" class="pa-5 border-green" border="thin">
-        <div class="d-flex justify-space-between align-center mb-1">
-          <span class="text-muted text-body-2">Servers Online</span>
-          <span class="material-symbols-outlined text-primary">dns</span>
-        </div>
-        <p class="text-white text-h4 font-weight-bold">
-          {{ online }} <span class="text-grey text-body-1 font-weight-regular">/ {{ total }}</span>
-        </p>
-      </v-card>
+      <div class="stat-card">
+        <div class="stat-label">Servers Online</div>
+        <div class="stat-value">{{ online }}<span class="stat-total">/{{ total }}</span></div>
+      </div>
     </v-col>
     <v-col cols="12" sm="6">
-      <v-card color="surface" class="pa-5 border-green" border="thin">
-        <div class="d-flex justify-space-between align-center mb-1">
-          <span class="text-muted text-body-2">Active Players</span>
-          <span class="material-symbols-outlined text-blue">person</span>
-        </div>
-        <p class="text-white text-h4 font-weight-bold">{{ players }}</p>
-      </v-card>
+      <div class="stat-card">
+        <div class="stat-label">Active Players</div>
+        <div class="stat-value">{{ players }}</div>
+      </div>
     </v-col>
   </v-row>
 </template>
@@ -30,3 +22,29 @@ defineProps({
   players: { type: Number, default: 42 }
 })
 </script>
+
+<style scoped>
+.stat-card {
+  padding: 24px 0;
+  border-bottom: 1px solid #e5e5e5;
+}
+.stat-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: #737373;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+}
+.stat-value {
+  font-size: 36px;
+  font-weight: 300;
+  color: #171717;
+  line-height: 1;
+}
+.stat-total {
+  font-size: 20px;
+  color: #a3a3a3;
+  margin-left: 4px;
+}
+</style>
