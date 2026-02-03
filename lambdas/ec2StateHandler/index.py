@@ -27,11 +27,12 @@ appValue = os.getenv('TAG_APP_VALUE')
 appName = os.getenv('APP_NAME') 
 envName = os.getenv('ENVIRONMENT_NAME')
 endpoint = os.getenv('APPSYNC_URL')
+servers_table_name = os.getenv('SERVERS_TABLE_NAME')
 cognito_pool_id = os.getenv('COGNITO_USER_POOL_ID', None)
 
 utl = utilHelper.Utils()
 ec2_utils = ec2Helper.Ec2Utils()
-ddb = ddbHelper.CoreTableDyn()
+ddb = ddbHelper.CoreTableDyn(servers_table_name)
 utc = pytz.utc
 pst = pytz.timezone('US/Pacific')
 
