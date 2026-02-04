@@ -24,7 +24,7 @@ Resources:
     Properties:
       DocumentType: Command
       TargetType: /AWS::EC2::Instance
-      Name: !Sub "${ProjectName}-${EnvironmentName}-BootstrapSSMDoc"
+      Name: !Sub "${ProjectName}-${EnvironmentName}-BootstrapSSMDoc-${AWS::StackName}"
       Content:
         schemaVersion: '2.2'
         description: Bootstrap instance
