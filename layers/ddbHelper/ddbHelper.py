@@ -125,7 +125,7 @@ class CoreTableDyn:
             'Type': 'Server',
             'stopScheduleExpression': config.get('stopScheduleExpression', ''),
             'startScheduleExpression': config.get('startScheduleExpression', ''),
-            'alarmThreshold': self._to_decimal(config.get('alarmThreshold', 0.0)),
+            'alarmThreshold': self._to_decimal(round(config.get('alarmThreshold', 0.0), 1)),
             'alarmEvaluationPeriod': config.get('alarmEvaluationPeriod', 0),
             'runCommand': config.get('runCommand', ''),
             'workDir': config.get('workDir', ''),

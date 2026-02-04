@@ -182,13 +182,19 @@ const shutdownPattern = computed(() => {
   
   const patterns = []
   if (props.config.alarmThreshold > 0) {
-    patterns.push(`CPU < ${props.config.alarmThreshold}%`)
+    patterns.push(`CPU < ${Math.round(props.config.alarmThreshold)}%`)
   }
   if (props.config.stopScheduleExpression && props.config.stopScheduleExpression.trim()) {
-    patterns.push('Scheduled')
+    const cron = props.config.stopScheduleExpression.split(' ')
+    if (cron.length >= 2) {
+      const hour = cron[1].padStart(2, '0')
+      const minute = cron[0].padStart(2, '0')
+      patterns.push(`Scheduled ${hour}:${minute}`)
+    } else {
+      patterns.push('Scheduled')
+    }
   }
   
-  console.log('Shutdown pattern for', props.server.name, ':', patterns, props.config)
   return patterns.length > 0 ? `Auto-shutdown: ${patterns.join(' • ')}` : null
 })
 </script>

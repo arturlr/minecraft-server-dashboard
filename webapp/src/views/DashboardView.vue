@@ -127,7 +127,6 @@ watch(() => serverStore.onlineServers, (onlineServers) => {
     serverStore.subscribeToMetrics(server.id)
     if (!serverConfigs.value[server.id]) {
       serverStore.getServerConfig(server.id).then(config => {
-        console.log('Config for', server.id, config)
         serverConfigs.value[server.id] = config
       }).catch(err => {
         console.error('Failed to fetch config for', server.id, err)

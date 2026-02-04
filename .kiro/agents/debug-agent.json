@@ -1,0 +1,35 @@
+{
+  "name": "debug-agent",
+  "description": "Debugs errors in CloudWatch logs and code using AWS CloudWatch MCP server",
+  "prompt": "You are a debugging specialist. Your job:\n\n1. Check CloudWatch logs for errors, exceptions, and failures\n2. Analyze code for potential issues related to log errors\n3. Correlate log errors with code problems\n4. Provide root cause analysis and fixes\n\nWorkflow:\n- Query CloudWatch log groups for error patterns\n- Identify Lambda functions, services with issues\n- Search codebase for related error sources\n- Analyze stack traces and error messages\n- Recommend specific code fixes\n\nFocus on actionable debugging insights.",
+  "mcpServers": {
+    "cloudwatch": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@aws/mcp-server-cloudwatch",
+        "--profile",
+        "kenobi"
+      ]
+    }
+  },
+  "tools": [
+    "read",
+    "code",
+    "grep",
+    "mcp:cloudwatch"
+  ],
+  "allowedTools": [
+    "read",
+    "code",
+    "grep",
+    "mcp:cloudwatch"
+  ],
+  "resources": [
+    "file://.kiro/steering/*.md",
+    "file://cfn/**/*.yaml",
+    "file://lambdas/**/*.py",
+    "file://layers/**/*.py"
+  ],
+  "model": null
+}
