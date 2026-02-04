@@ -122,12 +122,22 @@ jobs:
             
             # Deploy with monitoring
             export AWS_S3_USE_ARN_REGION=false
+            
+            # Set bucket names based on stage
+            if [ "<< parameters.stage >>" = "dev" ]; then
+              SUPPORT_BUCKET="${ARTIFACTS_BUCKET_DEV}"
+              FRONTEND_BUCKET="${FRONTEND_BUCKET_DEV}"
+            elif [ "<< parameters.stage >>" = "prod" ]; then
+              SUPPORT_BUCKET="${ARTIFACTS_BUCKET_PROD}"
+              FRONTEND_BUCKET="${FRONTEND_BUCKET_PROD}"
+            fi
+            
             sam deploy \
               --stack-name $STACK_NAME \
               --config-env << parameters.stage >> \
               --resolve-s3 \
               --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND \
-              --parameter-overrides "ProjectName=msd EnvironmentName=<< parameters.stage >> AppValue=minecraft" \
+              --parameter-overrides "ProjectName=msd EnvironmentName=<< parameters.stage >> AppValue=minecraft SupportBucketName=$SUPPORT_BUCKET FrontendBucketName=$FRONTEND_BUCKET" \
               --no-confirm-changeset \
               --no-fail-on-empty-changeset \
               --disable-rollback &
@@ -169,10 +179,12 @@ jobs:
       - run:
           name: Upload Rust binaries and scripts to SupportBucket
           command: |
-            SUPPORT_BUCKET=$(aws cloudformation describe-stacks \
-              --stack-name msd-<< parameters.stage >> \
-              --query 'Stacks[0].Outputs[?OutputKey==`SupportBucket`].OutputValue' \
-              --output text)
+            # Set bucket name based on stage
+            if [ "<< parameters.stage >>" = "dev" ]; then
+              SUPPORT_BUCKET="${ARTIFACTS_BUCKET_DEV}"
+            elif [ "<< parameters.stage >>" = "prod" ]; then
+              SUPPORT_BUCKET="${ARTIFACTS_BUCKET_PROD}"
+            fi
             
             echo "Uploading Rust binaries to s3://$SUPPORT_BUCKET/"
             aws s3 cp msd-metrics "s3://$SUPPORT_BUCKET/msd-metrics"
@@ -185,10 +197,12 @@ jobs:
       - run:
           name: Upload CloudWatch agent config
           command: |
-            SUPPORT_BUCKET=$(aws cloudformation describe-stacks \
-              --stack-name msd-<< parameters.stage >> \
-              --query 'Stacks[0].Outputs[?OutputKey==`SupportBucket`].OutputValue' \
-              --output text)
+            # Set bucket name based on stage
+            if [ "<< parameters.stage >>" = "dev" ]; then
+              SUPPORT_BUCKET="${ARTIFACTS_BUCKET_DEV}"
+            elif [ "<< parameters.stage >>" = "prod" ]; then
+              SUPPORT_BUCKET="${ARTIFACTS_BUCKET_PROD}"
+            fi
             
             if [ -f "amazon-cloudwatch-agent.json" ]; then
               echo "Uploading CloudWatch agent config to s3://$SUPPORT_BUCKET/"

@@ -11,6 +11,12 @@ Parameters:
   AppValue:
     Type: String
     Description: Value of the application
+  SupportBucketName:
+    Type: String
+    Description: Pre-existing S3 support bucket name from CircleCI
+  FrontendBucketName:
+    Type: String
+    Description: Pre-existing S3 frontend bucket name from CircleCI
 
 
 Resources:
@@ -42,6 +48,7 @@ Resources:
         ProjectName: !Ref ProjectName
         EnvironmentName: !Ref EnvironmentName
         AppValue: !Ref AppValue
+        SupportBucketName: !Ref SupportBucketName
 
   SSMStack:
     Type: AWS::Serverless::Application
@@ -52,7 +59,7 @@ Resources:
         ProjectName: !Ref ProjectName
         EnvironmentName: !Ref EnvironmentName
         AppValue: !Ref AppValue
-        SupportBucket: !GetAtt EC2Stack.Outputs.SupportBucket
+        SupportBucket: !Ref SupportBucketName
 
   LambdasStack:
     Type: AWS::Serverless::Application
@@ -67,26 +74,10 @@ Resources:
         AppValue: !Ref AppValue
         BootstrapSSMDoc: !GetAtt SSMStack.Outputs.BootstrapSSMDoc
 
-  WebStack:
-    Type: AWS::Serverless::Application
-    DependsOn: 
-      - EC2Stack
-      - CognitoStack
-    Properties:
-      Location: ./templates/web.yaml
-      Parameters:
-        ProjectName: !Ref ProjectName
-        EnvironmentName: !Ref EnvironmentName
-        AppValue: !Ref AppValue
-
 Outputs:
   GraphQLAPIEndpoint:
     Description: AppSync GraphQL API Endpoint
     Value: !GetAtt LambdasStack.Outputs.GraphQLAPIEndpoint
-
-  CloudFrontDomain:
-    Description: CloudFront Distribution Domain Name
-    Value: !GetAtt WebStack.Outputs.CloudFrontDomain
 
   CognitoUserPoolClientId:
     Description: Cognito User Pool Client ID
@@ -104,10 +95,10 @@ Outputs:
     Description: Cognito Domain Name
     Value: !GetAtt CognitoStack.Outputs.CognitoDomainName
 
-  WebAppBucket:
-    Description: S3 Web Application Bucket Name
-    Value: !GetAtt WebStack.Outputs.WebAppBucket
-
   SupportBucket:
     Description: S3 Support Bucket Name
-    Value: !GetAtt EC2Stack.Outputs.SupportBucket
+    Value: !Ref SupportBucketName
+
+  FrontendBucket:
+    Description: S3 Frontend Bucket Name
+    Value: !Ref FrontendBucketName
