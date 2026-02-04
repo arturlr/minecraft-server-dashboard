@@ -9,11 +9,40 @@ Parameters:
   AppValue:
     Type: String
     Description: Value of the application
-  SupportBucketName:
-    Type: String
-    Description: Name of the pre-existing S3 support bucket
 
 Resources:
+
+  SupportBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Delete
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+
+  SupportBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref SupportBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: DenyPublicAccess
+            Effect: Deny
+            Principal: "*"
+            Action: "s3:*"
+            Resource:
+              - !GetAtt SupportBucket.Arn
+              - !Sub "${SupportBucket.Arn}/*"
+            Condition:
+              Bool:
+                "aws:SecureTransport": "false"
 
   Ec2MinecraftDashboardInstanceRole:
     Type: "AWS::IAM::Role"
@@ -73,8 +102,8 @@ Resources:
                   - "s3:GetObject"
                   - "s3:ListBucket"
                 Resource:
-                  - !Sub "arn:aws:s3:::${SupportBucketName}"
-                  - !Sub "arn:aws:s3:::${SupportBucketName}/*"
+                  - !Sub "${SupportBucket.Arn}"
+                  - !Sub "${SupportBucket.Arn}/*"
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
         - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy
@@ -89,7 +118,7 @@ Resources:
 Outputs:
   SupportBucket:
     Description: SupportBucket
-    Value: !Ref SupportBucketName
+    Value: !Ref SupportBucket
     Export:
       Name: !Sub "${ProjectName}-${EnvironmentName}-SupportBucket"
 
