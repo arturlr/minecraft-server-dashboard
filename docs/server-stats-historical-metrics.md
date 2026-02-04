@@ -4,12 +4,12 @@
 The ServerStatsDialog was showing empty charts because it only subscribed to real-time metrics via AppSync subscriptions. Since metrics are published every 5 minutes, users had to wait up to 5 minutes to see any data when opening the dialog.
 
 ## Solution
-Added a new GraphQL query `getServerMetrics` that fetches the last hour of historical metrics from CloudWatch when the dialog opens, providing immediate data visualization.
+Added a new GraphQL query `ec2MetricsHandler` that fetches the last hour of historical metrics from CloudWatch when the dialog opens, providing immediate data visualization.
 
 ## Changes Made
 
-### 1. New Lambda Function: `getServerMetrics`
-**File**: `lambdas/getServerMetrics/index.py`
+### 1. New Lambda Function: `ec2MetricsHandler`
+**File**: `lambdas/ec2MetricsHandler/index.py`
 
 Fetches historical CloudWatch metrics for the last hour:
 - **CPU**: `CPUUtilization` from `AWS/EC2` namespace
@@ -24,13 +24,13 @@ Returns data in ApexCharts format with 1-minute granularity.
 
 Added new query:
 ```graphql
-getServerMetrics(id: String!): ServerMetric
+ec2MetricsHandler(id: String!): ServerMetric
 ```
 
 ### 3. Frontend Query
 **File**: `dashboard/src/graphql/queries.js`
 
-Added `getServerMetrics` query to fetch historical data.
+Added `ec2MetricsHandler` query to fetch historical data.
 
 ### 4. ServerCharts Component Updates
 **File**: `dashboard/src/components/ServerCharts.vue`
@@ -50,10 +50,10 @@ Fixed invalid `variant="label"` prop on VChip components (changed to `variant="t
 **File**: `cfn/templates/lambdas.yaml`
 
 Added:
-- `GetServerMetrics` Lambda function resource
-- `GetServerMetricsDataSource` AppSync data source
-- `getServerMetricsFunction` AppSync function
-- `getServerMetrics` resolver pipeline
+- `ec2MetricsHandler` Lambda function resource
+- `ec2MetricsHandlerDataSource` AppSync data source
+- `ec2MetricsHandlerFunction` AppSync function
+- `ec2MetricsHandler` resolver pipeline
 - CloudWatch read permissions for the Lambda
 
 ## User Experience Improvement

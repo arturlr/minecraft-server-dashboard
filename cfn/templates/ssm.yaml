@@ -1,0 +1,84 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+
+Parameters:
+  ProjectName:
+    Type: String
+  EnvironmentName:
+    Type: String
+  AppValue:
+    Type: String
+  SupportBucket:
+    Type: String
+    Description: S3 bucket for support files
+
+Resources:
+
+  BootstrapSSMDoc:
+    Type: AWS::SSM::Document
+    UpdateReplacePolicy: Delete
+    Properties:
+      DocumentType: Command
+      TargetType: /AWS::EC2::Instance
+      Name: !Sub "${ProjectName}-${EnvironmentName}-BootstrapSSMDoc"
+      Content:
+        schemaVersion: '2.2'
+        description: Bootstrap instance
+        parameters:
+          runCommand:
+            type: String
+            description: Minecraft server run command
+        mainSteps:              
+          - action: aws:runShellScript
+            name: BootstrapInstance
+            inputs:
+              runCommand:
+                - !Sub |
+                  #!/bin/bash
+                  set -e
+                  REGION=$(ec2metadata --availability-zone | sed 's/[a-z]$//')
+                  
+                  echo "=== Installing Packages ==="
+                  aws s3 cp s3://${SupportBucket}/scripts/01-install-packages.sh /tmp/install-packages.sh --region $REGION
+                  chmod +x /tmp/install-packages.sh
+                  /tmp/install-packages.sh
+                  
+                  echo "=== Setting up CloudWatch ==="
+                  aws s3 cp s3://${SupportBucket}/scripts/03-setup-cloudwatch.sh /tmp/setup-cloudwatch.sh --region $REGION
+                  chmod +x /tmp/setup-cloudwatch.sh
+                  /tmp/setup-cloudwatch.sh ${SupportBucket}
+                  
+                  echo "=== Setting up Metrics ==="
+                  aws s3 cp s3://${SupportBucket}/scripts/05-setup-metrics.sh /tmp/setup-metrics.sh --region $REGION
+                  chmod +x /tmp/setup-metrics.sh
+                  /tmp/setup-metrics.sh ${SupportBucket}
+                  
+                  echo "=== Setting up Log Server ==="
+                  aws s3 cp s3://${SupportBucket}/scripts/07-setup-log-server.sh /tmp/setup-log-server.sh --region $REGION
+                  chmod +x /tmp/setup-log-server.sh
+                  /tmp/setup-log-server.sh ${SupportBucket}
+                  
+                  echo "=== Setting up Minecraft Service ==="
+                  aws s3 cp s3://${SupportBucket}/scripts/09-setup-minecraft-service.sh /tmp/setup-minecraft-service.sh --region $REGION
+                  chmod +x /tmp/setup-minecraft-service.sh
+                  /tmp/setup-minecraft-service.sh "{{ runCommand }}"
+                  
+                  echo "=== Updating Bootstrap Status ==="
+                  aws s3 cp s3://${SupportBucket}/scripts/10-update-bootstrap-status.sh /tmp/update-bootstrap-status.sh --region $REGION
+                  chmod +x /tmp/update-bootstrap-status.sh
+                  /tmp/update-bootstrap-status.sh ${ProjectName} ${EnvironmentName}
+
+  NotificationSenderEmailParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /minecraft-dashboard/notification-sender-email
+      Type: String
+      Value: !Sub "msd@noreply.geckobyte.ca"
+      Description: Email address used to send server notifications
+
+Outputs:
+  BootstrapSSMDoc:
+    Description: Bootstrap SSM Document Name
+    Value: !Ref BootstrapSSMDoc
+    Export:
+      Name: !Sub "${ProjectName}-${EnvironmentName}-BootstrapSSMDoc"

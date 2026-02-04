@@ -86,7 +86,7 @@ This feature transforms the Minecraft Server Dashboard frontend from a single-se
 1. WHEN servers with IAM issues exist, THE Dashboard SHALL display a prominent alert banner above the server table
 2. THE IAM Alert SHALL list all servers with non-compliant IAM roles
 3. THE IAM Alert SHALL provide a "Fix IAM Role" button for each affected server
-4. WHEN a user clicks the fix button, THE Dashboard SHALL execute the fixServerRole mutation for that server
+4. WHEN a user clicks the fix button, THE Dashboard SHALL execute the iamProfileManager mutation for that server
 5. THE Dashboard SHALL remove servers from the alert after successful IAM remediation
 
 ### Requirement 7: Application Toolbar

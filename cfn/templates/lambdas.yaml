@@ -11,7 +11,14 @@ Globals:
     Tracing: Active
     Environment:
       Variables:
-        SERVERS_TABLE_NAME: !Ref ServersTable   
+        CORE_TABLE_NAME:
+          Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTableName"   
+        COGNITO_USER_POOL_ID:
+          Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-UserPoolId"
+        TAG_APP_VALUE: !Ref AppValue
+        APP_NAME: !Ref ProjectName
+        ENVIRONMENT_NAME: !Ref EnvironmentName
+        AWS_REGION_NAME: !Sub "${AWS::Region}"
 
 Parameters:
   ProjectName:
@@ -19,68 +26,44 @@ Parameters:
   EnvironmentName:
     Type: String
   AppValue:
-    Type: String    
-
-# Conditions:
-#   IsARM64Architecture: !Equals [ !Ref Architecture, arm64 ]
-
-# ParametersAndSecretsExtensionArn:
-#   us-east-1:
-#     x86: "arn:aws:lambda:us-east-1:177933569100:layer:AWS-Parameters-and-Secrets-Lambda-Extension:12"
-#     arm64: "arn:aws:lambda:us-east-1:177933569100:layer:AWS-Parameters-and-Secrets-Lambda-Extension-Arm64:12"
-#   us-west-2:
-#     x86: "arn:aws:lambda:us-west-2:345057560386:layer:AWS-Parameters-and-Secrets-Lambda-Extension:12"
-#     arm64: "arn:aws:lambda:us-west-2:345057560386:layer:AWS-Parameters-and-Secrets-Lambda-Extension-Arm64:12"
+    Type: String
+  BootstrapSSMDoc:
+    Type: String
+    Description: Bootstrap SSM Document Name
 
 Resources:
 
-  ServerActionQueue:
+  ec2ActionValidatorQueue:
     Type: AWS::SQS::Queue
     Properties:
-      QueueName: !Sub "${ProjectName}-${EnvironmentName}-server-actions"
+      QueueName: !Sub "${ProjectName}-${EnvironmentName}-ec2-actions"
       VisibilityTimeout: 300
       MessageRetentionPeriod: 1209600
       RedrivePolicy:
-        deadLetterTargetArn: !GetAtt ServerActionDLQ.Arn
+        deadLetterTargetArn: !GetAtt ec2ActionValidatorDLQ.Arn
         maxReceiveCount: 3
 
-  ServerActionDLQ:
+  ec2ActionValidatorDLQ:
     Type: AWS::SQS::Queue
     Properties:
-      QueueName: !Sub "${ProjectName}-${EnvironmentName}-server-actions-dlq"
+      QueueName: !Sub "${ProjectName}-${EnvironmentName}-ec2-actions-dlq"
       MessageRetentionPeriod: 1209600
 
-  ServersTable:
-    Type: AWS::DynamoDB::Table
+  SSMCommandQueue:
+    Type: AWS::SQS::Queue
     Properties:
-      BillingMode: PAY_PER_REQUEST
-      AttributeDefinitions:
-        - AttributeName: id
-          AttributeType: S
-      KeySchema:
-        - AttributeName: id
-          KeyType: HASH
-      TimeToLiveSpecification:
-         AttributeName: expiration
-         Enabled: true
-      PointInTimeRecoverySpecification:
-        PointInTimeRecoveryEnabled: true
-       
-  LogAuditTable:
-    Type: AWS::DynamoDB::Table
+      QueueName: !Sub "${ProjectName}-${EnvironmentName}-ec2-ssm-commands"
+      VisibilityTimeout: 900  # 15 minutes
+      MessageRetentionPeriod: 86400  # 24 hours
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt SSMCommandDLQ.Arn
+        maxReceiveCount: 3
+
+  SSMCommandDLQ:
+    Type: AWS::SQS::Queue
     Properties:
-      BillingMode: PAY_PER_REQUEST
-      AttributeDefinitions:
-        - AttributeName: id
-          AttributeType: S
-      KeySchema:
-        - AttributeName: id
-          KeyType: HASH
-      TimeToLiveSpecification:
-         AttributeName: expiration
-         Enabled: true
-      PointInTimeRecoverySpecification:
-        PointInTimeRecoveryEnabled: true
+      QueueName: !Sub "${ProjectName}-${EnvironmentName}-ec2-ssm-commands-dlq"
+      MessageRetentionPeriod: 1209600  # 14 days
 
   GraphQLAPI:
     Type: AWS::Serverless::GraphQLApi
@@ -99,52 +82,56 @@ Resources:
       DataSources:
         DynamoDb:
           LogAuditTable:
-            TableName: !Ref LogAuditTable
-            TableArn: !GetAtt LogAuditTable.Arn
-          ServersTable:
-            TableName: !Ref ServersTable
-            TableArn: !GetAtt ServersTable.Arn
+            TableName: 
+              Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-LogAuditTableName"
+            TableArn:
+              Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-LogAuditTable"
+          CoreTable:
+            TableName:
+              Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTable"
+            TableArn:
+              Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTable"
         Lambda:
-          ListServersDataSource:
-            FunctionArn: !GetAtt ListServers.Arn
-          ServerActionDataSource:
-            FunctionArn: !GetAtt ServerAction.Arn
-          FixServerRoleDataSource:
-            FunctionArn: !GetAtt FixServerRole.Arn
-          GetMonthlyCostDataSource:
-            FunctionArn: !GetAtt GetMonthlyCost.Arn
-          GetServerMetricsDataSource:
-            FunctionArn: !GetAtt GetServerMetrics.Arn
+          ec2DiscoveryDataSource:
+            FunctionArn: !GetAtt ec2Discovery.Arn
+          ec2ActionValidatorDataSource:
+            FunctionArn: !GetAtt ec2ActionValidator.Arn
+          iamProfileManagerDataSource:
+            FunctionArn: !GetAtt iamProfileManager.Arn
+          ec2MetricsHandlerDataSource:
+            FunctionArn: !GetAtt ec2MetricsHandler.Arn
+          getServerLogsDataSource:
+            FunctionArn: !GetAtt getServerLogs.Arn
       Functions:
         serverListFunction:
           Runtime:
             Name: APPSYNC_JS
             Version: "1.0.0"
-          DataSource: ListServersDataSource
+          DataSource: ec2DiscoveryDataSource
           CodeUri: ../../appsync/resolvers/lambdaInvoker.js
-        serverActionFunction:
+        ec2ActionValidatorFunction:
           Runtime:
             Name: APPSYNC_JS
             Version: "1.0.0"
-          DataSource: ServerActionDataSource
+          DataSource: ec2ActionValidatorDataSource
           CodeUri: ../../appsync/resolvers/lambdaInvoker.js
-        fixServerRoleFunction:
+        iamProfileManagerFunction:
           Runtime:
             Name: APPSYNC_JS
             Version: "1.0.0"
-          DataSource: FixServerRoleDataSource
+          DataSource: iamProfileManagerDataSource
           CodeUri: ../../appsync/resolvers/lambdaInvoker.js
-        getMonthlyCostFunction:
+        ec2MetricsHandlerFunction:
           Runtime:
             Name: APPSYNC_JS
             Version: "1.0.0"
-          DataSource: GetMonthlyCostDataSource
+          DataSource: ec2MetricsHandlerDataSource
           CodeUri: ../../appsync/resolvers/lambdaInvoker.js
-        getServerMetricsFunction:
+        getServerLogsFunction:
           Runtime:
             Name: APPSYNC_JS
             Version: "1.0.0"
-          DataSource: GetServerMetricsDataSource
+          DataSource: getServerLogsDataSource
           CodeUri: ../../appsync/resolvers/lambdaInvoker.js
         putLogAuditFunction:
           Runtime:
@@ -162,13 +149,13 @@ Resources:
           Runtime:
             Name: APPSYNC_JS
             Version: "1.0.0"
-          DataSource: ServersTable
+          DataSource: CoreTable
           CodeUri: ../../appsync/resolvers/putById.js
         getServerRecordFunction:
           Runtime:
             Name: APPSYNC_JS
             Version: "1.0.0"
-          DataSource: ServersTable
+          DataSource: CoreTable
           CodeUri: ../../appsync/resolvers/getById.js
       Resolvers:
         Mutation: 
@@ -177,43 +164,67 @@ Resources:
               Name: APPSYNC_JS
               Version: "1.0.0"
             Pipeline:
-              - serverActionFunction
+              - ec2ActionValidatorFunction
           updateServerConfig:
             Runtime:
               Name: APPSYNC_JS
               Version: "1.0.0"
             Pipeline:
-              - serverActionFunction
+              - ec2ActionValidatorFunction
           startServer:
             Runtime:
               Name: APPSYNC_JS
               Version: "1.0.0"
             Pipeline:
-              - serverActionFunction
+              - ec2ActionValidatorFunction
           stopServer:
             Runtime:
               Name: APPSYNC_JS
               Version: "1.0.0"
             Pipeline:
-              - serverActionFunction
+              - ec2ActionValidatorFunction
           restartServer:
             Runtime:
               Name: APPSYNC_JS
               Version: "1.0.0"
             Pipeline:
-              - serverActionFunction
-          fixServerRole:
+              - ec2ActionValidatorFunction
+          createServer:
             Runtime:
               Name: APPSYNC_JS
               Version: "1.0.0"
             Pipeline:
-              - fixServerRoleFunction
+              - ec2ActionValidatorFunction
+          iamProfileManager:
+            Runtime:
+              Name: APPSYNC_JS
+              Version: "1.0.0"
+            Pipeline:
+              - iamProfileManagerFunction
           addUserToServer:
             Runtime:
               Name: APPSYNC_JS
               Version: "1.0.0"
             Pipeline:
-              - serverActionFunction
+              - ec2ActionValidatorFunction
+          updateUserRole:
+            Runtime:
+              Name: APPSYNC_JS
+              Version: "1.0.0"
+            Pipeline:
+              - ec2ActionValidatorFunction
+          removeUserFromServer:
+            Runtime:
+              Name: APPSYNC_JS
+              Version: "1.0.0"
+            Pipeline:
+              - ec2ActionValidatorFunction
+          updateServerName:
+            Runtime:
+              Name: APPSYNC_JS
+              Version: "1.0.0"
+            Pipeline:
+              - ec2ActionValidatorFunction
           putLogAudit:
             Runtime:
               Name: APPSYNC_JS
@@ -226,14 +237,8 @@ Resources:
               Version: "1.0.0"
             Pipeline:
               - getLogAuditFunction
-          putServerActionStatus:
-            Runtime:
-              Name: APPSYNC_JS
-              Version: "1.0.0"
-            Pipeline:
-              - putServerRecordFunction
         Query:
-          listServers:
+          ec2Discovery:
             Runtime:
               Name: APPSYNC_JS
               Version: "1.0.0"
@@ -244,38 +249,95 @@ Resources:
               Name: APPSYNC_JS
               Version: "1.0.0"
             Pipeline:
-              - serverActionFunction
+              - ec2ActionValidatorFunction
           getServerUsers:
             Runtime:
               Name: APPSYNC_JS
               Version: "1.0.0"
             Pipeline:
-              - serverActionFunction
-          getMonthlyCost:
+              - ec2ActionValidatorFunction
+          searchUserByEmail:
             Runtime:
               Name: APPSYNC_JS
               Version: "1.0.0"
             Pipeline:
-              - getMonthlyCostFunction
+              - ec2ActionValidatorFunction
           getLogAudit:
             Runtime:
               Name: APPSYNC_JS
               Version: "1.0.0"
             Pipeline:
               - getLogAuditFunction
-          getServerActionStatus:
+          getServerLogs:
             Runtime:
               Name: APPSYNC_JS
               Version: "1.0.0"
             Pipeline:
-              - getServerRecordFunction
-              - getServerRecordFunction
-          getServerMetrics:
+              - getServerLogsFunction
+          ec2MetricsHandler:
             Runtime:
               Name: APPSYNC_JS
               Version: "1.0.0"
             Pipeline:
-              - getServerMetricsFunction
+              - ec2MetricsHandlerFunction
+
+  DataSourceNone:
+    Type: AWS::AppSync::DataSource
+    Properties:
+      ApiId: !GetAtt GraphQLAPI.ApiId
+      Name: dataSourceNameNone
+      Description: dataSourceNone
+      Type: "NONE"
+
+  PutMetricServerResolver:
+    Type: AWS::AppSync::Resolver
+    Properties:
+      ApiId: !GetAtt GraphQLAPI.ApiId
+      TypeName: Mutation
+      FieldName: putServerMetric
+      DataSourceName: !GetAtt DataSourceNone.Name
+      RequestMappingTemplate: |
+        {
+          "version" : "2017-02-28",
+          "payload": { 
+              "id": $util.toJson($context.arguments.input.id),
+              "cpuStats": $util.toJson($context.arguments.input.cpuStats),
+              "networkStats": $util.toJson($context.arguments.input.networkStats),
+              "memStats": $util.toJson($context.arguments.input.memStats),
+              "activeUsers": $util.toJson($context.arguments.input.activeUsers),
+          }
+        }
+      ResponseMappingTemplate: $util.toJson($ctx.result)
+
+  ChangeServerStateResolver:
+    Type: AWS::AppSync::Resolver
+    Properties:
+      ApiId: !GetAtt GraphQLAPI.ApiId
+      TypeName: Mutation
+      FieldName: changeServerState
+      DataSourceName: !GetAtt DataSourceNone.Name
+      RequestMappingTemplate: |
+        {
+          "version" : "2017-02-28",
+          "payload": { 
+              "id": $util.toJson($context.arguments.input.id),
+              "name": $util.toJson($context.arguments.input.name),
+              "type": $util.toJson($context.arguments.input.type),
+              "userEmail": $util.toJson($context.arguments.input.userEmail),
+              "state": $util.toJson($context.arguments.input.state),
+              "vCpus": $util.toJson($context.arguments.input.vCpus),
+              "memSize": $util.toJson($context.arguments.input.memSize),
+              "diskSize": $util.toJson($context.arguments.input.diskSize),
+              "launchTime": $util.toJson($context.arguments.input.launchTime),
+              "publicIp": $util.toJson($context.arguments.input.publicIp),
+              "initStatus": $util.toJson($context.arguments.input.initStatus),
+              "iamStatus": $util.toJson($context.arguments.input.iamStatus),
+              "runningMinutes": $util.toJson($context.arguments.input.runningMinutes),
+              "runningMinutesCacheTimestamp": $util.toJson($context.arguments.input.runningMinutesCacheTimestamp),
+              "groupMembers": $util.toJson($context.arguments.input.groupMembers)
+          }
+        }
+      ResponseMappingTemplate: $util.toJson($ctx.result)
 
   ScheduledRule: 
     Type: AWS::Events::Rule
@@ -285,8 +347,8 @@ Resources:
       State: "DISABLED"
       Targets: 
         - 
-          Arn: !GetAtt EventResponse.Arn              
-          Id: "EventResponseV1"
+          Arn: !GetAtt ec2StateHandler.Arn              
+          Id: "ec2StateHandlerV1"
 
   ScheduledRuleParameter:
     Type: AWS::SSM::Parameter
@@ -299,11 +361,29 @@ Resources:
   PermissionForEventsToInvokeLambda: 
     Type: AWS::Lambda::Permission
     Properties: 
-      FunctionName: !Ref "EventResponse"
+      FunctionName: !Ref "ec2StateHandler"
       Action: "lambda:InvokeFunction"
       Principal: "events.amazonaws.com"
       SourceArn: 
         !GetAtt ScheduledRule.Arn
+
+  MonthlyRuntimeCalculationRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: "Trigger monthly runtime calculation every hour"
+      ScheduleExpression: "rate(1 hour)"
+      State: "ENABLED"
+      Targets:
+        - Arn: !GetAtt CalculateMonthlyRuntime.Arn
+          Id: "CalculateMonthlyRuntimeV1"
+
+  PermissionForMonthlyRuntimeRule:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref CalculateMonthlyRuntime
+      Action: "lambda:InvokeFunction"
+      Principal: "events.amazonaws.com"
+      SourceArn: !GetAtt MonthlyRuntimeCalculationRule.Arn
 
   AuthLayer:
     Type: AWS::Serverless::LayerVersion
@@ -316,11 +396,11 @@ Resources:
     Metadata:
       BuildMethod: makefile
 
-  DynLayer:
+  DdbLayer:
     Type: AWS::Serverless::LayerVersion
     Properties:
       Description: MinecraftDashboardHelpers
-      ContentUri: ../../layers/dynHelper/
+      ContentUri: ../../layers/ddbHelper/
       CompatibleRuntimes:
         - python3.13
       RetentionPolicy: Delete
@@ -349,16 +429,38 @@ Resources:
     Metadata:
       BuildMethod: makefile
 
-  EventResponse:
+  SsmLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      Description: SSM Command Helper
+      ContentUri: ../../layers/ssmHelper/
+      CompatibleRuntimes:
+        - python3.13
+      RetentionPolicy: Delete
+    Metadata:
+      BuildMethod: makefile
+
+  ErrorLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      Description: SSM Command Helper
+      ContentUri: ../../layers/errorHelper/
+      CompatibleRuntimes:
+        - python3.13
+      RetentionPolicy: Delete
+    Metadata:
+      BuildMethod: makefile
+
+  ec2StateHandler:
     Type: AWS::Serverless::Function 
     Properties:
-      FunctionName: !Sub "${ProjectName}-${EnvironmentName}-eventResponse"
-      CodeUri: ../../lambdas/eventResponse/
+      FunctionName: !Sub "${ProjectName}-${EnvironmentName}-ec2StateHandler"
+      CodeUri: ../../lambdas/ec2StateHandler/
       Layers:
         - !Ref AuthLayer
+        - !Ref DdbLayer
         - !Ref UtilLayer
         - !Ref Ec2Layer
-        - !Ref DynLayer 
       Events:
         EC2StateTrigger:
           Type: CloudWatchEvent 
@@ -377,6 +479,13 @@ Resources:
         - arn:aws:iam::aws:policy/AmazonCognitoReadOnly
         - SSMParameterReadPolicy:
             ParameterName: !Sub "${ProjectName}*"
+        - Version: '2012-10-17' # Policy Document for Cognito Group Management
+          Statement:
+            - Effect: Allow
+              Action:
+                - cognito-idp:CreateGroup
+                - cognito-idp:GetGroup
+              Resource: !Sub 'arn:aws:cognito-idp:${AWS::Region}:${AWS::AccountId}:userpool/*'
         - Version: '2012-10-17' # Policy Document
           Statement:
             - Effect: Allow
@@ -402,68 +511,37 @@ Resources:
                 - events:DisableRule
                 - events:EnableRule
               Resource: "*"
-        - Version: '2012-10-17' # Policy Document for SSM
+        - Version: "2012-10-17" # Policy Document for SQS
           Statement:
             - Effect: Allow
               Action:
-                - ssm:SendCommand
-                - ssm:GetCommandInvocation
-                - ssm:ListCommandInvocations
-              Resource:
-                - !Sub 'arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:instance/*'
-                - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:document/${ProjectName}-${EnvironmentName}-BootstrapSSMDoc'
-        - Version: '2012-10-17' # Policy Document for DynamoDB
+                - sqs:SendMessage
+              Resource: !GetAtt SSMCommandQueue.Arn
+        - Version: '2012-10-17' # Policy Document for UserMembership DynamoDB
           Statement:
             - Effect: Allow
               Action:
                 - dynamodb:GetItem
                 - dynamodb:PutItem
                 - dynamodb:UpdateItem
-              Resource: !GetAtt ServersTable.Arn
+                - dynamodb:Query
+              Resource:
+                Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTable"
       Environment:
         Variables:
-          APP_NAME: !Ref ProjectName
-          ENVIRONMENT_NAME: !Ref EnvironmentName
-          AWS_REGION_NAME: !Sub "${AWS::Region}"
-          TAG_APP_VALUE: !Ref AppValue
           APPSYNC_URL: !GetAtt GraphQLAPI.GraphQLUrl
           COGNITO_USER_POOL_ID: 
             Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-UserPoolId"
-          SERVERS_TABLE_NAME: !Ref ServersTable
-          BOOTSTRAP_SSM_DOC_NAME:
-            Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-SSMDoc"          
+          BOOTSTRAP_SSM_DOC_NAME: !Ref BootstrapSSMDoc
+          SSM_COMMAND_QUEUE_URL: !Ref SSMCommandQueue
+          CORE_TABLE_NAME:
+            Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTableName"
 
-  GetMonthlyCost:
+  ec2MetricsHandler:
     Type: AWS::Serverless::Function 
     Properties:
-      FunctionName: !Sub "${ProjectName}-${EnvironmentName}-getMonthlyCost"
-      CodeUri: ../../lambdas/getMonthlyCost/
-      Layers:
-        - !Ref AuthLayer
-        - !Ref UtilLayer
-        - !Ref Ec2Layer         
-      Policies:
-        - CostExplorerReadOnlyPolicy: {}
-        - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
-        - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess
-        - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
-        - arn:aws:iam::aws:policy/AWSCloudTrail_ReadOnlyAccess
-        - arn:aws:iam::aws:policy/AmazonCognitoReadOnly
-        - SSMParameterReadPolicy:
-            ParameterName: !Sub "${ProjectName}*"
-        # - DynamoDBCrudPolicy:
-        #     TableName: !Ref InstancesTable
-      Environment:
-        Variables:
-          APP_NAME: !Ref ProjectName
-          TAG_APP_VALUE: !Ref AppValue
-          #INSTANCES_TABLE_NAME: !Ref InstancesTable
-
-  GetServerMetrics:
-    Type: AWS::Serverless::Function 
-    Properties:
-      FunctionName: !Sub "${ProjectName}-${EnvironmentName}-getServerMetrics"
-      CodeUri: ../../lambdas/getServerMetrics/
+      FunctionName: !Sub "${ProjectName}-${EnvironmentName}-ec2MetricsHandler"
+      CodeUri: ../../lambdas/ec2MetricsHandler/
       Layers:
         - !Ref AuthLayer
         - !Ref UtilLayer
@@ -471,20 +549,18 @@ Resources:
         - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
         - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess
         - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
-      Environment:
-        Variables:
-          APP_NAME: !Ref ProjectName
 
-  ListServers:
+
+  ec2Discovery:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !Sub "${ProjectName}-${EnvironmentName}-listServers"
-      CodeUri: ../../lambdas/listServers/
+      FunctionName: !Sub "${ProjectName}-${EnvironmentName}-ec2Discovery"
+      CodeUri: ../../lambdas/ec2Discovery/
       Layers:
         - !Ref AuthLayer
-        - !Ref UtilLayer
         - !Ref Ec2Layer
-        - !Ref DynLayer
+        - !Ref DdbLayer
+        - !Ref ErrorLayer
       Policies:
         - CostExplorerReadOnlyPolicy: {}
         - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
@@ -494,50 +570,77 @@ Resources:
         - arn:aws:iam::aws:policy/AmazonCognitoReadOnly
         - SSMParameterReadPolicy:
             ParameterName: !Sub "${ProjectName}*"
-        - DynamoDBCrudPolicy:
-            TableName: !Ref ServersTable
-        - Version: "2012-10-17" # Policy Document
+        - Version: "2012-10-17"
           Statement:
             - Effect: Allow
               Action:
-                - cloudwatch:PutMetricAlarm
-                - events:List*
-                - events:Describe*                
-              Resource: "*"
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+                - dynamodb:Query
+              Resource:
+                Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTable"
+
+  getServerLogs:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "${ProjectName}-${EnvironmentName}-getServerLogs"
+      CodeUri: ../../lambdas/getServerLogs/
+      Layers:
+        - !Ref AuthLayer
+        - !Ref Ec2Layer
+        - !Ref UtilLayer
+        - !Ref DdbLayer
       Environment:
         Variables:
-          APP_NAME: !Ref ProjectName
-          TAG_APP_VALUE: !Ref AppValue
-          AWS_REGION_NAME: !Sub "${AWS::Region}"
-          EC2_INSTANCE_PROFILE_ARN: 
-            Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-IAMEC2InstanceProfileArn"
-          #INSTANCES_TABLE_NAME: !Ref InstancesTable
-          COGNITO_USER_POOL_ID: 
+          COGNITO_USER_POOL_ID:
             Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-UserPoolId"
+          CORE_TABLE_NAME:
+            Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTableName"
+          LOG_SERVICE_PORT: "25566"
+      Policies:
+        - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
+        - arn:aws:iam::aws:policy/AmazonCognitoReadOnly
+        - Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:Query
+              Resource:
+                Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTable"
 
-
-  ServerActionProcessor:
+  ec2ActionWorker:
     Type: AWS::Serverless::Function
     Properties:
       Timeout: 300
-      FunctionName: !Sub "${ProjectName}-${EnvironmentName}-serverActionProcessor"
-      CodeUri: ../../lambdas/serverActionProcessor/
+      FunctionName: !Sub "${ProjectName}-${EnvironmentName}-ec2ActionWorker"
+      CodeUri: ../../lambdas/ec2ActionWorker/
       Layers:
         - !Ref UtilLayer
         - !Ref Ec2Layer
-        - !Ref DynLayer
+        - !Ref DdbLayer
       Events:
         SQSEvent:
           Type: SQS
           Properties:
-            Queue: !GetAtt ServerActionQueue.Arn
+            Queue: !GetAtt ec2ActionValidatorQueue.Arn
             BatchSize: 1
       Policies:
         - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
         - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess
         - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
-        - DynamoDBCrudPolicy:
-            TableName: !Ref ServersTable
+        - Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+                - dynamodb:UpdateItem
+                - dynamodb:DeleteItem
+                - dynamodb:Query
+                - dynamodb:Scan
+              Resource:
+                Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTable"
         - Version: "2012-10-17"
           Statement:
             - Effect: Allow
@@ -545,6 +648,8 @@ Resources:
                 - ec2:StartInstances
                 - ec2:StopInstances
                 - ec2:RebootInstances
+                - ec2:CreateTags
+                - ec2:DeleteTags
               Resource: 'arn:aws:ec2:*:*:instance/*'
               Condition:
                 StringEquals:
@@ -578,31 +683,126 @@ Resources:
                 - appsync:GetGraphqlApi
                 - appsync:GraphQL
               Resource: "*"
+        - Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Action:
+                - ses:SendEmail
+                - ses:SendRawEmail
+              Resource: "*"
+        - Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Action:
+                - ssm:GetParameter
+              Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/minecraft-dashboard/notification-sender-email"
       Environment:
         Variables:
-          APP_NAME: !Ref ProjectName
-          ENVIRONMENT_NAME: !Ref EnvironmentName
-          TAG_APP_VALUE: !Ref AppValue
-          AWS_REGION_NAME: !Sub "${AWS::Region}"
           APPSYNC_URL: !GetAtt GraphQLAPI.GraphQLUrl
 
-  ServerAction:
+  ec2BootWorker:
     Type: AWS::Serverless::Function
     Properties:
-      Timeout: 30
-      FunctionName: !Sub "${ProjectName}-${EnvironmentName}-serverAction"
-      CodeUri: ../../lambdas/serverAction/
+      Timeout: 60
+      FunctionName: !Sub "${ProjectName}-${EnvironmentName}-ec2BootWorker"
+      CodeUri: ../../lambdas/ec2BootWorker/
       Layers:
-        - !Ref AuthLayer
-        - !Ref UtilLayer
-        - !Ref Ec2Layer        
+        - !Ref Ec2Layer
+        - !Ref DdbLayer
+        - !Ref SsmLayer
+      Events:
+        EC2StateChange:
+          Type: EventBridgeRule
+          Properties:
+            Pattern:
+              source: ["aws.ec2"]
+              detail-type: ["EC2 Instance State-change Notification"]
+              detail:
+                state: ["running"]
       Policies:
+        - CostExplorerReadOnlyPolicy: {}
         - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
         - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess
         - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
         - arn:aws:iam::aws:policy/AmazonCognitoReadOnly
         - SSMParameterReadPolicy:
             ParameterName: !Sub "${ProjectName}*"
+        - Version: '2012-10-17' # Policy Document
+          Statement:
+            - Effect: Allow
+              Action:
+                - appsync:ListGraphqlApis
+                - appsync:GetGraphqlApi
+                - appsync:GraphQL
+              Resource: '*'
+        - Version: '2012-10-17' # Policy Document
+          Statement:
+            - Effect: Allow
+              Action:
+                - events:ListRules
+                - events:DescribeRule
+                - events:DisableRule
+                - events:EnableRule
+              Resource: "*"
+        - Version: "2012-10-17" # Policy Document for SQS
+          Statement:
+            - Effect: Allow
+              Action:
+                - sqs:SendMessage
+              Resource: !GetAtt SSMCommandQueue.Arn
+        - Version: '2012-10-17' # Policy Document for UserMembership DynamoDB
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+                - dynamodb:UpdateItem
+                - dynamodb:Query
+              Resource:
+                Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTable"
+      Environment:
+        Variables:
+          APPSYNC_URL: !GetAtt GraphQLAPI.GraphQLUrl
+          COGNITO_USER_POOL_ID: 
+            Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-UserPoolId"
+          BOOTSTRAP_SSM_DOC_NAME: !Ref BootstrapSSMDoc
+          SSM_COMMAND_QUEUE_URL: !Ref SSMCommandQueue   
+
+  ec2ActionValidator:
+    Type: AWS::Serverless::Function
+    Properties:
+      Timeout: 30
+      FunctionName: !Sub "${ProjectName}-${EnvironmentName}-ec2ActionValidator"
+      CodeUri: ../../lambdas/ec2ActionValidator/
+      Layers:
+        - !Ref AuthLayer
+        - !Ref UtilLayer
+        - !Ref Ec2Layer  
+        - !Ref DdbLayer      
+      Policies:
+        - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
+        - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess
+        - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
+        - arn:aws:iam::aws:policy/AmazonCognitoReadOnly
+        - SSMParameterReadPolicy:
+            ParameterName: !Sub "${ProjectName}*"        
+        - Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+                - dynamodb:UpdateItem
+                - dynamodb:DeleteItem
+                - dynamodb:Query
+                - dynamodb:Scan
+              Resource:
+                - Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTable"
+                - Fn::Sub:
+                    - "${CoreTable}/index/*"
+                    - CoreTable:
+                        Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTable"
+                - Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-LogAuditTable"
         - Version: "2012-10-17" # Policy Document
           Statement:
             - Effect: Allow
@@ -622,7 +822,7 @@ Resources:
             - Effect: Allow
               Action:
                 - sqs:SendMessage
-              Resource: !GetAtt ServerActionQueue.Arn
+              Resource: !GetAtt ec2ActionValidatorQueue.Arn
         - Version: "2012-10-17"
           Statement:
             - Effect: Allow
@@ -631,35 +831,29 @@ Resources:
               Resource: !Sub "${GraphQLAPI.Arn}/*"
       Environment:
         Variables:
-          # StepFunctionsArn: !Ref StateMachine
-          APP_NAME: !Ref ProjectName
-          ENVIRONMENT_NAME: !Ref EnvironmentName
-          TAG_APP_VALUE: !Ref AppValue
-          AWS_REGION_NAME: !Sub "${AWS::Region}"
           EC2_INSTANCE_PROFILE_NAME:  
             Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-IAMEC2InstanceProfile"
           EC2_INSTANCE_PROFILE_ARN:  
             Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-IAMEC2InstanceProfileArn"
-          # CONFIG_SERVER_LAMBDA_NAME: !Ref ConfigServer
-          SERVER_ACTION_QUEUE_URL: !Ref ServerActionQueue
+          SERVER_ACTION_QUEUE_URL: !Ref ec2ActionValidatorQueue
           APPSYNC_URL: !GetAtt GraphQLAPI.GraphQLUrl
           COGNITO_USER_POOL_ID:  
             Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-UserPoolId"
 
-  PermissionForScheduledEventsToInvokeServerAction:
+  PermissionForScheduledEventsToInvokeec2ActionValidator:
     Type: AWS::Lambda::Permission
     Properties:
-      FunctionName: !Ref ServerAction
+      FunctionName: !Ref ec2ActionValidator
       Action: "lambda:InvokeFunction"
       Principal: "events.amazonaws.com"
       SourceArn: !Sub "arn:aws:events:${AWS::Region}:${AWS::AccountId}:rule/*"
 
-  FixServerRole:
+  iamProfileManager:
     Type: AWS::Serverless::Function
     Properties:
       Timeout: 120
-      FunctionName: !Sub "${ProjectName}-${EnvironmentName}-fixServerRole"
-      CodeUri: ../../lambdas/fixServerRole/
+      FunctionName: !Sub "${ProjectName}-${EnvironmentName}-iamProfileManager"
+      CodeUri: ../../lambdas/iamProfileManager/
       Layers:
         - !Ref AuthLayer
         - !Ref UtilLayer
@@ -690,10 +884,6 @@ Resources:
                 Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-IAMEC2RoleArn"
       Environment:
         Variables:
-          APP_NAME: !Ref ProjectName
-          ENVIRONMENT_NAME: !Ref EnvironmentName
-          TAG_APP_VALUE: !Ref AppValue
-          AWS_REGION_NAME: !Sub "${AWS::Region}"
           EC2_INSTANCE_PROFILE_NAME:  
             Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-IAMEC2InstanceProfile"
           EC2_INSTANCE_PROFILE_ARN:  
@@ -701,19 +891,60 @@ Resources:
           COGNITO_USER_POOL_ID:  
             Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-UserPoolId"
 
-  # ConfigServer Lambda removed as its functionality is handled by SSM Document
+  CalculateMonthlyRuntime:
+    Type: AWS::Serverless::Function
+    Properties:
+      Timeout: 300
+      FunctionName: !Sub "${ProjectName}-${EnvironmentName}-calculateEc2MonthlyRuntime"
+      CodeUri: ../../lambdas/calculateEc2MonthlyRuntime/
+      Layers:
+        - !Ref Ec2Layer
+        - !Ref DdbLayer
+      Policies:
+        - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
+        - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
+        - arn:aws:iam::aws:policy/AWSCloudTrail_ReadOnlyAccess
+        - Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+                - dynamodb:UpdateItem
+                - dynamodb:DeleteItem
+                - dynamodb:Query
+                - dynamodb:Scan
+              Resource:
+                Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTable"
+
+  ssmCommandWorker:
+    Type: AWS::Serverless::Function
+    Properties:
+      Timeout: 900  # 15 minutes for retries
+      FunctionName: !Sub "${ProjectName}-${EnvironmentName}-ssmCommandWorker"
+      CodeUri: ../../lambdas/ssmCommandWorker/
+      Events:
+        SQSEvent:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt SSMCommandQueue.Arn
+            BatchSize: 1
+      Policies:
+        - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
+        - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
+        - Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Action:
+                - ssm:SendCommand
+                - ssm:GetCommandInvocation
+                - ssm:ListCommandInvocations
+              Resource:
+                - !Sub 'arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:instance/*'
+                - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:document/*'
+
 
 Outputs:
-  ServersTable:
-    Value: !GetAtt ServersTable.Arn
-    Export:
-      Name: !Sub "${ProjectName}-${EnvironmentName}-ServersTable"
-
-  LogAuditTable:
-    Value: !GetAtt LogAuditTable.Arn
-    Export:
-      Name: !Sub "${ProjectName}-${EnvironmentName}-LogAuditTable"
-
   GraphQLAPIEndpoint:
     Value: !GetAtt GraphQLAPI.GraphQLUrl
     Export:
@@ -726,32 +957,42 @@ Outputs:
 
   # ConfigServer output removed as Lambda is no longer needed
 
-  GetMonthlyCost:
-    Value: !GetAtt GetMonthlyCost.Arn
+  ec2MetricsHandler:
+    Value: !GetAtt ec2MetricsHandler.Arn
     Export:
-      Name: !Sub "${ProjectName}-${EnvironmentName}-GetMonthlyCost"
+      Name: !Sub "${ProjectName}-${EnvironmentName}-ec2MetricsHandler"
 
-  GetServerMetrics:
-    Value: !GetAtt GetServerMetrics.Arn
+  ec2Discovery:
+    Value: !GetAtt ec2Discovery.Arn
     Export:
-      Name: !Sub "${ProjectName}-${EnvironmentName}-GetServerMetrics"
+      Name: !Sub "${ProjectName}-${EnvironmentName}-ec2Discovery"
 
-  ListServers:
-    Value: !GetAtt ListServers.Arn
+  ec2ActionValidator:
+    Value: !GetAtt ec2ActionValidator.Arn
     Export:
-      Name: !Sub "${ProjectName}-${EnvironmentName}-ListServers"
+      Name: !Sub "${ProjectName}-${EnvironmentName}-ec2ActionValidator"
 
-  ServerAction:
-    Value: !GetAtt ServerAction.Arn
+  iamProfileManager:
+    Value: !GetAtt iamProfileManager.Arn
     Export:
-      Name: !Sub "${ProjectName}-${EnvironmentName}-ServerAction"
+      Name: !Sub "${ProjectName}-${EnvironmentName}-iamProfileManager"
 
-  FixServerRole:
-    Value: !GetAtt FixServerRole.Arn
+  ec2StateHandler:
+    Value: !GetAtt ec2StateHandler.Arn
     Export:
-      Name: !Sub "${ProjectName}-${EnvironmentName}-FixServerRole"
+      Name: !Sub "${ProjectName}-${EnvironmentName}-ec2StateHandler"
 
-  EventResponse:
-    Value: !GetAtt EventResponse.Arn
+  CalculateMonthlyRuntime:
+    Value: !GetAtt CalculateMonthlyRuntime.Arn
     Export:
-      Name: !Sub "${ProjectName}-${EnvironmentName}-EventResponse"
+      Name: !Sub "${ProjectName}-${EnvironmentName}-CalculateMonthlyRuntime"
+
+  ssmCommandWorker:
+    Value: !GetAtt ssmCommandWorker.Arn
+    Export:
+      Name: !Sub "${ProjectName}-${EnvironmentName}-ssmCommandWorker"
+
+  SSMCommandQueueUrl:
+    Value: !Ref SSMCommandQueue
+    Export:
+      Name: !Sub "${ProjectName}-${EnvironmentName}-SSMCommandQueueUrl"

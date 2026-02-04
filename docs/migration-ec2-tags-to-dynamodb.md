@@ -5,7 +5,7 @@ Migrated server configuration storage from EC2 tags to DynamoDB ServersTable for
 
 ## Changes Made
 
-### 1. DynHelper Layer (`layers/dynHelper/DynHelper.py`)
+### 1. ddbHelper Layer (`layers/ddbHelper/ddbHelper.py`)
 **Updated Methods:**
 - `get_server_config(instance_id)` - Retrieves server config from DynamoDB
 - `put_server_config(config)` - Saves complete server configuration
@@ -28,16 +28,16 @@ All ServerConfig GraphQL fields now stored in DynamoDB:
 **Updated Methods:**
 - `get_instance_attributes_from_tags()` - Now reads from DynamoDB instead of EC2 tags
 - `set_instance_attributes_to_tags()` - Now writes to DynamoDB instead of EC2 tags
-- Added DynHelper import and initialization
+- Added ddbHelper import and initialization
 
 ### 3. CloudFormation (`cfn/templates/lambdas.yaml`)
 **Infrastructure Changes:**
 - Added `SERVERS_TABLE_NAME` to Globals environment variables
 - Added `DynLayer` to Lambda functions:
-  - `ListServers`
-  - `ServerActionProcessor`
+  - `ec2Discovery`
+  - `ec2ActionWorker`
 - Added `DynamoDBCrudPolicy` for ServersTable access
-- Removed EC2 tag permissions (DeleteTags, CreateTags) from ServerActionProcessor
+- Removed EC2 tag permissions (DeleteTags, CreateTags) from ec2ActionWorker
 
 ### 4. EC2 Instance Creation (`layers/ec2Helper/ec2Helper.py`)
 **Enhanced:**
@@ -89,7 +89,7 @@ All ServerConfig GraphQL fields now stored in DynamoDB:
 - No EC2 tags created for configuration
 
 ## Backward Compatibility
-- Legacy method names preserved in DynHelper
+- Legacy method names preserved in ddbHelper
 - EC2Helper method signatures unchanged
 - GraphQL schema unchanged
 - Frontend requires no changes

@@ -12,7 +12,17 @@ Parameters:
     Type: String
     Description: Value of the application
 
+
 Resources:
+
+  DynamoDBStack:
+    Type: AWS::Serverless::Application
+    Properties:
+      Location: ./templates/dynamodb.yaml
+      Parameters:
+        ProjectName: !Ref ProjectName
+        EnvironmentName: !Ref EnvironmentName
+        AppValue: !Ref AppValue
 
   CognitoStack:
     Type: AWS::Serverless::Application
@@ -25,6 +35,7 @@ Resources:
 
   EC2Stack:
     Type: AWS::Serverless::Application
+    DependsOn: DynamoDBStack
     Properties:
       Location: ./templates/ec2.yaml
       Parameters:
@@ -32,28 +43,29 @@ Resources:
         EnvironmentName: !Ref EnvironmentName
         AppValue: !Ref AppValue
 
+  SSMStack:
+    Type: AWS::Serverless::Application
+    DependsOn: DynamoDBStack
+    Properties:
+      Location: ./templates/ssm.yaml
+      Parameters:
+        ProjectName: !Ref ProjectName
+        EnvironmentName: !Ref EnvironmentName
+        AppValue: !Ref AppValue
+        SupportBucket: !GetAtt EC2Stack.Outputs.SupportBucket
+
   LambdasStack:
     Type: AWS::Serverless::Application
     DependsOn: 
-      - EC2Stack
       - CognitoStack
+      - DynamoDBStack
     Properties:
       Location: ./templates/lambdas.yaml
       Parameters:
         ProjectName: !Ref ProjectName
         EnvironmentName: !Ref EnvironmentName
         AppValue: !Ref AppValue
-
-  AppSyncStack:
-    Type: AWS::Serverless::Application
-    DependsOn: 
-      - LambdasStack
-    Properties:
-      Location: ./templates/appsync.yaml
-      Parameters:
-        ProjectName: !Ref ProjectName
-        EnvironmentName: !Ref EnvironmentName
-        AppValue: !Ref AppValue
+        BootstrapSSMDoc: !GetAtt SSMStack.Outputs.BootstrapSSMDoc
 
   WebStack:
     Type: AWS::Serverless::Application
@@ -70,40 +82,32 @@ Resources:
 Outputs:
   GraphQLAPIEndpoint:
     Description: AppSync GraphQL API Endpoint
-    Value: 
-      Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-GraphQLAPIEndpoint"
+    Value: !GetAtt LambdasStack.Outputs.GraphQLAPIEndpoint
 
   CloudFrontDomain:
     Description: CloudFront Distribution Domain Name
-    Value: 
-      Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CloudFrontDomain"
+    Value: !GetAtt WebStack.Outputs.CloudFrontDomain
 
   CognitoUserPoolClientId:
     Description: Cognito User Pool Client ID
-    Value: 
-      Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-UserPoolClientId"
+    Value: !GetAtt CognitoStack.Outputs.CognitoUserPoolClientId
 
   CognitoUserPoolId:
     Description: Cognito User Pool ID
-    Value: 
-      Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-UserPoolId"
+    Value: !GetAtt CognitoStack.Outputs.CognitoUserPoolId
 
   CognitoIdentityPool:
     Description: Cognito Identity Pool ID
-    Value: 
-      Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CognitoIdentityPool"
+    Value: !GetAtt CognitoStack.Outputs.CognitoIdentityPool
 
   CognitoDomainName:
     Description: Cognito Domain Name
-    Value: 
-      Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CognitoDomainName"
+    Value: !GetAtt CognitoStack.Outputs.CognitoDomainName
 
   WebAppBucket:
     Description: S3 Web Application Bucket Name
-    Value: 
-      Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-WebBucket"
+    Value: !GetAtt WebStack.Outputs.WebAppBucket
 
   SupportBucket:
     Description: S3 Support Bucket Name
-    Value: 
-      Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-SupportBucket"
+    Value: !GetAtt EC2Stack.Outputs.SupportBucket

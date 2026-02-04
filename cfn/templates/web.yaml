@@ -13,13 +13,17 @@ Resources:
 
   WebAppBucket:
     Type: AWS::S3::Bucket
+    DeletionPolicy: Delete
     Properties:
-      AccessControl: Private
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
       BucketEncryption:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
               SSEAlgorithm: AES256
-    DeletionPolicy: Delete
 
   WebAppBucketPolicy:
     Type: AWS::S3::BucketPolicy

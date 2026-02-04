@@ -1,0 +1,6 @@
+httpx
+httpx-aws-auth
+gql
+pytz
+boto3
+python-jose[cryptography]

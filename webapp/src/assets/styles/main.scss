@@ -1,0 +1,35 @@
+* {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+html, body, #app {
+  height: 100%;
+  margin: 0;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #d4d4d4;
+  border-radius: 4px;
+  &:hover { background: #a3a3a3; }
+}
+
+.material-symbols-outlined {
+  font-variation-settings: 'wght' 300;
+}
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  display: inline-block;
+  &.online { background: #10b981; }
+  &.offline { background: #d4d4d4; }
+  &.warning { background: #f59e0b; }
+}

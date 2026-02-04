@@ -2,7 +2,7 @@
 
 ## Root Level Organization
 ```
-├── dashboard/          # Vue.js frontend application
+├── webapp/            # Vue.js frontend application
 ├── cfn/               # AWS SAM CloudFormation templates
 ├── lambdas/           # AWS Lambda function source code
 ├── layers/            # AWS Lambda layers for shared code
@@ -12,9 +12,9 @@
 └── public/            # Static web assets
 ```
 
-## Frontend Structure (`dashboard/`)
+## Frontend Structure (`webapp/`)
 ```
-dashboard/
+webapp/
 ├── src/
 │   ├── components/    # Reusable Vue components
 │   ├── views/         # Page-level Vue components
@@ -44,16 +44,19 @@ dashboard/
 ## Backend Structure
 
 ### Lambda Functions (`lambdas/`)
-- **eventResponse/**: Processes EC2 state changes and metrics
-- **getMonthlyCost/**: Retrieves AWS cost data from Cost Explorer API
-- **listServers/**: Lists available Minecraft servers from EC2 with tag validation and auto-configuration
-- **serverAction/**: Validates and queues server control actions (start/stop/restart/config) to SQS for asynchronous processing
-- **serverActionProcessor/**: Processes server control actions from SQS queue (start/stop/restart/config updates)
-- **fixServerRole/**: Handles IAM instance profile management synchronously (associate/disassociate profiles)
+- **ec2StateHandler/**: Processes EC2 state changes and metrics
+- **ec2CostCalculator/**: Retrieves AWS cost data from Cost Explorer API
+- **ec2Discovery/**: Lists available Minecraft servers from EC2 with tag validation and auto-configuration
+- **ec2ActionValidator/**: Validates and queues server control actions (start/stop/restart/config) to SQS for asynchronous processing
+- **ec2ActionWorker/**: Processes server control actions from SQS queue (start/stop/restart/config updates)
+- **iamProfileManager/**: Handles IAM instance profile management synchronously (associate/disassociate profiles)
+- **getServerLogs/**: Fetches Minecraft logs from msd-logs service with JWT authentication and authorization
+- **ec2ActionWorker/**: Processes server control actions from SQS queue (start/stop/restart/config updates)
+- **iamProfileManager/**: Handles IAM instance profile management synchronously (associate/disassociate profiles)
 
 ### Lambda Layers (`layers/`)
 - **authHelper/**: Cognito authentication utilities
-- **dynHelper/**: DynamoDB operations helper
+- **ddbHelper/**: DynamoDB operations helper
 - **ec2Helper/**: EC2 instance management utilities
   - CloudWatch alarm management (CPU-based and user-based shutdown)
   - EventBridge rule management for scheduled operations
@@ -91,17 +94,17 @@ cfn/
 ## File Naming Conventions
 - **Vue Components**: PascalCase (e.g., `ServerCard.vue`, `Header.vue`)
 - **Python Files**: snake_case (e.g., `index.py`, `auth_helper.py`)
-- **Lambda Functions**: camelCase directories (e.g., `listServers/`, `getMonthlyCost/`)
+- **Lambda Functions**: camelCase directories (e.g., `ec2Discovery/`, `ec2CostCalculator/`)
 - **CloudFormation**: kebab-case for resources, PascalCase for types
 
 ## Key Configuration Files
-- **dashboard/.env**: Frontend environment variables (VITE_ prefixed)
+- **webapp/.env**: Frontend environment variables (VITE_ prefixed)
 - **cfn/samconfig.toml**: SAM deployment parameters
 - **appsync/schema.graphql**: GraphQL API schema
 - **layers/*/requirements.txt**: Python dependencies for each layer
 - **lambdas/*/requirements.txt**: Python dependencies for each function
 
-### Environment Variables (dashboard/.env)
+### Environment Variables (webapp/.env)
 ```
 VITE_AWS_REGION=us-west-2
 VITE_GRAPHQL_ENDPOINT=[AppSync API Endpoint]

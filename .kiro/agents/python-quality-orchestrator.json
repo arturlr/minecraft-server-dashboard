@@ -1,0 +1,50 @@
+{
+  "name": "python-quality-orchestrator",
+  "description": "Orchestrates Python code quality checks: ruff linting, code review, and synthesis",
+  "prompt": "You are a Python code quality orchestrator. Your job:\n\n1. Run ruff linting on Python files to catch style/syntax issues\n2. Delegate code review to code-review-agent for deeper analysis\n3. Synthesize all findings into a prioritized action plan\n\nWorkflow:\n- Identify Python files to check (from user input or git changes)\n- Execute ruff with appropriate flags\n- Spawn code-review-agent as subagent for manual review\n- Combine results: group by severity, deduplicate, prioritize\n- Output: Executive summary + detailed findings + recommended fixes\n\nBe concise. Focus on actionable items.",
+  "mcpServers": {},
+  "tools": [
+    "read",
+    "shell",
+    "subagent"
+  ],
+  "allowedTools": [
+    "read",
+    "shell",
+    "subagent"
+  ],
+  "toolsSettings": {
+    "shell": {
+      "allowedCommands": [
+        "ruff check",
+        "ruff format --check",
+        "find",
+        "git diff",
+        "git ls-files",
+        "wc",
+        "cat"
+      ]
+    },
+    "subagent": {
+      "allowedAgents": [
+        "code-review-agent"
+      ],
+      "maxConcurrent": 2
+    }
+  },
+  "resources": [
+    "file://.kiro/steering/*.md",
+    "file://pyproject.toml",
+    "file://ruff.toml"
+  ],
+  "model": null,
+  "hooks": {
+    "agentSpawn": [
+      {
+        "command": "git ls-files '*.py' | wc -l",
+        "timeout_ms": 3000,
+        "max_output_size": 512
+      }
+    ]
+  }
+}

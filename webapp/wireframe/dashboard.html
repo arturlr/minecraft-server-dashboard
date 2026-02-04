@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Server Management Dashboard with All Metrics</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#13ec5b",
+                        "background-light": "#f6f8f6",
+                        "background-dark": "#102216",
+                        "surface-dark": "#1c2e24", // Custom surface color matching the theme
+                    },
+                    fontFamily: {
+                        "display": ["Space Grotesk", "sans-serif"]
+                    },
+                    borderRadius: { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" },
+                },
+            },
+        }
+    </script>
+<style>
+        body {
+            font-family: "Space Grotesk", sans-serif;
+        }::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #102216; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #28392e; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #13ec5b; 
+        }
+    </style>
+</head>
+<body>
+<div class="relative flex h-screen w-full overflow-hidden bg-background-light dark:bg-background-dark text-slate-900 dark:text-white">
+<aside class="flex w-64 flex-col border-r border-[#28392e] bg-background-dark hidden md:flex">
+<div class="flex h-full flex-col justify-between p-4">
+<div class="flex flex-col gap-6">
+<div class="flex items-center gap-3 px-2">
+<div class="flex items-center justify-center rounded-lg bg-primary/20 p-2">
+<span class="material-symbols-outlined text-primary" style="font-size: 28px;">dns</span>
+</div>
+<div class="flex flex-col">
+<h1 class="text-white text-lg font-bold leading-none tracking-tight">BlockNode</h1>
+<p class="text-[#9db9a6] text-xs font-medium">Manager v2.4</p>
+</div>
+</div>
+<nav class="flex flex-col gap-2">
+<a class="flex items-center gap-3 px-3 py-3 rounded-xl bg-primary/10 border border-primary/20" href="#">
+<span class="material-symbols-outlined text-primary">dashboard</span>
+<p class="text-white text-sm font-bold">Dashboard</p>
+</a>
+<a class="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-white/5 transition-colors group" href="#">
+<span class="material-symbols-outlined text-[#9db9a6] group-hover:text-white">group</span>
+<p class="text-[#9db9a6] text-sm font-medium group-hover:text-white">Members</p>
+</a>
+<a class="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-white/5 transition-colors group" href="#">
+<span class="material-symbols-outlined text-[#9db9a6] group-hover:text-white">settings_input_component</span>
+<p class="text-[#9db9a6] text-sm font-medium group-hover:text-white">Global Settings</p>
+</a>
+<a class="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-white/5 transition-colors group" href="#">
+<span class="material-symbols-outlined text-[#9db9a6] group-hover:text-white">terminal</span>
+<p class="text-[#9db9a6] text-sm font-medium group-hover:text-white">Logs</p>
+</a>
+</nav>
+</div>
+<div class="border-t border-[#28392e] pt-4">
+<button class="flex w-full items-center gap-3 rounded-xl p-2 hover:bg-white/5 transition-colors text-left">
+<div class="h-10 w-10 rounded-full bg-cover bg-center border-2 border-primary/30" data-alt="User avatar profile picture" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuAsDHbxxhqNpUPK_jQX8mbu9pFLRcfIj0wacMJA0dClaMrBvZpK6RCKvjNWIOVWq5I8EBVefqUmpndWTvAw-BhsWl9_hHkxARYI0C8lX3ezaNVEbNy0bvXZ9VM-nKBeAN-XY4b9zt0w-SSAncYr9AR-pbicK83KAMXlDMx01147xLjV_5XmJpIQcEhCn0PxjGZZYOKqmfrHdsEhh0YLYPL6f0Ei45bZoCM4CFSYHap1HKc6sTg7rzkjeG6p_2_8sFPi4-CTtBhwBMU')"></div>
+<div class="flex flex-col overflow-hidden">
+<p class="truncate text-sm font-bold text-white">AdminUser</p>
+<p class="truncate text-xs text-[#9db9a6]">Super Admin</p>
+</div>
+<span class="material-symbols-outlined ml-auto text-[#9db9a6] text-sm">expand_more</span>
+</button>
+</div>
+</div>
+</aside>
+<main class="flex flex-1 flex-col overflow-y-auto overflow-x-hidden relative z-0">
+<header class="sticky top-0 z-20 flex items-center justify-between border-b border-[#28392e] bg-background-dark/80 backdrop-blur-md px-6 py-4">
+<div class="flex items-center gap-4">
+<button class="md:hidden text-white">
+<span class="material-symbols-outlined">menu</span>
+</button>
+<h2 class="text-white text-xl font-bold tracking-tight">Command Center</h2>
+</div>
+<div class="flex gap-3">
+<button class="flex h-10 w-10 items-center justify-center rounded-lg bg-surface-dark text-white hover:bg-white/10 transition">
+<span class="material-symbols-outlined" style="font-size: 20px;">notifications</span>
+</button>
+<button class="hidden sm:flex h-10 items-center justify-center gap-2 rounded-lg bg-primary px-4 text-background-dark font-bold hover:bg-primary/90 transition shadow-[0_0_15px_rgba(19,236,91,0.3)]">
+<span class="material-symbols-outlined" style="font-size: 20px;">add</span>
+<span>New Instance</span>
+</button>
+</div>
+</header>
+<div class="flex flex-col gap-8 p-6 lg:p-10 max-w-[1600px] mx-auto w-full">
+<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+<div class="flex flex-col gap-1 rounded-xl bg-surface-dark p-5 border border-white/5 shadow-lg">
+<div class="flex items-center justify-between">
+<p class="text-[#9db9a6] text-sm font-medium">Servers Online</p>
+<span class="material-symbols-outlined text-primary" style="font-size: 20px;">dns</span>
+</div>
+<p class="text-white text-3xl font-bold tracking-tight">3 <span class="text-base text-gray-500 font-normal">/ 5</span></p>
+</div>
+<div class="flex flex-col gap-1 rounded-xl bg-surface-dark p-5 border border-white/5 shadow-lg">
+<div class="flex items-center justify-between">
+<p class="text-[#9db9a6] text-sm font-medium">Active Players</p>
+<span class="material-symbols-outlined text-blue-400" style="font-size: 20px;">person</span>
+</div>
+<p class="text-white text-3xl font-bold tracking-tight">42</p>
+</div>
+</div>
+<div class="flex flex-col gap-4">
+<div class="flex flex-col md:flex-row md:items-center justify-between gap-4 px-1">
+<h2 class="text-white text-2xl font-bold leading-tight whitespace-nowrap">Active Instances</h2>
+<div class="flex-1 w-full md:max-w-md mx-auto md:mx-4">
+<div class="relative group">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[#9db9a6] group-focus-within:text-primary transition-colors" style="font-size: 20px;">search</span>
+<input class="w-full rounded-lg border border-white/10 bg-black/20 py-2 pl-10 pr-4 text-sm text-white placeholder-[#9db9a6] outline-none transition focus:border-primary/50 focus:bg-black/40 focus:ring-0" placeholder="Search servers by name..." type="text"/>
+</div>
+</div>
+<div class="flex items-center gap-2">
+<span class="text-xs text-[#9db9a6] hidden sm:block">Page 1 of 5</span>
+<button class="text-sm text-primary font-medium hover:underline flex items-center gap-1 whitespace-nowrap self-end md:self-auto">
+                        View All <span class="material-symbols-outlined text-base">arrow_forward</span>
+</button>
+</div>
+</div>
+<div class="grid grid-cols-1 gap-6 xl:grid-cols-2">
+<div class="flex flex-col rounded-xl bg-surface-dark border border-white/5 overflow-hidden shadow-lg group">
+<div class="relative h-32 w-full bg-cover bg-center" data-alt="Abstract green digital landscape representing survival server" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuBC0GOPjfwebXSigjVNQF5hgqwgIXUibKqqzM0Q_I3xAJFbkbQWTYmh-rng8jwqJNm5yWRURqCHaLtqvT38iZCucRKMpM--k31IH_2GT3EMeKPFZmbzJEOz_WJJfixMd6ZRmGCKvvrB6RE2OizbvMHkmAteRUKYA4E6vrFyUnBUyFL_4_bduXcMYq48kpcInBkwoLAgQHk6FyrIkiL2PKtptHgoHv9tGknzd_8G-gFNIjEwaRo-8slSmIN3kIggQU9Yz1-4nk-Q25s');">
+<div class="absolute inset-0 bg-gradient-to-t from-surface-dark to-transparent"></div>
+<div class="absolute top-4 right-4">
+<span class="flex items-center gap-2 rounded-full bg-primary/20 px-3 py-1 text-xs font-bold text-primary border border-primary/30 backdrop-blur-sm">
+<span class="h-2 w-2 rounded-full bg-primary animate-pulse"></span>
+                                    ONLINE
+                                </span>
+</div>
+</div>
+<div class="flex flex-col p-5 gap-6">
+<div class="flex justify-between items-start">
+<div>
+<h3 class="text-white text-xl font-bold">Survival Server (S1)</h3>
+<div class="flex items-center gap-2 mt-1">
+<span class="material-symbols-outlined text-[#9db9a6] text-sm">lan</span>
+<p class="text-[#9db9a6] text-sm font-mono">192.168.1.12:25565</p>
+</div>
+</div>
+<button class="p-2 text-[#9db9a6] hover:text-white rounded-lg hover:bg-white/5 transition">
+<span class="material-symbols-outlined">settings</span>
+</button>
+</div>
+<div class="flex flex-col gap-5">
+<div class="flex flex-col gap-2">
+<div class="flex justify-between text-xs font-medium text-[#9db9a6]">
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-sm">memory</span>
+<span>CPU Load (45%)</span>
+</div>
+<span class="text-yellow-400">Threshold: &gt;90% (Auto-stop)</span>
+</div>
+<div class="flex h-10 w-full items-end gap-1">
+<div class="w-1 bg-primary/20 h-[30%] rounded-sm"></div>
+<div class="w-1 bg-primary/20 h-[40%] rounded-sm"></div>
+<div class="w-1 bg-primary/20 h-[35%] rounded-sm"></div>
+<div class="w-1 bg-primary/20 h-[50%] rounded-sm"></div>
+<div class="w-1 bg-primary/40 h-[60%] rounded-sm"></div>
+<div class="w-1 bg-primary/40 h-[55%] rounded-sm"></div>
+<div class="w-1 bg-primary/60 h-[70%] rounded-sm"></div>
+<div class="w-1 bg-primary/60 h-[65%] rounded-sm"></div>
+<div class="w-1 bg-primary h-[80%] rounded-sm"></div>
+<div class="w-1 bg-primary h-[75%] rounded-sm"></div>
+<div class="w-1 bg-primary/80 h-[45%] rounded-sm"></div>
+<div class="w-1 bg-primary/40 h-[30%] rounded-sm"></div>
+<div class="flex-1"></div>
+</div>
+</div>
+<div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+<div class="rounded-lg bg-black/20 p-3 border border-white/5 flex flex-col gap-2">
+<div class="flex justify-between items-center text-[#9db9a6]">
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-sm">group</span>
+<span class="text-xs font-medium uppercase tracking-wider">Players</span>
+</div>
+<span class="text-xs font-bold text-white">18</span>
+</div>
+<div class="w-full bg-white/10 rounded-full h-1.5">
+<div class="bg-blue-400 h-1.5 rounded-full shadow-[0_0_8px_rgba(96,165,250,0.4)]" style="width: 75%"></div>
+</div>
+<div class="flex justify-end">
+<span class="text-[10px] text-gray-500">Max: 24</span>
+</div>
+</div>
+<div class="rounded-lg bg-black/20 p-3 border border-white/5 flex flex-col gap-2">
+<div class="flex justify-between items-center text-[#9db9a6]">
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-sm">hard_drive</span>
+<span class="text-xs font-medium uppercase tracking-wider">Memory</span>
+</div>
+<span class="text-xs font-bold text-white">4.2 GB</span>
+</div>
+<div class="w-full bg-white/10 rounded-full h-1.5">
+<div class="bg-purple-500 h-1.5 rounded-full shadow-[0_0_8px_rgba(168,85,247,0.4)]" style="width: 52%"></div>
+</div>
+<div class="flex justify-end">
+<span class="text-[10px] text-gray-500">of 8.0 GB</span>
+</div>
+</div>
+<div class="rounded-lg bg-black/20 p-3 border border-white/5 flex flex-col justify-center gap-2">
+<div class="flex items-center gap-1.5 text-[#9db9a6] mb-1">
+<span class="material-symbols-outlined text-sm">network_check</span>
+<span class="text-xs font-medium uppercase tracking-wider">Network</span>
+</div>
+<div class="flex flex-col gap-1.5">
+<div class="flex items-center justify-between text-xs">
+<div class="flex items-center gap-1 text-gray-500">
+<span class="material-symbols-outlined text-[10px] text-blue-400 rotate-180">arrow_downward</span>
+<span>RX</span>
+</div>
+<span class="font-mono text-white">4.2 MB/s</span>
+</div>
+<div class="flex items-center justify-between text-xs">
+<div class="flex items-center gap-1 text-gray-500">
+<span class="material-symbols-outlined text-[10px] text-primary">arrow_upward</span>
+<span>TX</span>
+</div>
+<span class="font-mono text-white">1.8 MB/s</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="grid grid-cols-2 sm:grid-cols-4 gap-3 border-t border-white/5 pt-5">
+<button class="col-span-2 sm:col-span-1 flex flex-col items-center justify-center gap-1 rounded-lg bg-red-500/10 border border-red-500/20 py-2 text-red-400 hover:bg-red-500/20 transition group/btn">
+<span class="material-symbols-outlined">stop_circle</span>
+<span class="text-xs font-bold">STOP</span>
+</button>
+<button class="flex flex-col items-center justify-center gap-1 rounded-lg bg-white/5 py-2 text-[#9db9a6] hover:bg-white/10 hover:text-white transition">
+<span class="material-symbols-outlined text-sm">restart_alt</span>
+<span class="text-xs font-medium">Restart</span>
+</button>
+<button class="flex flex-col items-center justify-center gap-1 rounded-lg bg-white/5 py-2 text-[#9db9a6] hover:bg-white/10 hover:text-white transition">
+<span class="material-symbols-outlined text-sm">schedule</span>
+<span class="text-xs font-medium">Schedule</span>
+</button>
+<button class="flex flex-col items-center justify-center gap-1 rounded-lg bg-white/5 py-2 text-[#9db9a6] hover:bg-white/10 hover:text-white transition">
+<span class="material-symbols-outlined text-sm">speed</span>
+<span class="text-xs font-medium">Limits</span>
+</button>
+</div>
+</div>
+</div>
+<div class="flex flex-col rounded-xl bg-surface-dark border border-white/5 overflow-hidden shadow-lg opacity-80 hover:opacity-100 transition">
+<div class="relative h-32 w-full bg-cover bg-center grayscale" data-alt="Abstract gray geometric pattern representing offline server" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuCjno0S8-BY-MUDe7LsHN1HzdTrKj5D9PxDZunHqJy0la4TOkH2L83duSkS0-Y3CVUaY6shCtAg3gXrHCT-kJiU4RJhX-dknThnyewcofHclshXpPlhdnrm_CeggwWsBpzyQS2aYqRcNVliximzE2aQjO4KLbjmT8crDVijupDL0T6rlMHXcF6QhDCkPeIrFLTbyUJatfhwE7xbnVi60QDrmjyKBzMLE8ptSH3JshK4WRqYXdTcFVgiJBLjrgIoMypjwfBVLf0gyV8');">
+<div class="absolute inset-0 bg-black/60"></div>
+<div class="absolute top-4 right-4">
+<span class="flex items-center gap-2 rounded-full bg-gray-700/50 px-3 py-1 text-xs font-bold text-gray-400 border border-gray-600 backdrop-blur-sm">
+<span class="h-2 w-2 rounded-full bg-gray-500"></span>
+                                    OFFLINE
+                                </span>
+</div>
+</div>
+<div class="flex flex-col p-5 gap-6">
+<div class="flex justify-between items-start">
+<div>
+<h3 class="text-white text-xl font-bold">Creative Lobby</h3>
+<div class="flex items-center gap-2 mt-1">
+<span class="material-symbols-outlined text-[#9db9a6] text-sm">lan</span>
+<p class="text-[#9db9a6] text-sm font-mono">192.168.1.15:25566</p>
+</div>
+</div>
+<button class="p-2 text-[#9db9a6] hover:text-white rounded-lg hover:bg-white/5 transition">
+<span class="material-symbols-outlined">settings</span>
+</button>
+</div>
+<div class="flex flex-col gap-5 opacity-50">
+<div class="flex flex-col gap-2">
+<div class="flex justify-between text-xs font-medium text-[#9db9a6]">
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-sm">memory</span>
+<span>CPU Load (0%)</span>
+</div>
+<span>Auto-Start: 18:00 EST</span>
+</div>
+<div class="h-10 w-full flex items-center justify-center border border-dashed border-white/10 rounded-lg bg-black/20">
+<p class="text-[10px] text-gray-500 uppercase tracking-widest">Dormant</p>
+</div>
+</div>
+<div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+<div class="rounded-lg bg-black/20 p-3 border border-white/5 flex flex-col gap-2">
+<div class="flex justify-between items-center text-[#9db9a6]">
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-sm">group</span>
+<span class="text-xs font-medium uppercase tracking-wider">Players</span>
+</div>
+<span class="text-xs font-bold text-gray-500">0</span>
+</div>
+<div class="w-full bg-white/5 rounded-full h-1.5">
+<div class="bg-blue-400 h-1.5 rounded-full opacity-50" style="width: 0%"></div>
+</div>
+<div class="flex justify-end">
+<span class="text-[10px] text-gray-600">Max: 50</span>
+</div>
+</div>
+<div class="rounded-lg bg-black/20 p-3 border border-white/5 flex flex-col gap-2">
+<div class="flex justify-between items-center text-[#9db9a6]">
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-sm">hard_drive</span>
+<span class="text-xs font-medium uppercase tracking-wider">Memory</span>
+</div>
+<span class="text-xs font-bold text-gray-500">0 GB</span>
+</div>
+<div class="w-full bg-white/5 rounded-full h-1.5">
+<div class="bg-gray-700 h-1.5 rounded-full" style="width: 0%"></div>
+</div>
+<div class="flex justify-end">
+<span class="text-[10px] text-gray-600">of 6.0 GB</span>
+</div>
+</div>
+<div class="rounded-lg bg-black/20 p-3 border border-white/5 flex flex-col justify-center gap-2">
+<div class="flex items-center gap-1.5 text-[#9db9a6] mb-1">
+<span class="material-symbols-outlined text-sm">network_check</span>
+<span class="text-xs font-medium uppercase tracking-wider">Network</span>
+</div>
+<div class="flex flex-col gap-1.5">
+<div class="flex items-center justify-between text-xs">
+<div class="flex items-center gap-1 text-gray-600">
+<span class="material-symbols-outlined text-[10px] text-gray-600 rotate-180">arrow_downward</span>
+<span>RX</span>
+</div>
+<span class="font-mono text-gray-500">0 KB/s</span>
+</div>
+<div class="flex items-center justify-between text-xs">
+<div class="flex items-center gap-1 text-gray-600">
+<span class="material-symbols-outlined text-[10px] text-gray-600">arrow_upward</span>
+<span>TX</span>
+</div>
+<span class="font-mono text-gray-500">0 KB/s</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="grid grid-cols-2 sm:grid-cols-4 gap-3 border-t border-white/5 pt-5">
+<button class="col-span-2 sm:col-span-1 flex flex-col items-center justify-center gap-1 rounded-lg bg-primary text-background-dark font-bold py-2 hover:bg-primary/90 transition shadow-[0_0_10px_rgba(19,236,91,0.2)]">
+<span class="material-symbols-outlined">play_arrow</span>
+<span class="text-xs">START</span>
+</button>
+<button class="flex flex-col items-center justify-center gap-1 rounded-lg bg-white/5 py-2 text-[#9db9a6] hover:bg-white/10 hover:text-white transition cursor-not-allowed opacity-50">
+<span class="material-symbols-outlined text-sm">restart_alt</span>
+<span class="text-xs font-medium">Restart</span>
+</button>
+<button class="flex flex-col items-center justify-center gap-1 rounded-lg bg-white/5 py-2 text-[#9db9a6] hover:bg-white/10 hover:text-white transition">
+<span class="material-symbols-outlined text-sm">schedule</span>
+<span class="text-xs font-medium">Schedule</span>
+</button>
+<button class="flex flex-col items-center justify-center gap-1 rounded-lg bg-white/5 py-2 text-[#9db9a6] hover:bg-white/10 hover:text-white transition">
+<span class="material-symbols-outlined text-sm">speed</span>
+<span class="text-xs font-medium">Limits</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<div class="flex flex-col sm:flex-row items-center justify-between gap-4 py-2 border-t border-white/5 mt-4">
+<div class="text-sm text-[#9db9a6]">
+        Showing <span class="font-bold text-white">1</span> to <span class="font-bold text-white">2</span> of <span class="font-bold text-white">10</span> servers
+    </div>
+<div class="flex items-center gap-2">
+<button class="flex items-center justify-center h-9 w-9 rounded-lg border border-white/10 bg-white/5 text-[#9db9a6] hover:bg-white/10 hover:text-white transition disabled:opacity-50 disabled:cursor-not-allowed" disabled="">
+<span class="material-symbols-outlined text-sm">chevron_left</span>
+</button>
+<div class="flex items-center gap-1">
+<button class="h-9 w-9 rounded-lg bg-primary text-background-dark font-bold text-sm shadow-[0_0_10px_rgba(19,236,91,0.2)]">1</button>
+<button class="h-9 w-9 rounded-lg border border-white/10 bg-transparent text-[#9db9a6] font-medium text-sm hover:bg-white/5 hover:text-white transition">2</button>
+<button class="h-9 w-9 rounded-lg border border-white/10 bg-transparent text-[#9db9a6] font-medium text-sm hover:bg-white/5 hover:text-white transition hidden sm:block">3</button>
+<span class="flex items-center justify-center h-9 w-9 text-[#9db9a6]">...</span>
+<button class="h-9 w-9 rounded-lg border border-white/10 bg-transparent text-[#9db9a6] font-medium text-sm hover:bg-white/5 hover:text-white transition hidden sm:block">5</button>
+</div>
+<button class="flex items-center justify-center h-9 w-9 rounded-lg border border-white/10 bg-white/5 text-[#9db9a6] hover:bg-white/10 hover:text-white transition">
+<span class="material-symbols-outlined text-sm">chevron_right</span>
+</button>
+</div>
+</div>
+</div>
+<div class="flex flex-col gap-4">
+<div class="flex items-end justify-between px-1">
+<div>
+<h2 class="text-white text-2xl font-bold leading-tight">Access Control</h2>
+<p class="text-[#9db9a6] text-sm mt-1">Manage users who have access to the dashboard.</p>
+</div>
+<button class="flex items-center gap-2 text-sm bg-white/5 hover:bg-white/10 text-white px-4 py-2 rounded-lg font-bold border border-white/5 transition">
+<span class="material-symbols-outlined" style="font-size: 18px;">person_add</span>
+                        Invite Member
+                    </button>
+</div>
+<div class="w-full overflow-hidden rounded-xl border border-[#28392e] bg-surface-dark shadow-sm">
+<div class="overflow-x-auto">
+<table class="w-full text-left text-sm text-[#9db9a6]">
+<thead class="bg-black/20 text-xs uppercase text-white font-bold">
+<tr>
+<th class="px-6 py-4" scope="col">User</th>
+<th class="px-6 py-4" scope="col">Role</th>
+<th class="px-6 py-4" scope="col">Last Active</th>
+<th class="px-6 py-4 text-right" scope="col">Actions</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-[#28392e]">
+<tr class="hover:bg-white/5 transition-colors group">
+<td class="px-6 py-4 whitespace-nowrap">
+<div class="flex items-center gap-3">
+<div class="h-9 w-9 rounded-full bg-cover bg-center border border-white/10" data-alt="Avatar of user John Doe" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuBy8Ql0MfpJDC71Dhrj2Xd4sAcs0gZF0Ps4EAwOTuKondzCd3hpdHn1yn0HT4hvqyztzL8JaygBPLXjkxyBDI2SA-1dZ5qplacspIGa7tF38lK52eSCEWR2cZ1aXr8uAfN1z5sqLBcIvb8-Nq1DGUxglGw3aJS8yCeOfd0U8mziuhMJJKStbRvYFCm_7eeVraHpan6i934zNemY0BG3xYlwm1aL1XkoCoIXR5V5pGVqRWs9yBJi8Hpwl31h7vAa2bZwdCx9RzTVFEc')"></div>
+<div class="flex flex-col">
+<span class="font-bold text-white">John Doe</span>
+<span class="text-xs opacity-70">john@example.com</span>
+</div>
+</div>
+</td>
+<td class="px-6 py-4 whitespace-nowrap">
+<span class="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary border border-primary/20">
+<span class="h-1.5 w-1.5 rounded-full bg-primary"></span>
+                                            Administrator
+                                        </span>
+</td>
+<td class="px-6 py-4 whitespace-nowrap font-mono text-xs">
+                                        2 mins ago
+                                    </td>
+<td class="px-6 py-4 whitespace-nowrap text-right">
+<button class="text-[#9db9a6] hover:text-white transition p-1">
+<span class="material-symbols-outlined" style="font-size: 20px;">more_vert</span>
+</button>
+</td>
+</tr>
+<tr class="hover:bg-white/5 transition-colors group">
+<td class="px-6 py-4 whitespace-nowrap">
+<div class="flex items-center gap-3">
+<div class="h-9 w-9 rounded-full bg-cover bg-center border border-white/10" data-alt="Avatar of user Sarah Smith" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuDg55WJFljKzjhFfrqzOZ0Cn54_DJoSTavx0VmbY2SwNZL89zZriDLjkopc36XeIEhOo4R8TK1L58PGf3b9Y2ZhsWD5mekIGhH9naWbY3W0DCJO6aIKgMiAi8mF0ESYiegH75ZcFx7d6keNa7wIyChU3H3M13iye5H8NBLTot7uNb7g3je5yhY6-6cr2WImijiLD_2mq0j1qeTRh6Dw5ff3BjpxoFVq0fSMD1RdS8IDBFmkgSvuC_ciVizsjMkfQCIUon8fHwXJv8U')"></div>
+<div class="flex flex-col">
+<span class="font-bold text-white">Sarah Smith</span>
+<span class="text-xs opacity-70">sarah.s@example.com</span>
+</div>
+</div>
+</td>
+<td class="px-6 py-4 whitespace-nowrap">
+<span class="inline-flex items-center gap-1.5 rounded-full bg-purple-500/10 px-2.5 py-0.5 text-xs font-medium text-purple-400 border border-purple-500/20">
+                                            Moderator
+                                        </span>
+</td>
+<td class="px-6 py-4 whitespace-nowrap font-mono text-xs">
+                                        5 hours ago
+                                    </td>
+<td class="px-6 py-4 whitespace-nowrap text-right">
+<button class="text-[#9db9a6] hover:text-white transition p-1">
+<span class="material-symbols-outlined" style="font-size: 20px;">more_vert</span>
+</button>
+</td>
+</tr>
+<tr class="hover:bg-white/5 transition-colors group">
+<td class="px-6 py-4 whitespace-nowrap">
+<div class="flex items-center gap-3">
+<div class="h-9 w-9 rounded-full bg-cover bg-center border border-white/10" data-alt="Avatar of user Alex Tech" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuAPUbDdI_YM5ccWitoRVl1a5-WbdVyJsEfKK2CwsJztq_6IKcvV2DKIdZHj1J2AtlC9DzXGb05ZQX4Ml-yr6Isq86GIY3T72P_Y89p-meKQdDc26rM-AKx7bKtXGEhdHHOo47yrCsyW6IWiMe-8m_DFvBdrgUlgYifvPbaG0oQgl1M8T4U8Gfg6BDxkiahWTdBOR3qFdOUAHpipem6n3Yc0Ob2AxCS_ExpuvWm9G5wbRy5XEHQ9Ycqppot_7ehvvQnCAfACWVyvfWY')"></div>
+<div class="flex flex-col">
+<span class="font-bold text-white">Alex Tech</span>
+<span class="text-xs opacity-70">alex@example.com</span>
+</div>
+</div>
+</td>
+<td class="px-6 py-4 whitespace-nowrap">
+<span class="inline-flex items-center gap-1.5 rounded-full bg-blue-500/10 px-2.5 py-0.5 text-xs font-medium text-blue-400 border border-blue-500/20">
+                                            Viewer
+                                        </span>
+</td>
+<td class="px-6 py-4 whitespace-nowrap font-mono text-xs">
+                                        2 days ago
+                                    </td>
+<td class="px-6 py-4 whitespace-nowrap text-right">
+<button class="text-[#9db9a6] hover:text-white transition p-1">
+<span class="material-symbols-outlined" style="font-size: 20px;">more_vert</span>
+</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+</div>
+</main>
+</div>
+</body></html>

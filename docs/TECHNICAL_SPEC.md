@@ -68,7 +68,7 @@ aws s3 sync dist/ s3://[VITE_BUCKET_NAME]
 
 ### 2. Backend Lambda Functions (`./lambdas`)
 
-#### eventResponse
+#### ec2StateHandler
 - **Purpose**: Processes EC2 state changes and metrics
 - **Triggers**: CloudWatch Events, AppSync API calls
 - **Key Operations**:
@@ -76,7 +76,7 @@ aws s3 sync dist/ s3://[VITE_BUCKET_NAME]
   - Collect and format metrics
   - Update DynamoDB with current state
 
-#### getMonthlyCost
+#### ec2CostCalculator
 - **Purpose**: Retrieves cost metrics for servers
 - **Triggers**: AppSync API calls
 - **Key Operations**:
@@ -84,7 +84,7 @@ aws s3 sync dist/ s3://[VITE_BUCKET_NAME]
   - Calculate instance-specific costs
   - Format cost data for frontend display
 
-#### listServers
+#### ec2Discovery
 - **Purpose**: Lists available Minecraft servers
 - **Triggers**: AppSync API calls
 - **Key Operations**:
@@ -92,7 +92,7 @@ aws s3 sync dist/ s3://[VITE_BUCKET_NAME]
   - Retrieve instance metadata
   - Format server list for frontend display
 
-#### serverAction
+#### ec2ActionValidator
 - **Purpose**: Validates and queues server control operations
 - **Triggers**: AppSync API calls
 - **Key Operations**:
@@ -101,7 +101,7 @@ aws s3 sync dist/ s3://[VITE_BUCKET_NAME]
   - Send initial PROCESSING status to AppSync
   - Handle read-only operations (getServerConfig, getServerUsers) synchronously
 
-#### serverActionProcessor
+#### ec2ActionWorker
 - **Purpose**: Processes server control actions asynchronously
 - **Triggers**: SQS queue messages
 - **Key Operations**:
@@ -110,7 +110,7 @@ aws s3 sync dist/ s3://[VITE_BUCKET_NAME]
   - Manage EventBridge rules for scheduled operations
   - Send status updates to AppSync (COMPLETED/FAILED)
 
-#### fixServerRole
+#### iamProfileManager
 - **Purpose**: Manages IAM instance profile association
 - **Triggers**: AppSync API calls (direct, synchronous)
 - **Key Operations**:
@@ -132,8 +132,8 @@ The schema defines the following main types:
 
 #### Key Operations
 - **Queries**:
-  - `listServers`: Get all available servers
-  - `getMonthlyCost`: Get cost data for a server
+  - `ec2Discovery`: Get all available servers
+  - `ec2CostCalculator`: Get cost data for a server
   - `getServerConfig`: Get configuration for a server
   - `getServerUsers`: Get users with access to a server
   - `getLogAudit`: Get audit logs for a server
@@ -144,7 +144,7 @@ The schema defines the following main types:
   - `restartServer`: Restart a server
   - `putServerConfig`: Update server configuration
   - `addUserToServer`: Grant a user access to a server
-  - `fixServerRole`: Fix IAM role issues
+  - `iamProfileManager`: Fix IAM role issues
 
 - **Subscriptions**:
   - `onPutServerMetric`: Real-time metric updates

@@ -1,0 +1,79 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+
+Parameters:
+  ProjectName:
+    Type: String
+  EnvironmentName:
+    Type: String
+  AppValue:
+    Type: String
+
+Resources:
+  CoreTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "${ProjectName}-${EnvironmentName}-CoreTable"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: SK-PK-index
+          KeySchema:
+            - AttributeName: SK
+              KeyType: HASH
+            - AttributeName: PK
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      Tags:
+        - Key: app
+          Value: !Ref AppValue
+
+  LogAuditTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "${ProjectName}-${EnvironmentName}-LogAudit"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+        - AttributeName: timestamp
+          AttributeType: N
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+        - AttributeName: timestamp
+          KeyType: RANGE
+      Tags:
+        - Key: app
+          Value: !Ref AppValue
+
+Outputs:
+  CoreTable:
+    Value: !GetAtt CoreTable.Arn
+    Export:
+      Name: !Sub "${ProjectName}-${EnvironmentName}-CoreTable"
+
+  CoreTableName:
+    Value: !Ref CoreTable
+    Export:
+      Name: !Sub "${ProjectName}-${EnvironmentName}-CoreTableName"
+
+  LogAuditTable:
+    Value: !GetAtt LogAuditTable.Arn
+    Export:
+      Name: !Sub "${ProjectName}-${EnvironmentName}-LogAuditTable"
+
+  LogAuditTableName:
+    Value: !Ref LogAuditTable
+    Export:
+      Name: !Sub "${ProjectName}-${EnvironmentName}-LogAuditTableName"

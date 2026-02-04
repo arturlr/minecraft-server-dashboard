@@ -35,7 +35,6 @@ Resources:
 
   CognitoUserPoolClient:
     Type: AWS::Cognito::UserPoolClient
-    DependsOn: GoogleIdentityProvider
     Properties:
       UserPoolId: !Ref CognitoUserPool
       ClientName: !Sub ${ProjectName}-${EnvironmentName}-client

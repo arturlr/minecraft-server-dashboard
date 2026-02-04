@@ -1,22 +1,21 @@
-import sys
 import boto3
 import logging
 import os
 import json
 from datetime import datetime, timezone
 from botocore.exceptions import ClientError
-from boto3.dynamodb.conditions import Key, Attr
-
-sys.path.insert(0, '/opt/utilHelper')
-import utilHelper
-
-utl = utilHelper.Utils()
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 session = boto3.session.Session()
 aws_region = session.region_name
+
+def extract_instance_id(event):
+    """Extract instance ID from Lambda event arguments."""
+    return (event["arguments"].get("instanceId") or 
+            event["arguments"].get("id") or
+            event["arguments"].get("input", {}).get("id"))
                
 class Ec2Utils:
     def __init__(self):
@@ -49,26 +48,54 @@ class Ec2Utils:
     def create_ec2_instance(self, instance_name, instance_type='t3.micro', 
                        subnet_id=None,
                        security_group_id=None):
-        # None for subnet_id and security_group_id means the default one
+        """
+        Create a new EC2 instance with specified configuration
+        
+        Args:
+            instance_name (str): Name tag for the instance
+            instance_type (str): EC2 instance type (default: t3.micro)
+            subnet_id (str): Subnet ID (None for default)
+            security_group_id (list): Security group IDs (None for default)
+            
+        Returns:
+            str: Instance ID if successful, None if failed
+        """
+        logger.info(f"------- create_ec2_instance: {instance_name} ({instance_type})")
+        
+        # Validate instance type
+        supported_instance_types = [
+            't3.micro', 't3.small', 't3.medium', 
+            't3.large', 't3.xlarge', 't3.2xlarge'
+        ]
+        
+        if instance_type not in supported_instance_types:
+            logger.error(f"Unsupported instance type: {instance_type}. Supported types: {supported_instance_types}")
+            return None
+        
         try:
             # Get the latest Ubuntu 22.04 AMI
             ami_id = self.get_latest_ubuntu_ami()
-            print(f"Using Ubuntu 22.04 AMI: {ami_id}")
+            if not ami_id:
+                logger.error("Failed to retrieve Ubuntu 22.04 AMI ID")
+                return None
+                
+            logger.info(f"Using Ubuntu 22.04 AMI: {ami_id}")
+            logger.info(f"Creating instance with type: {instance_type}")
             
             # Define block device mappings for two EBS volumes
             block_device_mappings = [
                 {
-                    # Root volume (OS) - size depends on AMI default
+                    # Root volume (OS) - 16GB for OS
                     'DeviceName': '/dev/sda1',
                     'Ebs': {
-                        'VolumeSize': 16,  # 8 GB for OS
+                        'VolumeSize': 16,  # 16 GB for OS
                         'VolumeType': 'gp3',
                         'DeleteOnTermination': True,
                         'Encrypted': False
                     }
                 },
                 {
-                    # Second volume for game data and logs
+                    # Second volume for game data and logs - 50GB for game
                     'DeviceName': '/dev/sdf',
                     'Ebs': {
                         'VolumeSize': 50,  # 50 GB for game and logs
@@ -78,21 +105,24 @@ class Ec2Utils:
                     }
                 }
             ]
-                        
-            response = self.ec2_client.run_instances(
-                ImageId=ami_id,
-                InstanceType=instance_type,
-                MinCount=1,
-                MaxCount=1,
-                #KeyName=KEY_NAME,
-                SubnetId=subnet_id,
-                SecurityGroupIds=security_group_id,
-                IamInstanceProfile={'Arn': self.ec2InstanceProfileArn},
-                BlockDeviceMappings=block_device_mappings,
-                TagSpecifications=[
+            
+            logger.info("Configured two EBS volumes: 16GB root (/dev/sda1), 50GB data (/dev/sdf)")
+            
+            # Prepare run_instances parameters
+            run_params = {
+                'ImageId': ami_id,
+                'InstanceType': instance_type,
+                'MinCount': 1,
+                'MaxCount': 1,
+                'IamInstanceProfile': {'Arn': self.ec2InstanceProfileArn},
+                'BlockDeviceMappings': block_device_mappings,
+                'TagSpecifications': [
                     {
                         'ResourceType': 'instance',
-                        'Tags': [{'Key': 'Name', 'Value': instance_name}]
+                        'Tags': [
+                            {'Key': 'Name', 'Value': instance_name},
+                            {'Key': 'App', 'Value': self.appValue}
+                        ]
                     },
                     {
                         'ResourceType': 'volume',
@@ -102,17 +132,45 @@ class Ec2Utils:
                         ]
                     }
                 ]
-            )
+            }
+            
+            # Add optional parameters if provided
+            if subnet_id:
+                run_params['SubnetId'] = subnet_id
+                logger.info(f"Using subnet: {subnet_id}")
+            else:
+                logger.info("Using default subnet")
+                
+            if security_group_id:
+                run_params['SecurityGroupIds'] = security_group_id
+                logger.info(f"Using security groups: {security_group_id}")
+            else:
+                logger.info("Using default security group")
+                        
+            response = self.ec2_client.run_instances(**run_params)
             
             instance_id = response['Instances'][0]['InstanceId']
-            print(f"EC2 instance created: {instance_id}")
-            print(f"Root volume (OS) on /dev/sda1")
-            print(f"Data volume (game/logs) on /dev/sdf")
+            logger.info(f"✓ EC2 instance created successfully: {instance_id}")
+            logger.info(f"✓ Instance type: {instance_type}")
             
             return instance_id
         
         except ClientError as e:
-            print(f"✗ Error: {e}")
+            error_code = e.response.get('Error', {}).get('Code', 'Unknown')
+            error_message = e.response.get('Error', {}).get('Message', str(e))
+            logger.error(f"✗ AWS ClientError creating instance: {error_code} - {error_message}")
+            
+            # Log specific common errors with helpful context
+            if error_code == 'InvalidParameterValue':
+                logger.error("Check if the instance type is available in the current region")
+            elif error_code == 'InsufficientInstanceCapacity':
+                logger.error("AWS does not have sufficient capacity for the requested instance type")
+            elif error_code == 'UnauthorizedOperation':
+                logger.error("Check IAM permissions for ec2:RunInstances and iam:PassRole")
+            
+            return None
+        except Exception as e:
+            logger.error(f"✗ Unexpected error creating instance: {str(e)}", exc_info=True)
             return None
 
 
@@ -182,7 +240,7 @@ class Ec2Utils:
     
     def check_eventbridge_rules_exist(self, instance_id):
         """Check if EventBridge rules exist for the instance.
-           This is a read-only check used by the listServers Lambda function
+           This is a read-only check used by the ec2Discovery Lambda function
         """
         eventbridge = boto3.client('events')
         shutdown_rule = f"shutdown-{instance_id}"
@@ -200,55 +258,146 @@ class Ec2Utils:
             logger.error(f"Error checking EventBridge rules for {instance_id}: {e}")
             return {'shutdown_rule_exists': False, 'start_rule_exists': False}
 
+    def get_cached_running_minutes(self, instance_id):
+        """
+        Get cached running minutes from DynamoDB.
+        Falls back to real-time calculation if cache is missing.
+        
+        Args:
+            instance_id (str): EC2 instance ID
+            
+        Returns:
+            dict: {
+                'minutes': float - Total running minutes for the current month,
+                'timestamp': str - ISO timestamp when value was calculated (or None if real-time)
+            }
+        """
+        logger.info(f"------- get_cached_running_minutes: {instance_id}")
+        
+        try:
+            # Import ddbHelper here to avoid circular dependency
+            import ddbHelper
+            dyn = ddbHelper.Dyn()
+            
+            # Get server config with cache
+            config = dyn.get_server_config(instance_id)
+            
+            if config and config.get('runningMinutesCache') is not None:
+                cache_timestamp_str = config.get('runningMinutesCacheTimestamp')
+                
+                if cache_timestamp_str:
+                    logger.info(f"Using cached value for {instance_id}: {config['runningMinutesCache']} minutes")
+                    return {
+                        'minutes': config['runningMinutesCache'],
+                        'timestamp': cache_timestamp_str
+                    }
+                else:
+                    logger.info(f"Cache timestamp missing for {instance_id}, falling back to calculation")
+            else:
+                logger.info(f"No cache found for {instance_id}, falling back to calculation")
+        
+        except Exception as e:
+            logger.warning(f"Error reading cache for {instance_id}: {e}, falling back to calculation")
+        
+        # Fallback to real-time calculation
+        return self.get_total_hours_running_per_month(instance_id)
+
     def get_total_hours_running_per_month(self, instanceId):
+        """
+        Calculate total running minutes for the current month from CloudTrail events.
+        This is an expensive operation - prefer using get_cached_running_minutes() instead.
+        """
         logger.info(f"------- get_total_hours_running_per_month {instanceId}")
 
         total_minutes = 0
         event_data = []
 
+        # Get current instance state to handle running instances
+        try:
+            instance_response = self.ec2_client.describe_instances(InstanceIds=[instanceId])
+            current_state = instance_response['Reservations'][0]['Instances'][0]['State']['Name']
+        except Exception as e:
+            logger.error(f"Error getting instance state: {e}")
+            current_state = None
+
         paginator = self.ct_client.get_paginator('lookup_events')
         start_time = datetime(datetime.now().year, datetime.now().month, 1, tzinfo=timezone.utc)
         end_time = datetime.now(tz=timezone.utc)
 
-        for page in paginator.paginate(
-            LookupAttributes=[{'AttributeKey': 'ResourceName', 'AttributeValue': instanceId}],
-            StartTime=start_time,
-            EndTime=end_time
-        ):
-            for event in page['Events']:
-                event_name = event['EventName']
-                if event_name == "RunInstances":
-                    event_data.append({'s': 'StartInstances', 'x': json.loads(event['CloudTrailEvent'])['eventTime']})
-                elif event_name == "StartInstances":
-                    start_event = self.extract_state_event_time(event, "stopped", instanceId)
-                    if start_event:
-                        event_data.append({'s': 'StartInstances', 'x': start_event})
-                elif event_name == "StopInstances":
-                    stop_event = self.extract_state_event_time(event, "running", instanceId)
-                    if stop_event:
-                        event_data.append({'s': 'StopInstances', 'x': stop_event})
+        # Limit to relevant event names only
+        event_names = ['RunInstances', 'StartInstances', 'StopInstances']
+        
+        try:
+            for page in paginator.paginate(
+                LookupAttributes=[{'AttributeKey': 'ResourceName', 'AttributeValue': instanceId}],
+                StartTime=start_time,
+                EndTime=end_time,
+                PaginationConfig={'MaxItems': 1000}  # Limit total items to prevent excessive API calls
+            ):
+                for event in page['Events']:
+                    event_name = event['EventName']
+                    
+                    # Skip irrelevant events early
+                    if event_name not in event_names:
+                        continue
+                    
+                    # Parse CloudTrail event once
+                    ct_event = json.loads(event['CloudTrailEvent'])
+                    event_time = ct_event['eventTime']
+                    
+                    if event_name == "RunInstances":
+                        event_data.append({'s': 'StartInstances', 'x': event_time})
+                    elif event_name == "StartInstances":
+                        # Check if this was a transition from stopped state
+                        response_elements = ct_event.get('responseElements', {})
+                        instances_set = response_elements.get('instancesSet', {})
+                        items = instances_set.get('items', [])
+                        
+                        for item in items:
+                            if (item.get('instanceId') == instanceId and 
+                                item.get('previousState', {}).get('name') == 'stopped'):
+                                event_data.append({'s': 'StartInstances', 'x': event_time})
+                                break
+                                
+                    elif event_name == "StopInstances":
+                        # Check if this was a transition from running state
+                        response_elements = ct_event.get('responseElements', {})
+                        instances_set = response_elements.get('instancesSet', {})
+                        items = instances_set.get('items', [])
+                        
+                        for item in items:
+                            if (item.get('instanceId') == instanceId and 
+                                item.get('previousState', {}).get('name') == 'running'):
+                                event_data.append({'s': 'StopInstances', 'x': event_time})
+                                break
+        except Exception as e:
+            logger.error(f"Error fetching CloudTrail events: {e}")
+            return {'minutes': 0, 'timestamp': None}
 
+        # Sort events chronologically
         data_points = sorted(event_data, key=lambda k: k['x'])
 
+        # Calculate runtime from event pairs
         start_event = None
-        stop_event = None
         for point in data_points:
             if point['s'] == "StartInstances":
                 start_event = datetime.fromisoformat(point['x'].replace("Z", "+00:00"))
-            elif point['s'] == "StopInstances":
-                if start_event:
-                    stop_event = datetime.fromisoformat(point['x'].replace("Z", "+00:00"))
-                else:
-                    start_event = start_time
-                    stop_event = datetime.fromisoformat(point['x'].replace("Z", "+00:00"))
+            elif point['s'] == "StopInstances" and start_event:
+                stop_event = datetime.fromisoformat(point['x'].replace("Z", "+00:00"))
+                delta = stop_event - start_event
+                total_minutes += round(delta.total_seconds() / 60, 2)
+                start_event = None
 
-                if start_event and stop_event:
-                    delta = stop_event - start_event
-                    total_minutes += round(delta.total_seconds() / 60, 2)
-                    start_event = None
-                    stop_event = None
+        # Handle case where instance is currently running
+        if start_event and current_state == 'running':
+            delta = end_time - start_event
+            total_minutes += round(delta.total_seconds() / 60, 2)
 
-        return total_minutes
+        # Return dict with minutes and timestamp (None for real-time calculation)
+        return {
+            'minutes': total_minutes,
+            'timestamp': None
+        }
 
     def extract_state_event_time(self, evt, previous_state, instance_id):
         logger.info(f"------- extract_state_event_time {instance_id}")
@@ -438,14 +587,14 @@ class Ec2Utils:
                  
     def describe_instance_status(self, instance_id):
         logger.info(f"------- describe_instance_status: {instance_id}") 
-        iamStatus = 'Fail'
-        initStatus = 'Fail'
+        iamStatus = 'fail'
+        initStatus = 'fail'
 
         statusRsp = self.ec2_client.describe_instance_status(InstanceIds=[instance_id])
 
         if not statusRsp["InstanceStatuses"]:
-            instanceStatus =  "Fail" 
-            systemStatus = "Fail" 
+            instanceStatus =  "fail" 
+            systemStatus = "fail" 
         else:
             instanceStatus = statusRsp["InstanceStatuses"][0]["InstanceStatus"]["Status"]
             systemStatus = statusRsp["InstanceStatuses"][0]["SystemStatus"]["Status"]
@@ -453,17 +602,50 @@ class Ec2Utils:
         if instanceStatus == 'ok' and systemStatus == 'ok':
             initStatus = 'ok'
         
+        # Check IAM profile regardless of instance state
         iamProfile = self.describe_iam_profile(instance_id,"associated")
         if iamProfile is not None and iamProfile['Arn'] == self.ec2InstanceProfileArn:
             iamStatus = 'ok'
         
         return { 'instanceId': instance_id, 'initStatus': initStatus, 'iamStatus': iamStatus }
 
-    def describe_instance_attributes(self, instance_id):
+    def describe_instance_attribute(self, instance_id, attribute):
         logger.info(f"------- describe_instance_attributes: {instance_id}")
-        response = self.ec2_client.describe_instance_attribute(
-            Attribute='userData',
+        return self.ec2_client.describe_instance_attribute(
+            Attribute=attribute,
             instanceId=instance_id
         )
-
    
+    def update_instance_name_tag(self, instance_id, new_name):
+        """
+        Update the Name tag of an EC2 instance
+        
+        Args:
+            instance_id (str): The EC2 instance ID
+            new_name (str): The new name for the instance
+            
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        logger.info(f"------- update_instance_name_tag: {instance_id} -> {new_name}")
+        
+        try:
+            # Update the Name tag
+            self.ec2_client.create_tags(
+                Resources=[instance_id],
+                Tags=[
+                    {
+                        'Key': 'Name',
+                        'Value': new_name
+                    }
+                ]
+            )
+            logger.info(f"Successfully updated Name tag for instance {instance_id} to '{new_name}'")
+            return True
+            
+        except ClientError as e:
+            logger.error(f"Failed to update Name tag for instance {instance_id}: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"Unexpected error updating Name tag for instance {instance_id}: {e}")
+            return False

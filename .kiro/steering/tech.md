@@ -18,18 +18,29 @@
 - **Monitoring**: Amazon CloudWatch for metrics, logs, and alarms
 - **Scheduling**: Amazon EventBridge for scheduled server operations
 - **Content Delivery**: Amazon CloudFront
+- **Log Streaming**: Custom Rust service (msd-logs) on port 25566
+
+## Rust Services
+- **msd-metrics**: Collects and sends server metrics (CPU, memory, network, active users) to CloudWatch
+- **msd-logs**: HTTP server that streams Minecraft logs via journalctl with JWT authentication
+  - Listens on port 25566
+  - Validates JWT token format (Bearer token)
+  - Provides GET /logs?lines=N endpoint (max 1000 lines)
+  - Provides GET /health endpoint for monitoring
+  - Runs as systemd service with auto-restart
 
 ## Development Tools
 - **Package Manager**: npm
 - **Module System**: ES modules
 - **Environment**: Node.js with Vite dev server
+- **Rust Toolchain**: 1.70+ with musl target for static binaries
 
 ## Common Commands
 
 ### Frontend Development
 ```bash
-# Navigate to dashboard directory
-cd dashboard
+# Navigate to webapp directory
+cd webapp
 
 # Install dependencies
 npm install
@@ -49,6 +60,9 @@ npm run preview
 # Navigate to CloudFormation directory
 cd cfn
 
+# Validate templates with linting
+sam validate --lint
+
 # Build SAM application
 sam build
 
@@ -57,6 +71,17 @@ sam deploy --guided
 
 # Deploy with existing configuration
 sam deploy
+```
+
+### Rust Binary Building
+```bash
+# Build msd-metrics
+cd rust/msd-metrics
+cargo build --release --target x86_64-unknown-linux-musl
+
+# Build msd-logs
+cd rust/msd-logs
+cargo build --release --target x86_64-unknown-linux-musl
 ```
 
 ### Lambda Layer Building
@@ -73,18 +98,18 @@ cd layers/authHelper && make
 ### Asynchronous Action Processing
 - **Pattern**: Queue-based asynchronous processing for server control actions
 - **Components**:
-  - `serverAction` Lambda: Receives GraphQL mutations (start/stop/restart/config), validates, and queues to SQS
+  - `ec2ActionValidator` Lambda: Receives GraphQL mutations (start/stop/restart/config), validates, and queues to SQS
   - SQS Queue: Buffers server actions for reliable processing
-  - `serverActionProcessor` Lambda: Processes server control actions from queue, updates AppSync
+  - `ec2ActionWorker` Lambda: Processes server control actions from queue, updates AppSync
   - Dead Letter Queue (DLQ): Captures failed messages for troubleshooting
 - **Benefits**: Improved reliability, timeout handling, decoupled processing
 - **Status Updates**: Real-time status via GraphQL subscriptions (PROCESSING/COMPLETED/FAILED)
-- **Note**: IAM profile management (`fixServerRole`) is handled synchronously by a dedicated Lambda, not queued
+- **Note**: IAM profile management (`iamProfileManager`) is handled synchronously by a dedicated Lambda, not queued
 
 ### IAM Profile Management
 - **Pattern**: Synchronous IAM profile association/disassociation
 - **Components**:
-  - `fixServerRole` Lambda: Dedicated function for IAM profile management
+  - `iamProfileManager` Lambda: Dedicated function for IAM profile management
   - Direct execution (no SQS queue needed)
 - **Operations**:
   - Validates existing IAM profile on EC2 instance
@@ -145,7 +170,7 @@ cd layers/authHelper && make
 ### IAM Permissions (Fixed)
 - **Issue**: `iam:PassRole` permission was incorrectly targeting instance profile ARN
 - **Fix**: Updated to target EC2 role ARN (required for associating instance profiles)
-- **Location**: `cfn/templates/lambdas.yaml` - FixServerRole Lambda policies
+- **Location**: `cfn/templates/lambdas.yaml` - iamProfileManager Lambda policies
 
 ### Schedule Expression Validation (Fixed)
 - **Issue**: EventBridge rejected cron expressions from frontend
@@ -160,14 +185,14 @@ cd layers/authHelper && make
   - Added `stopScheduleExpression`, `startScheduleExpression` to queries
   - Created separate `getServerUsers` query
   - Fixed data type handling in ServerSettings component
-- **Location**: `dashboard/src/graphql/queries.js`, `dashboard/src/components/ServerSettings.vue`
+- **Location**: `webapp/src/graphql/queries.js`, `webapp/src/components/ServerSettings.vue`
 
 ### UI/UX Improvements
 - **Quick Schedule Presets**: One-click common schedules (weekday evenings, weekends, etc.)
 - **Smart Validation**: Warnings for timing conflicts, short durations, high thresholds
 - **Visual Feedback**: Day chips, runtime calculations, color-coded summaries
 - **Better Layout**: Card-based design with progressive disclosure
-- **Location**: `dashboard/src/components/ServerSettings.vue`
+- **Location**: `webapp/src/components/ServerSettings.vue`
 
 ## GraphQL Schema & Data Models
 
@@ -178,12 +203,12 @@ cd layers/authHelper && make
 - **ServerUsers**: User access management
 - **MonthlyCost**: Cost tracking information
 - **LogAudit**: Audit trail for actions
-- **ServerActionStatus**: Real-time action status tracking (start/stop/restart/config updates)
+- **ec2ActionValidatorStatus**: Real-time action status tracking (start/stop/restart/config updates)
 
 ### Key GraphQL Operations
-- **Queries**: `listServers`, `getMonthlyCost`, `getServerConfig`, `getServerUsers`, `getLogAudit`, `getServerActionStatus`
-- **Mutations**: `startServer`, `stopServer`, `restartServer`, `putServerConfig`, `updateServerConfig`, `addUserToServer`, `fixServerRole`, `putServerActionStatus`
-- **Subscriptions**: `onPutServerMetric`, `onChangeState`, `onPutServerActionStatus` (real-time action status updates)
+- **Queries**: `ec2Discovery`, `ec2CostCalculator`, `getServerConfig`, `getServerUsers`, `getLogAudit`, `getec2ActionValidatorStatus`
+- **Mutations**: `startServer`, `stopServer`, `restartServer`, `putServerConfig`, `updateServerConfig`, `addUserToServer`, `iamProfileManager`, `putec2ActionValidatorStatus`
+- **Subscriptions**: `onPutServerMetric`, `onChangeState`, `onPutec2ActionValidatorStatus` (real-time action status updates)
 
 ## Authentication & Authorization
 - **Primary Auth**: Amazon Cognito User Pools with Google OAuth

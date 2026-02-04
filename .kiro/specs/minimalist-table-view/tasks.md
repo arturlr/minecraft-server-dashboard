@@ -35,8 +35,8 @@
   - Add template with v-chip component displaying icon and state text
   - _Requirements: 1.3_
 
-- [x] 4. Create ServerActionsMenu component
-  - Create new component file `dashboard/src/components/ServerActionsMenu.vue`
+- [x] 4. Create ec2ActionValidatorsMenu component
+  - Create new component file `dashboard/src/components/ec2ActionValidatorsMenu.vue`
   - Implement props interface for serverId, serverState, and iamStatus
   - Add emit definitions for open-config, open-stats, open-power, and copy-ip events
   - Create template with power button as FIRST action, followed by statistics, configuration, and copy IP
@@ -51,7 +51,7 @@
   - Configure v-data-table with headers for name, instance ID, state, public IP, CPU, RAM, disk, running time, and actions (NO IAM status column)
   - Add search input field bound to table search property
   - Implement custom slot for state column using ServerStatusChip component
-  - Implement custom slot for actions column using ServerActionsMenu component
+  - Implement custom slot for actions column using ec2ActionValidatorsMenu component
   - Add custom slot for running time column with formatted time display
   - Add custom slot for RAM column to display memory in GB (memSize / 1024)
   - Add empty state template when no servers available
@@ -65,7 +65,7 @@
   - Add emit definitions for update:visible and action-complete events
   - Add reactive state for loading indicators
   - Implement executeAction method to call GraphQL mutations (startServer, stopServer, restartServer)
-  - Implement fixIamRole method to call fixServerRole mutation
+  - Implement fixIamRole method to call iamProfileManager mutation
   - Add template with v-dialog component
   - Add IAM error alert with fix button when iamStatus is not 'ok'
   - Add conditional power action buttons based on serverState (Start for stopped, Stop/Restart for running)
@@ -121,9 +121,9 @@
   - Implement openStatsDialog method to set selectedServerId and show stats dialog
   - Implement openPowerDialog method to set selectedServerId and show power dialog
   - Implement copyToClipboard method for IP address copying
-  - Implement fixIamRole method to execute fixServerRole mutation
+  - Implement fixIamRole method to execute iamProfileManager mutation
   - Implement handleActionComplete method to display snackbar notifications
-  - Update onMounted to call serverStore.listServers and subscribe to onChangeState
+  - Update onMounted to call serverStore.ec2Discovery and subscribe to onChangeState
   - Add onUnmounted to clean up state change subscription
   - _Requirements: 1.1, 2.2, 2.3, 2.4, 5.5, 6.4, 6.5, 7.1, 7.5, 9.1, 9.2, 9.3, 11.1, 11.2, 11.3, 11.5_
 
@@ -191,7 +191,7 @@
 
 - [ ]* 17. Write component tests
   - Write unit tests for ServerStatusChip component
-  - Write unit tests for ServerActionsMenu component
+  - Write unit tests for ec2ActionValidatorsMenu component
   - Write unit tests for ServerTable component
   - Write unit tests for PowerControlDialog component
   - Write unit tests for ServerConfigDialog component

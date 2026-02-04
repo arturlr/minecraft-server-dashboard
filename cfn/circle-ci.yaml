@@ -14,6 +14,9 @@ Resources:
     Type: AWS::S3::Bucket
     Properties:
       BucketName: !Sub "circleci-${ProjectName}-frontend-${EnvironmentName}"
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
       PublicAccessBlockConfiguration:
         BlockPublicAcls: true
         BlockPublicPolicy: true
@@ -24,6 +27,9 @@ Resources:
     Type: AWS::S3::Bucket
     Properties:
       BucketName: !Sub "circleci-${ProjectName}-artifacts-${EnvironmentName}"
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
       PublicAccessBlockConfiguration:
         BlockPublicAcls: true
         BlockPublicPolicy: true
@@ -102,7 +108,7 @@ Outputs:
     Value: !Ref CloudFrontDistribution
     Export:
       Name: !Sub "${ProjectName}-${EnvironmentName}-CloudFrontDistribution"
-  
+
   CloudFrontDomainName:
     Description: Domain name of the CloudFront distribution
     Value: !GetAtt CloudFrontDistribution.DomainName

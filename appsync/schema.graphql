@@ -3,6 +3,47 @@ input AddUserToServerInput {
 	userEmail: AWSEmail!
 }
 
+# New enum for membership roles
+enum MembershipRole {
+	admin
+	moderator
+	viewer
+}
+
+# New type for user membership
+type UserMembership @aws_iam @aws_cognito_user_pools {
+	userId: String!
+	serverId: String!
+	email: AWSEmail!
+	role: MembershipRole!
+	createdAt: AWSDateTime!
+	updatedAt: AWSDateTime!
+	createdBy: AWSEmail!
+}
+
+input UserMembershipInput {
+	userId: String!
+	serverId: String!
+	email: AWSEmail!
+	role: MembershipRole!
+	createdBy: AWSEmail!
+}
+
+input UpdateUserRoleInput {
+	userId: String!
+	serverId: String!
+	role: MembershipRole!
+}
+
+input CreateServerInput {
+	serverName: String!
+	instanceType: String!
+	alarmThreshold: Float
+	alarmEvaluationPeriod: Int
+	startScheduleExpression: String
+	stopScheduleExpression: String
+}
+
 type LogAudit @aws_iam
 @aws_cognito_user_pools {
 	id: ID!
@@ -12,6 +53,14 @@ type LogAudit @aws_iam
 	inviteeEmail: AWSEmail	
 	expirationEpoch: AWSTimestamp
 	createdAt: AWSDateTime
+}
+
+type ServerLogs @aws_iam
+@aws_cognito_user_pools {
+	success: Boolean!
+	logs: String
+	error: String
+	instanceId: String
 }
 
 input LogAuditInput {
@@ -39,7 +88,7 @@ input MonthlyCostInput {
 	UsageQuantity: Float
 }
 
-input ServerActionInput {
+input ec2ActionValidatorInput {
 	action: String!
 	instanceId: String!
 	params: AWSJSON
@@ -48,7 +97,6 @@ input ServerActionInput {
 type ServerConfig @aws_iam
 @aws_cognito_user_pools {
 	id: String!
-	shutdownMethod: String
 	stopScheduleExpression: String
 	startScheduleExpression: String
 	alarmThreshold: Float
@@ -56,17 +104,19 @@ type ServerConfig @aws_iam
 	runCommand: String
 	workDir: String
 	timezone: String
-	isBootstrapped: Boolean
+	isBootstrapComplete: Boolean
+	hasCognitoGroup: Boolean
 	minecraftVersion: String
 	latestPatchUpdate: String
 	createdAt: AWSDateTime
 	updatedAt: AWSDateTime
 	autoConfigured: Boolean
+	runningMinutesCache: Float
+	runningMinutesCacheTimestamp: AWSDateTime
 }
 
 input ServerConfigInput {
 	id: String!
-	shutdownMethod: String
 	stopScheduleExpression: String
 	startScheduleExpression: String
 	alarmThreshold: Float
@@ -74,12 +124,15 @@ input ServerConfigInput {
 	runCommand: String
 	workDir: String
 	timezone: String
-	isBootstrapped: Boolean
+	isBootstrapComplete: Boolean
+	hasCognitoGroup: Boolean
 	minecraftVersion: String
 	latestPatchUpdate: String
 	createdAt: AWSDateTime
 	updatedAt: AWSDateTime
 	autoConfigured: Boolean
+	runningMinutesCache: Float
+	runningMinutesCacheTimestamp: AWSDateTime
 }
 
 type ServerUsers @aws_iam
@@ -87,12 +140,14 @@ type ServerUsers @aws_iam
 	id: String!
 	email: AWSEmail!
 	fullName: String!
+	role: MembershipRole!
 }
 
 input ServerUsersInput {
 	id: String!
 	email: AWSEmail!
 	fullName: String!
+	role: MembershipRole!
 }
 
 type ServerInfo @aws_iam
@@ -110,6 +165,7 @@ type ServerInfo @aws_iam
 	initStatus: String
 	iamStatus: String
 	runningMinutes: String
+	runningMinutesCacheTimestamp: String
 	configStatus: String
 	configValid: Boolean
 	configWarnings: [String]
@@ -131,6 +187,7 @@ input ServerInfoInput {
 	initStatus: String
 	iamStatus: String
 	runningMinutes: String
+	runningMinutesCacheTimestamp: String
 	configStatus: String
 	configValid: Boolean
 	configWarnings: [String]
@@ -156,7 +213,7 @@ input ServerMetricInput {
 }
 
 # New type for server action status
-type ServerActionStatus @aws_iam
+type ec2ActionValidatorStatus @aws_iam
 @aws_cognito_user_pools {
 	id: String!
 	action: String!
@@ -166,7 +223,7 @@ type ServerActionStatus @aws_iam
 	userEmail: AWSEmail
 }
 
-input ServerActionStatusInput {
+input ec2ActionValidatorStatusInput {
 	id: String!
 	action: String!
 	status: String!
@@ -180,13 +237,16 @@ type Mutation {
 		@aws_iam @aws_cognito_user_pools
 	changeServerState(input: ServerInfoInput!): ServerInfo
 		@aws_iam
+	
+	putec2ActionValidatorStatus(input: ec2ActionValidatorStatusInput!): ec2ActionValidatorStatus
+		@aws_iam @aws_cognito_user_pools
 	startServer(instanceId: String!): AWSJSON
 		@aws_cognito_user_pools
 	restartServer(instanceId: String!): AWSJSON
 		@aws_cognito_user_pools
 	stopServer(instanceId: String!): AWSJSON
 		@aws_cognito_user_pools
-	fixServerRole(instanceId: String!): AWSJSON
+	iamProfileManager(instanceId: String!): AWSJSON
 		@aws_cognito_user_pools  
 	verifyUserEmail(id: String!): AWSJSON
 		@aws_cognito_user_pools
@@ -196,29 +256,35 @@ type Mutation {
 		@aws_cognito_user_pools
 	updateServerConfig(input: ServerConfigInput!): ServerConfig
 		@aws_cognito_user_pools 
+	updateServerName(instanceId: String!, newName: String!): AWSJSON
+		@aws_cognito_user_pools
+	createServer(input: CreateServerInput!): AWSJSON
+		@aws_cognito_user_pools
 	putLogAudit(input: LogAuditInput!): LogAudit
 		@aws_iam @aws_cognito_user_pools
-	# New mutation for server action status
-	putServerActionStatus(input: ServerActionStatusInput!): ServerActionStatus
-		@aws_iam @aws_cognito_user_pools
+	updateUserRole(input: UpdateUserRoleInput!): UserMembership
+		@aws_cognito_user_pools
+	removeUserFromServer(userId: String!, serverId: String!): AWSJSON
+		@aws_cognito_user_pools
 }
 
 type Query {
-	listServers: [ServerInfo]  
-		@aws_cognito_user_pools
-	getMonthlyCost(instanceId: String!): MonthlyCost
+	ec2Discovery: [ServerInfo]  
 		@aws_cognito_user_pools
 	getServerConfig(id: String!): ServerConfig
 		@aws_cognito_user_pools
 	getServerUsers(instanceId: String!): [ServerUsers]
 		@aws_cognito_user_pools
+	getAdminUsers: [ServerUsers]
+		@aws_cognito_user_pools
+	searchUserByEmail(email: AWSEmail!): ServerUsers
+		@aws_cognito_user_pools
 	getLogAudit(id: String!): [LogAudit]
 		@aws_cognito_user_pools  
-	# New query for server action status
-	getServerActionStatus(id: String!): ServerActionStatus
+	getServerLogs(instanceId: String!, lines: Int): ServerLogs
 		@aws_cognito_user_pools
 	# Query for historical server metrics
-	getServerMetrics(id: String!): ServerMetric
+	ec2MetricsHandler(id: String!): ServerMetric
 		@aws_cognito_user_pools
 }
 
@@ -233,9 +299,9 @@ type Subscription {
 @aws_cognito_user_pools
 @aws_iam
 
-	# New subscription for server action status
-	onPutServerActionStatus(id: String!): ServerActionStatus
-		@aws_subscribe(mutations: ["putServerActionStatus"])
+	onPutec2ActionValidatorStatus(id: String!): ec2ActionValidatorStatus
+		@aws_subscribe(mutations: ["putec2ActionValidatorStatus"])
 @aws_cognito_user_pools
 @aws_iam
+
 }

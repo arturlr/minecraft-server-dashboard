@@ -2,11 +2,11 @@
 node_modules
 /dist
 
-# local env files
+# env files
 .env
+.env.test
 *.env
-.env.local
-.env.*.local
+.env.*
 
 # Log files
 npm-debug.log*
@@ -82,3 +82,4 @@ venv.bak/
 .pytest_cache/
 .coverage
 htmlcov/
+playwright/.auth
