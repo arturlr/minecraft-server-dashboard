@@ -66,6 +66,7 @@ Resources:
     DependsOn: 
       - CognitoStack
       - DynamoDBStack
+      - EC2Stack
     Properties:
       Location: ./templates/lambdas.yaml
       Parameters:
@@ -73,6 +74,9 @@ Resources:
         EnvironmentName: !Ref EnvironmentName
         AppValue: !Ref AppValue
         BootstrapSSMDoc: !GetAtt SSMStack.Outputs.BootstrapSSMDoc
+        IAMEC2RoleArn: !GetAtt EC2Stack.Outputs.IAMEC2RoleArn
+        IAMEC2InstanceProfile: !GetAtt EC2Stack.Outputs.IAMEC2InstanceProfile
+        IAMEC2InstanceProfileArn: !GetAtt EC2Stack.Outputs.IAMEC2InstanceProfileArn
 
 Outputs:
   GraphQLAPIEndpoint:

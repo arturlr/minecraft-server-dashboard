@@ -30,6 +30,15 @@ Parameters:
   BootstrapSSMDoc:
     Type: String
     Description: Bootstrap SSM Document Name
+  IAMEC2RoleArn:
+    Type: String
+    Description: IAM EC2 Role ARN
+  IAMEC2InstanceProfile:
+    Type: String
+    Description: IAM EC2 Instance Profile Name
+  IAMEC2InstanceProfileArn:
+    Type: String
+    Description: IAM EC2 Instance Profile ARN
 
 Resources:
 
@@ -880,14 +889,11 @@ Resources:
             - Effect: Allow
               Action:
                 - iam:PassRole
-              Resource: 
-                Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-IAMEC2RoleArn"
+              Resource: !Ref IAMEC2RoleArn
       Environment:
         Variables:
-          EC2_INSTANCE_PROFILE_NAME:  
-            Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-IAMEC2InstanceProfile"
-          EC2_INSTANCE_PROFILE_ARN:  
-            Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-IAMEC2InstanceProfileArn"
+          EC2_INSTANCE_PROFILE_NAME: !Ref IAMEC2InstanceProfile
+          EC2_INSTANCE_PROFILE_ARN: !Ref IAMEC2InstanceProfileArn
           COGNITO_USER_POOL_ID:  
             Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-UserPoolId"
 
