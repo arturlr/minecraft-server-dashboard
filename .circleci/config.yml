@@ -186,14 +186,22 @@ jobs:
               SUPPORT_BUCKET="${ARTIFACTS_BUCKET_PROD}"
             fi
             
+            # Get script version
+            SCRIPT_VERSION=$(cat scripts/VERSION)
+            echo "Script version: $SCRIPT_VERSION"
+            
             echo "Uploading Rust binaries to s3://$SUPPORT_BUCKET/"
             aws s3 cp msd-metrics "s3://$SUPPORT_BUCKET/msd-metrics"
             aws s3 cp msd-logs "s3://$SUPPORT_BUCKET/msd-logs"
             
-            echo "Uploading bootstrap scripts to s3://$SUPPORT_BUCKET/scripts/"
+            echo "Uploading bootstrap scripts to s3://$SUPPORT_BUCKET/scripts/v${SCRIPT_VERSION}/"
             if [ -d "scripts" ]; then
-              aws s3 sync scripts/ "s3://$SUPPORT_BUCKET/scripts/" --delete
+              aws s3 sync scripts/ "s3://$SUPPORT_BUCKET/scripts/v${SCRIPT_VERSION}/" --delete
             fi
+            
+            # Also upload to 'latest' for convenience
+            echo "Uploading to s3://$SUPPORT_BUCKET/scripts/latest/"
+            aws s3 sync scripts/ "s3://$SUPPORT_BUCKET/scripts/latest/" --delete
       - run:
           name: Upload CloudWatch agent config
           command: |

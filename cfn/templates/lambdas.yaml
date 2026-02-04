@@ -654,6 +654,13 @@ Resources:
           Statement:
             - Effect: Allow
               Action:
+                - dynamodb:PutItem
+              Resource:
+                Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-LogAuditTable"
+        - Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Action:
                 - ec2:StartInstances
                 - ec2:StopInstances
                 - ec2:RebootInstances
@@ -708,6 +715,8 @@ Resources:
       Environment:
         Variables:
           APPSYNC_URL: !GetAtt GraphQLAPI.GraphQLUrl
+          LOG_AUDIT_TABLE_NAME:
+            Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-LogAuditTableName"
 
   ec2BootWorker:
     Type: AWS::Serverless::Function
@@ -929,6 +938,8 @@ Resources:
       Timeout: 900  # 15 minutes for retries
       FunctionName: !Sub "${ProjectName}-${EnvironmentName}-ssmCommandWorker"
       CodeUri: ../../lambdas/ssmCommandWorker/
+      Layers:
+        - !Ref DdbLayer
       Events:
         SQSEvent:
           Type: SQS
@@ -948,6 +959,17 @@ Resources:
               Resource:
                 - !Sub 'arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:instance/*'
                 - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:document/*'
+        - Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:PutItem
+              Resource:
+                Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-LogAuditTable"
+      Environment:
+        Variables:
+          LOG_AUDIT_TABLE_NAME:
+            Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-LogAuditTableName"
 
 
 Outputs:

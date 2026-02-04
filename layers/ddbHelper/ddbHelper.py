@@ -319,6 +319,45 @@ class CoreTableDyn:
         except (ValueError, TypeError):
             return default
 
+class LogAuditTable:
+    """DynamoDB helper for LogAuditTable - tracks SSM commands and server actions."""
+    
+    def __init__(self, table_name=None):
+        dynamodb = boto3.resource('dynamodb', region_name=aws_region)
+        audit_table = table_name or os.getenv('LOG_AUDIT_TABLE_NAME')
+        if not audit_table:
+            raise ValueError("LOG_AUDIT_TABLE_NAME environment variable not set")
+        self.table = dynamodb.Table(audit_table)
+    
+    def log_action(self, instance_id, action, action_user='system', command_id=None, metadata=None):
+        """
+        Log server action to audit table.
+        
+        Args:
+            instance_id: EC2 instance ID
+            action: Action type (start, stop, restart, bootstrap, etc.)
+            action_user: User who initiated action (email or 'system')
+            command_id: SSM command ID if applicable
+            metadata: Additional context (dict)
+        """
+        timestamp = int(datetime.now(timezone.utc).timestamp())
+        item = {
+            'id': instance_id,
+            'timestamp': timestamp,
+            'action': action,
+            'actionUser': action_user,
+            'instanceId': instance_id,
+            'createdAt': datetime.now(timezone.utc).isoformat()
+        }
+        
+        if command_id:
+            item['commandId'] = command_id
+        if metadata:
+            item['metadata'] = metadata
+        
+        self.table.put_item(Item=item)
+        logger.info(f"Logged action: {action} for {instance_id} by {action_user}")
+
 # Backward compatibility aliases
 Dyn = CoreTableDyn
 UserMembershipDyn = CoreTableDyn

@@ -24,6 +24,7 @@ eventbridge_client = boto3.client('events')
 ec2_utils = ec2Helper.Ec2Utils()
 utils = utilHelper.Utils()
 dyn = ddbHelper.CoreTableDyn()
+audit_table = ddbHelper.LogAuditTable()
 boto3_session = boto3.Session()
 
 # Environment variables
@@ -365,10 +366,12 @@ def _validate_message(message):
 
 def _route_action(action, instance_id, arguments, message):
     """Route action to appropriate handler"""
+    user_email = message.get('userEmail', 'system')
+    
     handlers = {
-        ('start', 'startserver'): lambda: handle_server_action('start', instance_id),
-        ('stop', 'stopserver'): lambda: handle_server_action('stop', instance_id),
-        ('restart', 'restartserver'): lambda: handle_server_action('restart', instance_id),
+        ('start', 'startserver'): lambda: handle_server_action('start', instance_id, user_email),
+        ('stop', 'stopserver'): lambda: handle_server_action('stop', instance_id, user_email),
+        ('restart', 'restartserver'): lambda: handle_server_action('restart', instance_id, user_email),
         ('putserverconfig', 'updateserverconfig'): lambda: handle_update_server_config(instance_id, arguments),
         ('updateservername',): lambda: handle_update_server_name(instance_id, arguments),
         ('createserver',): lambda: process_create_server(message)
@@ -479,7 +482,7 @@ def _send_notification(user_email, server_name, action, instance_id):
     if user_email:
         utils.send_server_notification_email(user_email, server_name, action, instance_id)
 
-def handle_server_action(action, instance_id):
+def handle_server_action(action, instance_id, action_user='system'):
     """Handle EC2 instance actions (start/stop/restart)"""
     logger.info(f"Handling {action} for {instance_id}")
     
@@ -504,6 +507,14 @@ def handle_server_action(action, instance_id):
     if _execute_ec2_action(action, instance_id):
         _send_notification(user_email, server_name, action, instance_id)
         logger.info(f"{action.capitalize()} initiated for {instance_id}")
+        
+        # Log to audit table
+        audit_table.log_action(
+            instance_id=instance_id,
+            action=action,
+            action_user=action_user,
+            metadata={'serverName': server_name, 'previousState': state}
+        )
         return True
     
     return False

@@ -11,6 +11,10 @@ Parameters:
   SupportBucket:
     Type: String
     Description: S3 bucket for support files
+  ScriptVersion:
+    Type: String
+    Default: latest
+    Description: Version of bootstrap scripts to use (e.g., v1.0.0 or latest)
 
 Resources:
 
@@ -28,6 +32,10 @@ Resources:
           runCommand:
             type: String
             description: Minecraft server run command
+          scriptVersion:
+            type: String
+            description: Version of bootstrap scripts
+            default: latest
         mainSteps:              
           - action: aws:runShellScript
             name: BootstrapInstance
@@ -35,38 +43,91 @@ Resources:
               runCommand:
                 - !Sub |
                   #!/bin/bash
-                  set -e
+                  # Don't exit on error - we want to report partial failures
+                  set +e
+                  
                   REGION=$(ec2metadata --availability-zone | sed 's/[a-z]$//')
+                  SCRIPT_VERSION="{{ scriptVersion }}"
+                  INSTANCE_ID=$(ec2-metadata --instance-id | cut -d " " -f 2)
                   
+                  echo "=== Bootstrap Script Version: $SCRIPT_VERSION ==="
+                  echo "=== Instance: $INSTANCE_ID ==="
+                  
+                  # Download and source helper functions
+                  aws s3 cp s3://${SupportBucket}/scripts/$SCRIPT_VERSION/00-bootstrap-helper.sh /tmp/bootstrap-helper.sh --region $REGION
+                  chmod +x /tmp/bootstrap-helper.sh
+                  source /tmp/bootstrap-helper.sh ${ProjectName} ${EnvironmentName}
+                  
+                  # Track overall success
+                  CRITICAL_FAILURE=0
+                  
+                  # Stage 1: Install Packages (CRITICAL)
                   echo "=== Installing Packages ==="
-                  aws s3 cp s3://${SupportBucket}/scripts/01-install-packages.sh /tmp/install-packages.sh --region $REGION
+                  aws s3 cp s3://${SupportBucket}/scripts/$SCRIPT_VERSION/01-install-packages.sh /tmp/install-packages.sh --region $REGION
                   chmod +x /tmp/install-packages.sh
-                  /tmp/install-packages.sh
+                  if run_stage "packages" /tmp/install-packages.sh; then
+                    echo "✓ Packages installed"
+                  else
+                    echo "✗ Package installation failed - CRITICAL"
+                    CRITICAL_FAILURE=1
+                  fi
                   
+                  # Stage 2: Setup CloudWatch (NON-CRITICAL)
                   echo "=== Setting up CloudWatch ==="
-                  aws s3 cp s3://${SupportBucket}/scripts/03-setup-cloudwatch.sh /tmp/setup-cloudwatch.sh --region $REGION
+                  aws s3 cp s3://${SupportBucket}/scripts/$SCRIPT_VERSION/03-setup-cloudwatch.sh /tmp/setup-cloudwatch.sh --region $REGION
                   chmod +x /tmp/setup-cloudwatch.sh
-                  /tmp/setup-cloudwatch.sh ${SupportBucket}
+                  if run_stage "cloudwatch" /tmp/setup-cloudwatch.sh ${SupportBucket}; then
+                    echo "✓ CloudWatch configured"
+                  else
+                    echo "⚠ CloudWatch setup failed - continuing anyway"
+                  fi
                   
+                  # Stage 3: Setup Metrics (NON-CRITICAL)
                   echo "=== Setting up Metrics ==="
-                  aws s3 cp s3://${SupportBucket}/scripts/05-setup-metrics.sh /tmp/setup-metrics.sh --region $REGION
+                  aws s3 cp s3://${SupportBucket}/scripts/$SCRIPT_VERSION/05-setup-metrics.sh /tmp/setup-metrics.sh --region $REGION
                   chmod +x /tmp/setup-metrics.sh
-                  /tmp/setup-metrics.sh ${SupportBucket}
+                  if run_stage "metrics" /tmp/setup-metrics.sh ${SupportBucket}; then
+                    echo "✓ Metrics configured"
+                  else
+                    echo "⚠ Metrics setup failed - continuing anyway"
+                  fi
                   
+                  # Stage 4: Setup Log Server (NON-CRITICAL)
                   echo "=== Setting up Log Server ==="
-                  aws s3 cp s3://${SupportBucket}/scripts/07-setup-log-server.sh /tmp/setup-log-server.sh --region $REGION
+                  aws s3 cp s3://${SupportBucket}/scripts/$SCRIPT_VERSION/07-setup-log-server.sh /tmp/setup-log-server.sh --region $REGION
                   chmod +x /tmp/setup-log-server.sh
-                  /tmp/setup-log-server.sh ${SupportBucket}
+                  if run_stage "logs" /tmp/setup-log-server.sh ${SupportBucket}; then
+                    echo "✓ Log server configured"
+                  else
+                    echo "⚠ Log server setup failed - continuing anyway"
+                  fi
                   
+                  # Stage 5: Setup Minecraft Service (CRITICAL)
                   echo "=== Setting up Minecraft Service ==="
-                  aws s3 cp s3://${SupportBucket}/scripts/09-setup-minecraft-service.sh /tmp/setup-minecraft-service.sh --region $REGION
+                  aws s3 cp s3://${SupportBucket}/scripts/$SCRIPT_VERSION/09-setup-minecraft-service.sh /tmp/setup-minecraft-service.sh --region $REGION
                   chmod +x /tmp/setup-minecraft-service.sh
-                  /tmp/setup-minecraft-service.sh "{{ runCommand }}"
+                  if run_stage "minecraft" /tmp/setup-minecraft-service.sh "{{ runCommand }}"; then
+                    echo "✓ Minecraft service configured"
+                  else
+                    echo "✗ Minecraft setup failed - CRITICAL"
+                    CRITICAL_FAILURE=1
+                  fi
                   
+                  # Stage 6: Update Final Status
                   echo "=== Updating Bootstrap Status ==="
-                  aws s3 cp s3://${SupportBucket}/scripts/10-update-bootstrap-status.sh /tmp/update-bootstrap-status.sh --region $REGION
+                  aws s3 cp s3://${SupportBucket}/scripts/$SCRIPT_VERSION/10-update-bootstrap-status.sh /tmp/update-bootstrap-status.sh --region $REGION
                   chmod +x /tmp/update-bootstrap-status.sh
-                  /tmp/update-bootstrap-status.sh ${ProjectName} ${EnvironmentName}
+                  
+                  if [ $CRITICAL_FAILURE -eq 0 ]; then
+                    /tmp/update-bootstrap-status.sh ${ProjectName} ${EnvironmentName}
+                    update_bootstrap_stage "complete" "completed"
+                    echo "=== Bootstrap completed successfully with script version: $SCRIPT_VERSION ==="
+                    exit 0
+                  else
+                    update_bootstrap_stage "complete" "failed" "Critical stage failed"
+                    echo "=== Bootstrap completed with CRITICAL FAILURES ==="
+                    exit 1
+                  fi
 
   NotificationSenderEmailParameter:
     Type: AWS::SSM::Parameter

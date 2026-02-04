@@ -3,6 +3,7 @@ import logging
 import os
 import json
 import time
+import ddbHelper
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -13,6 +14,7 @@ envName = os.getenv('ENVIRONMENT_NAME')
 
 ssm = boto3.client('ssm')
 ec2_client = boto3.client('ec2')
+audit_table = ddbHelper.LogAuditTable()
 
 def check_instance_ready(instance_id):
     """
@@ -200,6 +202,17 @@ def handler(event, context):
             
             if result['success']:
                 logger.info(f"Successfully processed SSM command for {instance_id}: CommandId={result['commandId']}")
+                
+                # Log to audit table
+                action = metadata.get('purpose', 'ssm_command')
+                action_user = metadata.get('requestedBy', 'system')
+                audit_table.log_action(
+                    instance_id=instance_id,
+                    action=action,
+                    action_user=action_user,
+                    command_id=result['commandId'],
+                    metadata={'documentName': document_name, **metadata}
+                )
             else:
                 logger.error(f"Failed to process SSM command for {instance_id}: {result['message']}")
                 # Raise exception to trigger SQS retry or DLQ

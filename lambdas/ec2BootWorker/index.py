@@ -108,9 +108,14 @@ def queue_bootstrap_server(instance_id):
     """
     logger.info(f"------- queue_bootstrap_server {instance_id}")
     
-    try:        
+    try:
+        # Get server config to retrieve runCommand
+        config = core_dyn.get_server_config(instance_id)
+        run_command = config.get('runCommand', 'java -Xmx1024M -Xms1024M -jar server.jar nogui')
+        script_version = config.get('scriptVersion', 'latest')
+        
         # Queue the bootstrap command for asynchronous execution
-        result = ssm_helper.queue_bootstrap_command(instance_id)
+        result = ssm_helper.queue_bootstrap_command(instance_id, run_command, script_version)
         
         if result['success']:
             logger.info(f"Bootstrap command queued for {instance_id}: MessageId={result['messageId']}")
@@ -142,6 +147,7 @@ def validate_and_configure_server(instance_id, server_info, core_dyn, ec2_utils)
                 'runCommand': 'java -Xmx1024M -Xms1024M -jar server.jar nogui',
                 'workDir': '/opt/minecraft',
                 'timezone': 'UTC',
+                'scriptVersion': 'latest',
                 'isBootstrapComplete': False,
                 'autoConfigured': True
             }
@@ -158,8 +164,8 @@ def validate_and_configure_server(instance_id, server_info, core_dyn, ec2_utils)
             if config.get('alarmThreshold', 0) <= 0:
                 warnings.append("Invalid alarm threshold")
             # Check if server needs bootstrapping
-            if config.get('isBootstrapComplete'):
-                logger.warning(f"Server {instance_id} is not bootstrapped, queueing bootstrap command")
+            if not config.get('isBootstrapComplete'):
+                logger.info(f"Server {instance_id} is not bootstrapped, queueing bootstrap command")
                 queue_bootstrap_server(instance_id)
         
         # Check IAM instance profile

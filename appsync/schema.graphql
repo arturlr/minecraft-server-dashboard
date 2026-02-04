@@ -104,7 +104,11 @@ type ServerConfig @aws_iam
 	runCommand: String
 	workDir: String
 	timezone: String
+	scriptVersion: String
 	isBootstrapComplete: Boolean
+	bootstrapStage: String
+	bootstrapStatus: String
+	bootstrapError: String
 	hasCognitoGroup: Boolean
 	minecraftVersion: String
 	latestPatchUpdate: String
@@ -124,7 +128,11 @@ input ServerConfigInput {
 	runCommand: String
 	workDir: String
 	timezone: String
+	scriptVersion: String
 	isBootstrapComplete: Boolean
+	bootstrapStage: String
+	bootstrapStatus: String
+	bootstrapError: String
 	hasCognitoGroup: Boolean
 	minecraftVersion: String
 	latestPatchUpdate: String

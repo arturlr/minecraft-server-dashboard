@@ -80,12 +80,14 @@ class SSMHelper:
                 'message': str(e)
             }
 
-    def queue_bootstrap_command(self, instance_id):
+    def queue_bootstrap_command(self, instance_id, run_command, script_version='latest'):
         """
         Queue bootstrap SSM command for an instance.
         
         Args:
             instance_id (str): EC2 instance ID
+            run_command (str): Minecraft server run command
+            script_version (str): Version of bootstrap scripts to use (default: latest)
             
         Returns:
             dict: Result from queue_ssm_command
@@ -101,12 +103,16 @@ class SSMHelper:
         return self.queue_ssm_command(
             instance_id=instance_id,
             document_name=self.bootstrap_doc_name,
-            parameters={},  # No parameters needed
-            comment=f'Bootstrap server {instance_id}',
+            parameters={
+                'runCommand': [run_command],
+                'scriptVersion': [script_version]
+            },
+            comment=f'Bootstrap server {instance_id} with scripts {script_version}',
             timeout_seconds=3600,
             metadata={
                 'purpose': 'bootstrap',
-                'requestedBy': 'system'
+                'requestedBy': 'system',
+                'scriptVersion': script_version
             }
         )
 
