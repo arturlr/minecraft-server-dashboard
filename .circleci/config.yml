@@ -113,11 +113,17 @@ jobs:
             # Check if stack exists and is in failed state
             STACK_STATUS=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query 'Stacks[0].StackStatus' --output text 2>/dev/null || echo "DOES_NOT_EXIST")
             
-            if [[ "$STACK_STATUS" == *"FAILED"* ]] || [[ "$STACK_STATUS" == "ROLLBACK_COMPLETE" ]]; then
-              echo "Stack is in failed state: $STACK_STATUS. Deleting..."
-              aws cloudformation delete-stack --stack-name $STACK_NAME
-              aws cloudformation wait stack-delete-complete --stack-name $STACK_NAME
-              echo "Stack deleted successfully"
+            if [[ "$STACK_STATUS" == "UPDATE_ROLLBACK_FAILED" ]]; then
+              echo "Stack is in UPDATE_ROLLBACK_FAILED state. Attempting to continue rollback..."
+              aws cloudformation continue-update-rollback --stack-name $STACK_NAME
+              aws cloudformation wait stack-rollback-complete --stack-name $STACK_NAME
+              echo "Rollback completed successfully"
+            elif [[ "$STACK_STATUS" == "ROLLBACK_COMPLETE" ]]; then
+              echo "ERROR: Stack is in ROLLBACK_COMPLETE state."
+              echo "Manual intervention required. Either:"
+              echo "  1. Delete the stack manually if safe to do so"
+              echo "  2. Fix the issue and redeploy"
+              exit 1
             fi
             
             # Deploy with monitoring
@@ -179,12 +185,13 @@ jobs:
       - run:
           name: Upload Rust binaries and scripts to SupportBucket
           command: |
-            # Set bucket name based on stage
-            if [ "<< parameters.stage >>" = "dev" ]; then
-              SUPPORT_BUCKET="${ARTIFACTS_BUCKET_DEV}"
-            elif [ "<< parameters.stage >>" = "prod" ]; then
-              SUPPORT_BUCKET="${ARTIFACTS_BUCKET_PROD}"
-            fi
+            # Get bucket name from CloudFormation stack outputs
+            SUPPORT_BUCKET=$(aws cloudformation describe-stacks \
+              --stack-name msd-<< parameters.stage >> \
+              --query 'Stacks[0].Outputs[?OutputKey==`SupportBucket`].OutputValue' \
+              --output text)
+            
+            echo "Using support bucket: $SUPPORT_BUCKET"
             
             # Get script version
             SCRIPT_VERSION=$(cat scripts/VERSION)
@@ -205,12 +212,11 @@ jobs:
       - run:
           name: Upload CloudWatch agent config
           command: |
-            # Set bucket name based on stage
-            if [ "<< parameters.stage >>" = "dev" ]; then
-              SUPPORT_BUCKET="${ARTIFACTS_BUCKET_DEV}"
-            elif [ "<< parameters.stage >>" = "prod" ]; then
-              SUPPORT_BUCKET="${ARTIFACTS_BUCKET_PROD}"
-            fi
+            # Get bucket name from CloudFormation stack outputs
+            SUPPORT_BUCKET=$(aws cloudformation describe-stacks \
+              --stack-name msd-<< parameters.stage >> \
+              --query 'Stacks[0].Outputs[?OutputKey==`SupportBucket`].OutputValue' \
+              --output text)
             
             if [ -f "amazon-cloudwatch-agent.json" ]; then
               echo "Uploading CloudWatch agent config to s3://$SUPPORT_BUCKET/"
