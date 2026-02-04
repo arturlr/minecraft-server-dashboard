@@ -85,26 +85,40 @@ jobs:
             cargo build --release --target x86_64-unknown-linux-musl
             cp target/x86_64-unknown-linux-musl/release/msd-logs ../../
 
-            SUPPORT_BUCKET=$(aws cloudformation describe-stacks \
-              --stack-name msd-<< parameters.stage >> \
-              --query 'Stacks[0].Outputs[?OutputKey==`SupportBucket`].OutputValue' \
-              --output text)
-
-            if [ -n "$SUPPORT_BUCKET" ]; then
+            if [ -n "$ARTIFACTS_BUCKET" ]; then
               echo "Downloading existing binaries from S3"
-              aws s3 cp s3://$SUPPORT_BUCKET/msd-metrics ./msd-metrics 2>/dev/null || echo "msd-metrics not found in S3"
-              aws s3 cp s3://$SUPPORT_BUCKET/msd-logs ./msd-logs 2>/dev/null || echo "msd-logs not found in S3"
+              aws s3 cp s3://$ARTIFACTS_BUCKET/msd-metrics ./msd-metrics 2>/dev/null || echo "msd-metrics not found in S3"
+              aws s3 cp s3://$ARTIFACTS_BUCKET/msd-logs ./msd-logs 2>/dev/null || echo "msd-logs not found in S3"
 
               echo "Current directory: $(pwd)"
               echo "Checking for scripts directory..."
               if [ -d "$CIRCLE_WORKING_DIRECTORY/scripts" ]; then
-                echo "Uploading bootstrap scripts to s3://$SUPPORT_BUCKET/scripts/"
-                aws s3 sync "$CIRCLE_WORKING_DIRECTORY/scripts/" "s3://$SUPPORT_BUCKET/scripts/" --delete
+                echo "Uploading bootstrap scripts to s3://$ARTIFACTS_BUCKET/scripts/"
+                aws s3 sync "$CIRCLE_WORKING_DIRECTORY/scripts/" "s3://$ARTIFACTS_BUCKET/scripts/" --delete
               elif [ -d "scripts" ]; then
-                echo "Uploading bootstrap scripts to s3://$SUPPORT_BUCKET/scripts/"
-                aws s3 sync scripts/ "s3://$SUPPORT_BUCKET/scripts/" --delete
+                echo "Uploading bootstrap scripts to s3://$ARTIFACTS_BUCKET/scripts/"
+                aws s3 sync scripts/ "s3://$ARTIFACTS_BUCKET/scripts/" --delete
               else
                 echo "Scripts directory not found, skipping upload"
+              fi
+            fi
+      - run:
+          name: Ensure artifacts bucket exists
+          command: |
+            if [ -n "$ARTIFACTS_BUCKET" ]; then
+              if ! aws s3 ls "s3://$ARTIFACTS_BUCKET" 2>/dev/null; then
+                echo "Creating artifacts bucket: $ARTIFACTS_BUCKET"
+                aws s3 mb "s3://$ARTIFACTS_BUCKET" --region us-west-2
+                aws s3api put-public-access-block \
+                  --bucket "$ARTIFACTS_BUCKET" \
+                  --public-access-block-configuration \
+                  "BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true"
+                aws s3api put-bucket-encryption \
+                  --bucket "$ARTIFACTS_BUCKET" \
+                  --server-side-encryption-configuration \
+                  '{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"AES256"}}]}'
+              else
+                echo "Artifacts bucket already exists: $ARTIFACTS_BUCKET"
               fi
             fi
       - run:
@@ -162,7 +176,7 @@ jobs:
               --config-env << parameters.stage >> \
               --resolve-s3 \
               --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND \
-              --parameter-overrides "ProjectName=msd EnvironmentName=<< parameters.stage >> AppValue=minecraft" \
+              --parameter-overrides "ProjectName=msd EnvironmentName=<< parameters.stage >> AppValue=minecraft SupportBucketName=$ARTIFACTS_BUCKET" \
               --no-confirm-changeset \
               --no-fail-on-empty-changeset \
               --disable-rollback &
@@ -192,14 +206,9 @@ jobs:
       - run:
           name: Upload CloudWatch agent config
           command: |
-            SUPPORT_BUCKET=$(aws cloudformation describe-stacks \
-              --stack-name msd-<< parameters.stage >> \
-              --query 'Stacks[0].Outputs[?OutputKey==`SupportBucket`].OutputValue' \
-              --output text)
-            
             if [ -f "amazon-cloudwatch-agent.json" ]; then
-              echo "Uploading CloudWatch agent config to s3://$SUPPORT_BUCKET/"
-              aws s3 cp amazon-cloudwatch-agent.json "s3://$SUPPORT_BUCKET/amazon-cloudwatch-agent.json"
+              echo "Uploading CloudWatch agent config to s3://$ARTIFACTS_BUCKET/"
+              aws s3 cp amazon-cloudwatch-agent.json "s3://$ARTIFACTS_BUCKET/amazon-cloudwatch-agent.json"
             fi
 
       - save_cache:
