@@ -111,7 +111,7 @@ Resources:
   IAMEC2InstanceProfile:
     Type: AWS::IAM::InstanceProfile
     Properties:
-      InstanceProfileName: !Sub AWSEC2MinecraftProfile-${AWS::Region}
+      InstanceProfileName: !Sub AWSEC2MinecraftProfile-${EnvironmentName}-${AWS::Region}
       Roles:
         - !Ref Ec2MinecraftDashboardInstanceRole
 
