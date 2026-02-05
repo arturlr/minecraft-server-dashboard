@@ -17,126 +17,7 @@ Parameters:
     Description: Version of bootstrap scripts to use (e.g., v1.0.0 or latest)
 
 Resources:
-
-  BootstrapSSMDoc:
-    Type: AWS::SSM::Document
-    UpdateReplacePolicy: Delete
-    Properties:
-      DocumentType: Command
-      TargetType: /AWS::EC2::Instance
-      Content:
-        schemaVersion: '2.2'
-        description: Bootstrap instance
-        parameters:
-          runCommand:
-            type: String
-            description: Minecraft server run command
-          scriptVersion:
-            type: String
-            description: Version of bootstrap scripts
-            default: latest
-        mainSteps:              
-          - action: aws:runShellScript
-            name: BootstrapInstance
-            inputs:
-              runCommand:
-                - !Sub |
-                  #!/bin/bash
-                  set +e
-                  
-                  SCRIPT_VERSION="{{ scriptVersion }}"
-                  
-                  echo "[$(date)] Starting package installation"
-
-                  # Update package list
-                  apt-get update
-
-                  # Install required packages
-                  apt-get install -y jq zip unzip net-tools wget screen openjdk-21-jre-headless
-
-                  # Install AWS CLI
-                  if ! command -v aws >/dev/null 2>&1; then
-                      mkdir -p /usr/share/collectd
-                      touch /usr/share/collectd/types.db
-                      curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-                      unzip awscliv2.zip
-                      ./aws/install
-                      rm -rf aws awscliv2.zip
-                  fi
-
-                  echo "[$(date)] All packages installed successfully"
-                  
-                  # Get region and instance ID
-                  REGION=$(curl -s http://169.254.169.254/latest/meta-data/placement/region)
-                  INSTANCE_ID=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)
-                  
-                  echo "=== Bootstrap Script Version: $SCRIPT_VERSION ==="
-                  echo "=== Instance: $INSTANCE_ID ==="
-                  
-                  # Download and source helper functions
-                  aws s3 cp s3://${SupportBucket}/scripts/$SCRIPT_VERSION/00-bootstrap-helper.sh /tmp/bootstrap-helper.sh --region $REGION
-                  chmod +x /tmp/bootstrap-helper.sh
-                  source /tmp/bootstrap-helper.sh ${ProjectName} ${EnvironmentName}
-                  
-                  # Track overall success
-                  CRITICAL_FAILURE=0
-                  
-                  # Stage 2: Setup CloudWatch (NON-CRITICAL)
-                  # echo "=== Setting up CloudWatch ==="
-                  # aws s3 cp s3://${SupportBucket}/scripts/$SCRIPT_VERSION/03-setup-cloudwatch.sh /tmp/setup-cloudwatch.sh --region $REGION
-                  # chmod +x /tmp/setup-cloudwatch.sh
-                  # if run_stage "cloudwatch" /tmp/setup-cloudwatch.sh ${SupportBucket}; then
-                  #   echo "✓ CloudWatch configured"
-                  # else
-                  #   echo "⚠ CloudWatch setup failed - continuing anyway"
-                  # fi
-                  
-                  # Stage 3: Setup Metrics (NON-CRITICAL)
-                  echo "=== Setting up Metrics ==="
-                  aws s3 cp s3://${SupportBucket}/scripts/$SCRIPT_VERSION/05-setup-metrics.sh /tmp/setup-metrics.sh --region $REGION
-                  chmod +x /tmp/setup-metrics.sh
-                  if run_stage "metrics" /tmp/setup-metrics.sh ${SupportBucket}; then
-                    echo "✓ Metrics configured"
-                  else
-                    echo "⚠ Metrics setup failed - continuing anyway"
-                  fi
-                  
-                  # Stage 4: Setup Log Server (NON-CRITICAL)
-                  echo "=== Setting up Log Server ==="
-                  aws s3 cp s3://${SupportBucket}/scripts/$SCRIPT_VERSION/07-setup-log-server.sh /tmp/setup-log-server.sh --region $REGION
-                  chmod +x /tmp/setup-log-server.sh
-                  if run_stage "logs" /tmp/setup-log-server.sh ${SupportBucket}; then
-                    echo "✓ Log server configured"
-                  else
-                    echo "⚠ Log server setup failed - continuing anyway"
-                  fi
-                  
-                  # Stage 5: Setup Minecraft Service (CRITICAL)
-                  echo "=== Setting up Minecraft Service ==="
-                  aws s3 cp s3://${SupportBucket}/scripts/$SCRIPT_VERSION/09-setup-minecraft-service.sh /tmp/setup-minecraft-service.sh --region $REGION
-                  chmod +x /tmp/setup-minecraft-service.sh
-                  if run_stage "minecraft" /tmp/setup-minecraft-service.sh "{{ runCommand }}"; then
-                    echo "✓ Minecraft service configured"
-                  else
-                    echo "✗ Minecraft setup failed - CRITICAL"
-                    CRITICAL_FAILURE=1
-                  fi
-                  
-                  # Stage 6: Update Final Status
-                  echo "=== Updating Bootstrap Status ==="
-                  aws s3 cp s3://${SupportBucket}/scripts/$SCRIPT_VERSION/10-update-bootstrap-status.sh /tmp/update-bootstrap-status.sh --region $REGION
-                  chmod +x /tmp/update-bootstrap-status.sh
-                  
-                  if [ $CRITICAL_FAILURE -eq 0 ]; then
-                    /tmp/update-bootstrap-status.sh ${ProjectName} ${EnvironmentName}
-                    update_bootstrap_stage "complete" "completed"
-                    echo "=== Bootstrap completed successfully with script version: $SCRIPT_VERSION ==="
-                    exit 0
-                  else
-                    update_bootstrap_stage "complete" "failed" "Critical stage failed"
-                    echo "=== Bootstrap completed with CRITICAL FAILURES ==="
-                    exit 1
-                  fi
+  # No custom SSM Document - Lambda will use AWS-RunShellScript with inline commands
 
   NotificationSenderEmailParameter:
     Type: AWS::SSM::Parameter
@@ -147,8 +28,8 @@ Resources:
       Description: Email address used to send server notifications
 
 Outputs:
-  BootstrapSSMDoc:
-    Description: Bootstrap SSM Document Name
-    Value: !Ref BootstrapSSMDoc
+  BootstrapDocumentName:
+    Description: SSM Document name for bootstrap (managed AWS document)
+    Value: AWS-RunShellScript
     Export:
-      Name: !Sub "${ProjectName}-${EnvironmentName}-BootstrapSSMDoc"
+      Name: !Sub "${ProjectName}-${EnvironmentName}-BootstrapDocName"
