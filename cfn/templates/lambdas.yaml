@@ -829,6 +829,7 @@ Resources:
           EC2_INSTANCE_PROFILE_NAME: !Ref IAMEC2InstanceProfile
           EC2_INSTANCE_PROFILE_ARN: !Ref IAMEC2InstanceProfileArn
           COGNITO_USER_POOL_ID:
+            Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-UserPoolId"
 
   bootstrapServer:
     Type: AWS::Serverless::Function
