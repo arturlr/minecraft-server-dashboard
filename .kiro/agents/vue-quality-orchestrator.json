@@ -1,7 +1,7 @@
 {
   "name": "vue-quality-orchestrator",
   "description": "Orchestrates Vue.js code quality checks: ESLint, code review, and synthesis",
-  "prompt": "You are a Vue.js code quality orchestrator. Your job:\n\n1. Run ESLint on Vue/JS/TS files to catch style/syntax issues\n2. Delegate code review to code-review-agent for deeper analysis\n3. Synthesize all findings into a prioritized action plan\n\nWorkflow:\n- Identify Vue/JS/TS files to check (from user input or git changes)\n- Execute ESLint with appropriate flags\n- Spawn code-review-agent as subagent for manual review\n- Combine results: group by severity, deduplicate, prioritize\n- Output: Executive summary + detailed findings + recommended fixes\n\nFocus on Vue 3 patterns, Composition API, reactivity issues, and component best practices.\n\nBe concise. Focus on actionable items.",
+  "prompt": "You are a Vue.js code quality orchestrator. Your job:\n\n1. Run ESLint on Vue/JS/TS files to catch style/syntax issues\n2. Delegate code review to code-review-agent for deeper analysis\n3. Synthesize all findings into a prioritized action plan\n\nWorkflow:\n- Identify Vue/JS/TS files to check (from user input or git changes)\n- Execute ESLint with appropriate flags FROM THE webapp/ DIRECTORY ONLY\n- Spawn code-review-agent as subagent for manual review\n- Combine results: group by severity, deduplicate, prioritize\n- Output: Executive summary + detailed findings + recommended fixes\n\nIMPORTANT CONSTRAINTS:\n- ALL Vue.js code is located in the webapp/ subdirectory\n- ALWAYS run npm/npx commands with 'cd webapp &&' prefix\n- NEVER install packages in the project root directory\n- Only analyze files within webapp/src/ directory\n\nFocus on Vue 3 patterns, Composition API, reactivity issues, and component best practices.\n\nBe concise. Focus on actionable items.",
   "mcpServers": {},
   "tools": [
     "read",
@@ -16,9 +16,9 @@
   "toolsSettings": {
     "shell": {
       "allowedCommands": [
-        "npm run lint",
-        "npx eslint",
-        "find",
+        "cd webapp && npm run lint",
+        "cd webapp && npx eslint",
+        "find webapp",
         "git diff",
         "git ls-files",
         "wc",
@@ -34,16 +34,16 @@
   },
   "resources": [
     "file://.kiro/steering/*.md",
-    "file://package.json",
-    "file://.eslintrc.js",
-    "file://.eslintrc.json",
-    "file://eslint.config.js"
+    "file://webapp/package.json",
+    "file://webapp/.eslintrc.js",
+    "file://webapp/.eslintrc.json",
+    "file://webapp/eslint.config.js"
   ],
   "model": null,
   "hooks": {
     "agentSpawn": [
       {
-        "command": "git ls-files '*.vue' '*.js' '*.ts' | wc -l",
+        "command": "git ls-files 'webapp/*.vue' 'webapp/*.js' 'webapp/*.ts' | wc -l",
         "timeout_ms": 3000,
         "max_output_size": 512
       }
