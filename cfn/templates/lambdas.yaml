@@ -37,12 +37,12 @@ Parameters:
     Type: String
     Description: IAM EC2 Instance Profile Name
   IAMEC2InstanceProfileArn:
+    Type: String
+    Description: IAM EC2 Instance Profile ARN
   SupportBucket:
     Type: String
     Description: S3 Support Bucket Name
-    Type: String
-    Description: IAM EC2 Instance Profile ARN
-
+Resources:
 Resources:
 
   ec2ActionValidatorQueue:
