@@ -43,7 +43,6 @@ Parameters:
     Type: String
     Description: S3 Support Bucket Name
 Resources:
-Resources:
 
   ec2ActionValidatorQueue:
     Type: AWS::SQS::Queue

@@ -9,15 +9,6 @@ manifest_hash = ""
 packagetype = "Zip"
 functions = ["LambdasStack/ec2StateHandler"]
 
-[function_build_definitions.3fec1a12-2958-453a-a7e0-590e5519e4fb]
-codeuri = "/Users/artrodri/dev/minecraft-server-dashboard/lambdas/ec2CostCalculator"
-runtime = "python3.13"
-architecture = "x86_64"
-handler = "index.handler"
-manifest_hash = ""
-packagetype = "Zip"
-functions = ["LambdasStack/ec2CostCalculator"]
-
 [function_build_definitions.a2c448d2-8c1c-4f9b-a919-886b0d51b288]
 codeuri = "/Users/artrodri/dev/minecraft-server-dashboard/lambdas/ec2MetricsHandler"
 runtime = "python3.13"
@@ -63,23 +54,32 @@ manifest_hash = ""
 packagetype = "Zip"
 functions = ["LambdasStack/iamProfileManager"]
 
-[function_build_definitions.53859bf1-6d5e-48dd-8000-3b17d18ba4da]
-codeuri = "/Users/artrodri/dev/minecraft-server-dashboard/lambdas/calculateMonthlyRuntime"
+[function_build_definitions.276fcc0f-e777-4860-b87b-80bed4ae9876]
+codeuri = "/Users/artrodri/dev/minecraft-server-dashboard/lambdas/getServerLogs"
+runtime = "python3.13"
+architecture = "x86_64"
+handler = "index.handler"
+manifest_hash = ""
+packagetype = "Zip"
+functions = ["LambdasStack/getServerLogs"]
+
+[function_build_definitions.5da4c258-7767-401f-9927-2d343f5d4b5f]
+codeuri = "/Users/artrodri/dev/minecraft-server-dashboard/lambdas/bootstrapServer"
+runtime = "python3.13"
+architecture = "x86_64"
+handler = "index.handler"
+manifest_hash = ""
+packagetype = "Zip"
+functions = ["LambdasStack/bootstrapServer"]
+
+[function_build_definitions.4af1864b-9d2c-4846-9585-cf1a6b4f3125]
+codeuri = "/Users/artrodri/dev/minecraft-server-dashboard/lambdas/calculateEc2MonthlyRuntime"
 runtime = "python3.13"
 architecture = "x86_64"
 handler = "index.handler"
 manifest_hash = ""
 packagetype = "Zip"
 functions = ["LambdasStack/CalculateMonthlyRuntime"]
-
-[function_build_definitions.ca3808b4-83cd-427c-8327-84ce7081ee20]
-codeuri = "/Users/artrodri/dev/minecraft-server-dashboard/lambdas/ssmCommandWorker"
-runtime = "python3.13"
-architecture = "x86_64"
-handler = "index.handler"
-manifest_hash = ""
-packagetype = "Zip"
-functions = ["LambdasStack/ssmCommandWorker"]
 
 [layer_build_definitions.09c3e8b9-b60e-40aa-9b33-f2298785cfa5]
 layer_name = "LambdasStack/AuthLayer"
@@ -96,7 +96,7 @@ codeuri = "/Users/artrodri/dev/minecraft-server-dashboard/layers/ddbHelper"
 build_method = "makefile"
 compatible_runtimes = ["python3.13"]
 architecture = "x86_64"
-source_hash = "ab0829020dbb01beed30b663247d16b55dce9e8c9233116b2c94f20cc5f700f3"
+source_hash = "13d2e18c723b57a021726c902ecad37c25b231f5a137f0ae99df5b7edbe8bce3"
 manifest_hash = ""
 layer = "LambdasStack/DdbLayer"
 
@@ -124,6 +124,16 @@ codeuri = "/Users/artrodri/dev/minecraft-server-dashboard/layers/ssmHelper"
 build_method = "makefile"
 compatible_runtimes = ["python3.13"]
 architecture = "x86_64"
-source_hash = "3f8fb9810d2d1fabfe5a8a9b513cb4b01d48f8308d3b4917bc99aea4f895e119"
+source_hash = "477d831003eb6b77f4d288d942cbd2d10f5e4d73c71c15bea9d28f68c8b39b1d"
 manifest_hash = ""
 layer = "LambdasStack/SsmLayer"
+
+[layer_build_definitions.3efce45e-93f3-4c13-8664-38a8bec9b4a8]
+layer_name = "LambdasStack/ErrorLayer"
+codeuri = "/Users/artrodri/dev/minecraft-server-dashboard/layers/errorHelper"
+build_method = "makefile"
+compatible_runtimes = ["python3.13"]
+architecture = "x86_64"
+source_hash = "e9607bc9e0ac177b3cedd3de7919446d7f268119c354e386c1acb1a673c5111f"
+manifest_hash = ""
+layer = "LambdasStack/ErrorLayer"
