@@ -53,9 +53,12 @@ Resources:
                 Action:
                   - "dynamodb:UpdateItem"
                   - "dynamodb:PutItem"
-                  - "dynamodb:GetItem"
                 Resource:
                   Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTable"
+                Condition:
+                  ForAllValues:StringLike:
+                    "dynamodb:LeadingKeys":
+                      - "SERVER#${ec2:SourceInstanceARN}"
         - PolicyName: ec2TagsAccess
           PolicyDocument:
             Version: "2012-10-17"

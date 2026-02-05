@@ -43,12 +43,33 @@ Resources:
               runCommand:
                 - !Sub |
                   #!/bin/bash
-                  # Don't exit on error - we want to report partial failures
                   set +e
                   
-                  REGION=$(ec2metadata --availability-zone | sed 's/[a-z]$//')
                   SCRIPT_VERSION="{{ scriptVersion }}"
-                  INSTANCE_ID=$(ec2-metadata --instance-id | cut -d " " -f 2)
+                  
+                  echo "[$(date)] Starting package installation"
+
+                  # Update package list
+                  apt-get update
+
+                  # Install required packages
+                  apt-get install -y jq zip unzip net-tools wget screen openjdk-21-jre-headless
+
+                  # Install AWS CLI
+                  if ! command -v aws >/dev/null 2>&1; then
+                      mkdir -p /usr/share/collectd
+                      touch /usr/share/collectd/types.db
+                      curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+                      unzip awscliv2.zip
+                      ./aws/install
+                      rm -rf aws awscliv2.zip
+                  fi
+
+                  echo "[$(date)] All packages installed successfully"
+                  
+                  # Get region and instance ID
+                  REGION=$(curl -s http://169.254.169.254/latest/meta-data/placement/region)
+                  INSTANCE_ID=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)
                   
                   echo "=== Bootstrap Script Version: $SCRIPT_VERSION ==="
                   echo "=== Instance: $INSTANCE_ID ==="
@@ -61,26 +82,15 @@ Resources:
                   # Track overall success
                   CRITICAL_FAILURE=0
                   
-                  # Stage 1: Install Packages (CRITICAL)
-                  echo "=== Installing Packages ==="
-                  aws s3 cp s3://${SupportBucket}/scripts/$SCRIPT_VERSION/01-install-packages.sh /tmp/install-packages.sh --region $REGION
-                  chmod +x /tmp/install-packages.sh
-                  if run_stage "packages" /tmp/install-packages.sh; then
-                    echo "✓ Packages installed"
-                  else
-                    echo "✗ Package installation failed - CRITICAL"
-                    CRITICAL_FAILURE=1
-                  fi
-                  
                   # Stage 2: Setup CloudWatch (NON-CRITICAL)
-                  echo "=== Setting up CloudWatch ==="
-                  aws s3 cp s3://${SupportBucket}/scripts/$SCRIPT_VERSION/03-setup-cloudwatch.sh /tmp/setup-cloudwatch.sh --region $REGION
-                  chmod +x /tmp/setup-cloudwatch.sh
-                  if run_stage "cloudwatch" /tmp/setup-cloudwatch.sh ${SupportBucket}; then
-                    echo "✓ CloudWatch configured"
-                  else
-                    echo "⚠ CloudWatch setup failed - continuing anyway"
-                  fi
+                  # echo "=== Setting up CloudWatch ==="
+                  # aws s3 cp s3://${SupportBucket}/scripts/$SCRIPT_VERSION/03-setup-cloudwatch.sh /tmp/setup-cloudwatch.sh --region $REGION
+                  # chmod +x /tmp/setup-cloudwatch.sh
+                  # if run_stage "cloudwatch" /tmp/setup-cloudwatch.sh ${SupportBucket}; then
+                  #   echo "✓ CloudWatch configured"
+                  # else
+                  #   echo "⚠ CloudWatch setup failed - continuing anyway"
+                  # fi
                   
                   # Stage 3: Setup Metrics (NON-CRITICAL)
                   echo "=== Setting up Metrics ==="
