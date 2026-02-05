@@ -53,7 +53,7 @@ jobs:
       stage:
         type: string
     environment:
-      AWS_DEFAULT_REGION: us-west-2
+      AWS_DEFAULT_REGION: ${AWS_REGION:-us-west-2}
     steps:
       - checkout
       - restore_cache:
@@ -236,7 +236,7 @@ jobs:
       stage:
         type: string
     environment:
-      AWS_DEFAULT_REGION: us-west-2
+      AWS_DEFAULT_REGION: ${AWS_REGION:-us-west-2}
     steps:
       - checkout
       - restore_cache:
@@ -249,8 +249,8 @@ jobs:
           command: |
             set -e
             # Run create-env-from-cfn-stack.sh to generate .env file
-            chmod +x create-env-from-cfn-stack.sh
-            ./create-env-from-cfn-stack.sh msd-<< parameters.stage >> us-west-2
+            chmod +x support_tasks/create-env-from-cfn-stack.sh
+            ./support_tasks/create-env-from-cfn-stack.sh msd-<< parameters.stage >> ${AWS_DEFAULT_REGION}
       - run:
           name: Build frontend
           command: |

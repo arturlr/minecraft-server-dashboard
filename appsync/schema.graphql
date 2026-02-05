@@ -254,6 +254,8 @@ type Mutation {
 		@aws_cognito_user_pools
 	stopServer(instanceId: String!): AWSJSON
 		@aws_cognito_user_pools
+	bootstrapServer(instanceId: String!): AWSJSON
+		@aws_cognito_user_pools
 	iamProfileManager(instanceId: String!): AWSJSON
 		@aws_cognito_user_pools  
 	verifyUserEmail(id: String!): AWSJSON

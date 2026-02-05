@@ -37,6 +37,9 @@ Parameters:
     Type: String
     Description: IAM EC2 Instance Profile Name
   IAMEC2InstanceProfileArn:
+  SupportBucket:
+    Type: String
+    Description: S3 Support Bucket Name
     Type: String
     Description: IAM EC2 Instance Profile ARN
 
@@ -57,22 +60,6 @@ Resources:
     Properties:
       QueueName: !Sub "${ProjectName}-${EnvironmentName}-ec2-actions-dlq"
       MessageRetentionPeriod: 1209600
-
-  SSMCommandQueue:
-    Type: AWS::SQS::Queue
-    Properties:
-      QueueName: !Sub "${ProjectName}-${EnvironmentName}-ec2-ssm-commands"
-      VisibilityTimeout: 900  # 15 minutes
-      MessageRetentionPeriod: 86400  # 24 hours
-      RedrivePolicy:
-        deadLetterTargetArn: !GetAtt SSMCommandDLQ.Arn
-        maxReceiveCount: 3
-
-  SSMCommandDLQ:
-    Type: AWS::SQS::Queue
-    Properties:
-      QueueName: !Sub "${ProjectName}-${EnvironmentName}-ec2-ssm-commands-dlq"
-      MessageRetentionPeriod: 1209600  # 14 days
 
   GraphQLAPI:
     Type: AWS::Serverless::GraphQLApi
@@ -107,6 +94,8 @@ Resources:
             FunctionArn: !GetAtt ec2ActionValidator.Arn
           iamProfileManagerDataSource:
             FunctionArn: !GetAtt iamProfileManager.Arn
+          bootstrapServerDataSource:
+            FunctionArn: !GetAtt bootstrapServer.Arn
           ec2MetricsHandlerDataSource:
             FunctionArn: !GetAtt ec2MetricsHandler.Arn
           getServerLogsDataSource:
@@ -129,6 +118,12 @@ Resources:
             Name: APPSYNC_JS
             Version: "1.0.0"
           DataSource: iamProfileManagerDataSource
+          CodeUri: ../../appsync/resolvers/lambdaInvoker.js
+        bootstrapServerFunction:
+          Runtime:
+            Name: APPSYNC_JS
+            Version: "1.0.0"
+          DataSource: bootstrapServerDataSource
           CodeUri: ../../appsync/resolvers/lambdaInvoker.js
         ec2MetricsHandlerFunction:
           Runtime:
@@ -192,6 +187,12 @@ Resources:
               Version: "1.0.0"
             Pipeline:
               - ec2ActionValidatorFunction
+          bootstrapServer:
+            Runtime:
+              Name: APPSYNC_JS
+              Version: "1.0.0"
+            Pipeline:
+              - bootstrapServerFunction
           restartServer:
             Runtime:
               Name: APPSYNC_JS
@@ -520,12 +521,6 @@ Resources:
                 - events:DisableRule
                 - events:EnableRule
               Resource: "*"
-        - Version: "2012-10-17" # Policy Document for SQS
-          Statement:
-            - Effect: Allow
-              Action:
-                - sqs:SendMessage
-              Resource: !GetAtt SSMCommandQueue.Arn
         - Version: '2012-10-17' # Policy Document for UserMembership DynamoDB
           Statement:
             - Effect: Allow
@@ -542,7 +537,6 @@ Resources:
           COGNITO_USER_POOL_ID: 
             Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-UserPoolId"
           BOOTSTRAP_SSM_DOC_NAME: !Ref BootstrapSSMDoc
-          SSM_COMMAND_QUEUE_URL: !Ref SSMCommandQueue
           CORE_TABLE_NAME:
             Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTableName"
 
@@ -718,74 +712,6 @@ Resources:
           LOG_AUDIT_TABLE_NAME:
             Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-LogAuditTableName"
 
-  ec2BootWorker:
-    Type: AWS::Serverless::Function
-    Properties:
-      Timeout: 60
-      FunctionName: !Sub "${ProjectName}-${EnvironmentName}-ec2BootWorker"
-      CodeUri: ../../lambdas/ec2BootWorker/
-      Layers:
-        - !Ref Ec2Layer
-        - !Ref DdbLayer
-        - !Ref SsmLayer
-      Events:
-        EC2StateChange:
-          Type: EventBridgeRule
-          Properties:
-            Pattern:
-              source: ["aws.ec2"]
-              detail-type: ["EC2 Instance State-change Notification"]
-              detail:
-                state: ["running"]
-      Policies:
-        - CostExplorerReadOnlyPolicy: {}
-        - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
-        - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess
-        - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
-        - arn:aws:iam::aws:policy/AmazonCognitoReadOnly
-        - SSMParameterReadPolicy:
-            ParameterName: !Sub "${ProjectName}*"
-        - Version: '2012-10-17' # Policy Document
-          Statement:
-            - Effect: Allow
-              Action:
-                - appsync:ListGraphqlApis
-                - appsync:GetGraphqlApi
-                - appsync:GraphQL
-              Resource: '*'
-        - Version: '2012-10-17' # Policy Document
-          Statement:
-            - Effect: Allow
-              Action:
-                - events:ListRules
-                - events:DescribeRule
-                - events:DisableRule
-                - events:EnableRule
-              Resource: "*"
-        - Version: "2012-10-17" # Policy Document for SQS
-          Statement:
-            - Effect: Allow
-              Action:
-                - sqs:SendMessage
-              Resource: !GetAtt SSMCommandQueue.Arn
-        - Version: '2012-10-17' # Policy Document for UserMembership DynamoDB
-          Statement:
-            - Effect: Allow
-              Action:
-                - dynamodb:GetItem
-                - dynamodb:PutItem
-                - dynamodb:UpdateItem
-                - dynamodb:Query
-              Resource:
-                Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTable"
-      Environment:
-        Variables:
-          APPSYNC_URL: !GetAtt GraphQLAPI.GraphQLUrl
-          COGNITO_USER_POOL_ID: 
-            Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-UserPoolId"
-          BOOTSTRAP_SSM_DOC_NAME: !Ref BootstrapSSMDoc
-          SSM_COMMAND_QUEUE_URL: !Ref SSMCommandQueue   
-
   ec2ActionValidator:
     Type: AWS::Serverless::Function
     Properties:
@@ -903,6 +829,34 @@ Resources:
         Variables:
           EC2_INSTANCE_PROFILE_NAME: !Ref IAMEC2InstanceProfile
           EC2_INSTANCE_PROFILE_ARN: !Ref IAMEC2InstanceProfileArn
+          COGNITO_USER_POOL_ID:
+
+  bootstrapServer:
+    Type: AWS::Serverless::Function
+    Properties:
+      Timeout: 120
+      FunctionName: !Sub "${ProjectName}-${EnvironmentName}-bootstrapServer"
+      CodeUri: ../../lambdas/bootstrapServer/
+      Layers:
+        - !Ref UtilLayer
+        - !Ref DdbLayer
+        - !Ref SsmLayer
+      Policies:
+        - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
+        - arn:aws:iam::aws:policy/AmazonSSMFullAccess
+        - Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:UpdateItem
+              Resource:
+                Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTable"
+      Environment:
+        Variables:
+          SUPPORT_BUCKET: !Ref SupportBucket
+          APP_NAME: !Ref ProjectName
+          ENVIRONMENT_NAME: !Ref EnvironmentName
           COGNITO_USER_POOL_ID:  
             Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-UserPoolId"
 
@@ -931,45 +885,6 @@ Resources:
                 - dynamodb:Scan
               Resource:
                 Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTable"
-
-  ssmCommandWorker:
-    Type: AWS::Serverless::Function
-    Properties:
-      Timeout: 900  # 15 minutes for retries
-      FunctionName: !Sub "${ProjectName}-${EnvironmentName}-ssmCommandWorker"
-      CodeUri: ../../lambdas/ssmCommandWorker/
-      Layers:
-        - !Ref DdbLayer
-      Events:
-        SQSEvent:
-          Type: SQS
-          Properties:
-            Queue: !GetAtt SSMCommandQueue.Arn
-            BatchSize: 1
-      Policies:
-        - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
-        - arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess
-        - Version: "2012-10-17"
-          Statement:
-            - Effect: Allow
-              Action:
-                - ssm:SendCommand
-                - ssm:GetCommandInvocation
-                - ssm:ListCommandInvocations
-              Resource:
-                - !Sub 'arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:instance/*'
-                - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:document/*'
-        - Version: "2012-10-17"
-          Statement:
-            - Effect: Allow
-              Action:
-                - dynamodb:PutItem
-              Resource:
-                Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-LogAuditTable"
-      Environment:
-        Variables:
-          LOG_AUDIT_TABLE_NAME:
-            Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-LogAuditTableName"
 
 
 Outputs:
@@ -1015,12 +930,8 @@ Outputs:
     Export:
       Name: !Sub "${ProjectName}-${EnvironmentName}-CalculateMonthlyRuntime"
 
-  ssmCommandWorker:
-    Value: !GetAtt ssmCommandWorker.Arn
-    Export:
-      Name: !Sub "${ProjectName}-${EnvironmentName}-ssmCommandWorker"
 
-  SSMCommandQueueUrl:
-    Value: !Ref SSMCommandQueue
+  bootstrapServer:
+    Value: !GetAtt bootstrapServer.Arn
     Export:
-      Name: !Sub "${ProjectName}-${EnvironmentName}-SSMCommandQueueUrl"
+      Name: !Sub "${ProjectName}-${EnvironmentName}-bootstrapServer"
