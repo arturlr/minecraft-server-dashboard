@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Description: ECR repositories for Minecraft Dashboard Docker images
+Description: ECR configuration and secrets for Minecraft Dashboard
 
 Parameters:
   ProjectName:
@@ -8,96 +8,6 @@ Parameters:
     Type: String
 
 Resources:
-
-  MsdMetricsRepository:
-    Type: AWS::ECR::Repository
-    Properties:
-      RepositoryName: msd-metrics
-      ImageScanningConfiguration:
-        ScanOnPush: true
-      EncryptionConfiguration:
-        EncryptionType: AES256
-      LifecyclePolicy:
-        LifecyclePolicyText: |
-          {
-            "rules": [
-              {
-                "rulePriority": 1,
-                "description": "Keep last 10 tagged images",
-                "selection": {
-                  "tagStatus": "tagged",
-                  "tagPrefixList": ["v", "latest"],
-                  "countType": "imageCountMoreThan",
-                  "countNumber": 10
-                },
-                "action": {
-                  "type": "expire"
-                }
-              },
-              {
-                "rulePriority": 2,
-                "description": "Keep last 3 untagged images",
-                "selection": {
-                  "tagStatus": "untagged",
-                  "countType": "imageCountMoreThan",
-                  "countNumber": 3
-                },
-                "action": {
-                  "type": "expire"
-                }
-              }
-            ]
-          }
-      Tags:
-        - Key: Project
-          Value: !Ref ProjectName
-        - Key: Environment
-          Value: !Ref EnvironmentName
-
-  MsdLogsRepository:
-    Type: AWS::ECR::Repository
-    Properties:
-      RepositoryName: msd-logs
-      ImageScanningConfiguration:
-        ScanOnPush: true
-      EncryptionConfiguration:
-        EncryptionType: AES256
-      LifecyclePolicy:
-        LifecyclePolicyText: |
-          {
-            "rules": [
-              {
-                "rulePriority": 1,
-                "description": "Keep last 10 tagged images",
-                "selection": {
-                  "tagStatus": "tagged",
-                  "tagPrefixList": ["v", "latest"],
-                  "countType": "imageCountMoreThan",
-                  "countNumber": 10
-                },
-                "action": {
-                  "type": "expire"
-                }
-              },
-              {
-                "rulePriority": 2,
-                "description": "Keep last 3 untagged images",
-                "selection": {
-                  "tagStatus": "untagged",
-                  "countType": "imageCountMoreThan",
-                  "countNumber": 3
-                },
-                "action": {
-                  "type": "expire"
-                }
-              }
-            ]
-          }
-      Tags:
-        - Key: Project
-          Value: !Ref ProjectName
-        - Key: Environment
-          Value: !Ref EnvironmentName
 
   # SSM Parameters for Docker secrets
   JwtSecretParameter:
@@ -160,15 +70,11 @@ Resources:
 Outputs:
   MsdMetricsRepositoryUri:
     Description: URI of msd-metrics ECR repository
-    Value: !GetAtt MsdMetricsRepository.RepositoryUri
-    Export:
-      Name: !Sub "${ProjectName}-${EnvironmentName}-MsdMetricsRepositoryUri"
+    Value: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/msd-metrics"
 
   MsdLogsRepositoryUri:
     Description: URI of msd-logs ECR repository
-    Value: !GetAtt MsdLogsRepository.RepositoryUri
-    Export:
-      Name: !Sub "${ProjectName}-${EnvironmentName}-MsdLogsRepositoryUri"
+    Value: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/msd-logs"
 
   JwtSecretParameterArn:
     Description: ARN of JWT secret SSM parameter
