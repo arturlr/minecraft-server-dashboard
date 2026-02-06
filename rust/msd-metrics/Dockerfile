@@ -1,6 +1,6 @@
 # Multi-stage build for msd-metrics
 # Stage 1: Builder
-FROM rust:1.70-alpine AS builder
+FROM rust:1.85-alpine AS builder
 
 # Install build dependencies
 RUN apk add --no-cache \
