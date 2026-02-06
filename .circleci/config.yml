@@ -94,18 +94,17 @@ jobs:
           docker_layer_caching: true
       - aws-cli/setup
       - run:
-          name: Get ECR repository URI
+          name: Get ECR registry
           command: |
-            ECR_REPO=$(aws cloudformation describe-stacks \
-              --stack-name msd-<< parameters.stage >> \
-              --query 'Stacks[0].Outputs[?OutputKey==`MsdMetricsRepositoryUri`].OutputValue' \
-              --output text)
-            echo "export ECR_REPO=$ECR_REPO" >> $BASH_ENV
+            AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+            ECR_REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com"
+            echo "export ECR_REGISTRY=$ECR_REGISTRY" >> $BASH_ENV
+            echo "export ECR_REPO=${ECR_REGISTRY}/msd-metrics" >> $BASH_ENV
       - run:
           name: Login to ECR
           command: |
             aws ecr get-login-password --region $AWS_DEFAULT_REGION | \
-              docker login --username AWS --password-stdin ${ECR_REPO%%/*}
+              docker login --username AWS --password-stdin $ECR_REGISTRY
       - run:
           name: Build and push msd-metrics
           command: |
@@ -130,18 +129,17 @@ jobs:
           docker_layer_caching: true
       - aws-cli/setup
       - run:
-          name: Get ECR repository URI
+          name: Get ECR registry
           command: |
-            ECR_REPO=$(aws cloudformation describe-stacks \
-              --stack-name msd-<< parameters.stage >> \
-              --query 'Stacks[0].Outputs[?OutputKey==`MsdLogsRepositoryUri`].OutputValue' \
-              --output text)
-            echo "export ECR_REPO=$ECR_REPO" >> $BASH_ENV
+            AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+            ECR_REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com"
+            echo "export ECR_REGISTRY=$ECR_REGISTRY" >> $BASH_ENV
+            echo "export ECR_REPO=${ECR_REGISTRY}/msd-logs" >> $BASH_ENV
       - run:
           name: Login to ECR
           command: |
             aws ecr get-login-password --region $AWS_DEFAULT_REGION | \
-              docker login --username AWS --password-stdin ${ECR_REPO%%/*}
+              docker login --username AWS --password-stdin $ECR_REGISTRY
       - run:
           name: Build and push msd-logs
           command: |
