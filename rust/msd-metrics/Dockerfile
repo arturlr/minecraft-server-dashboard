@@ -1,11 +1,9 @@
 # Multi-stage build for msd-metrics
 # Stage 1: Builder
-FROM rust:1.85-alpine AS builder
+FROM rust:latest AS builder
 
 # Install build dependencies
-RUN apk add --no-cache \
-    musl-dev \
-    pkgconfig
+RUN apt-get update && apt-get install -y musl-tools pkg-config && rm -rf /var/lib/apt/lists/*
 
 # Add musl target
 RUN rustup target add x86_64-unknown-linux-musl
