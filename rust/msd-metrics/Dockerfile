@@ -15,9 +15,10 @@ WORKDIR /build
 
 # Copy manifests and fetch dependencies (better layer caching)
 COPY Cargo.toml Cargo.lock* ./
+RUN mkdir -p src && echo "fn main() {}" > src/main.rs
 RUN cargo fetch --target x86_64-unknown-linux-musl
 
-# Copy source code
+# Copy source code (replaces dummy main.rs)
 COPY src ./src
 
 # Build static binary with musl target
