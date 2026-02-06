@@ -8,6 +8,10 @@
         hide-details
         style="width: 240px"
       />
+      <v-btn color="#171717" class="ml-4" @click="createDialog = true">
+        <span class="material-symbols-outlined mr-1" style="font-size: 18px;">add</span>
+        New Server
+      </v-btn>
     </template>
 
     <StatsCards 
@@ -44,6 +48,8 @@
     <v-snackbar v-model="snackbar.show" :color="snackbar.color" :timeout="3000" location="bottom">
       {{ snackbar.text }}
     </v-snackbar>
+
+    <CreateServerDialog v-model="createDialog" @created="handleCreateServer" />
   </AppLayout>
 </template>
 
@@ -54,10 +60,12 @@ import AppLayout from '../components/layout/AppLayout.vue'
 import StatsCards from '../components/dashboard/StatsCards.vue'
 import ServerCard from '../components/dashboard/ServerCard.vue'
 import ServerSettingsDialog from '../components/dashboard/ServerSettingsDialog.vue'
+import CreateServerDialog from '../components/dashboard/CreateServerDialog.vue'
 
 const serverStore = useServerStore()
 const search = ref('')
 const settingsDialog = ref(false)
+const createDialog = ref(false)
 const selectedServerId = ref(null)
 const serverConfigs = ref({})
 
@@ -114,6 +122,17 @@ const handleStop = async (server) => {
     showNotification(`Stopping ${server.name}...`)
   } catch (e) {
     showNotification('Failed to stop server', 'error')
+  }
+}
+
+const handleCreateServer = async (config) => {
+  try {
+    await serverStore.createServer(config)
+    showNotification(`Creating ${config.serverName}...`)
+    setTimeout(() => serverStore.ec2Discovery(), 5000)
+  } catch (e) {
+    console.error('Create server error:', e)
+    showNotification('Failed to create server', 'error')
   }
 }
 

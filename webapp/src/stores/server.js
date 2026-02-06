@@ -291,6 +291,18 @@ export const useServerStore = defineStore("server", {
       }
     },
 
+    async createServer(config) {
+      try {
+        await client.graphql({
+          query: mutations.createServer,
+          variables: { input: config }
+        });
+      } catch (error) {
+        this.error = parseGraphQLError(error);
+        throw error;
+      }
+    },
+
     async putServerConfig(config) {
       try {
         const result = await client.graphql({

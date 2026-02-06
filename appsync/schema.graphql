@@ -38,6 +38,10 @@ input UpdateUserRoleInput {
 input CreateServerInput {
 	serverName: String!
 	instanceType: String!
+	minecraftVersion: String
+	minecraftType: String
+	minecraftMemory: String
+	shutdownMethod: String
 	alarmThreshold: Float
 	alarmEvaluationPeriod: Int
 	startScheduleExpression: String

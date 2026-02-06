@@ -120,6 +120,20 @@ def validate_create_server_input(input_data):
         if not utl.is_valid_cron(start_schedule) or not utl.is_valid_cron(stop_schedule):
             return False, "Invalid cron expression format"
     
+    # Minecraft config validation
+    mc_version = input_data.get('minecraftVersion', 'LATEST')
+    if not re.match(r'^[a-zA-Z0-9._-]+$', mc_version):
+        return False, "Invalid Minecraft version format"
+    
+    mc_type = input_data.get('minecraftType', 'VANILLA')
+    allowed_mc_types = ['VANILLA', 'PAPER', 'FORGE', 'FABRIC', 'SPIGOT']
+    if mc_type not in allowed_mc_types:
+        return False, f"Minecraft type must be one of {allowed_mc_types}"
+    
+    mc_memory = input_data.get('minecraftMemory', '2G')
+    if not re.match(r'^[1-9][0-9]*[GM]$', mc_memory):
+        return False, "Invalid memory format (e.g., 2G, 4G)"
+    
     return True, None
 
 def validate_queue_message(action, instance_id, arguments=None, user_email=None):
@@ -400,6 +414,11 @@ def handle_create_server(input_data, user_attributes):
         
         if 'stopScheduleExpression' in input_data:
             message_data['stopScheduleExpression'] = input_data['stopScheduleExpression']
+        
+        # Minecraft Docker config
+        for field in ['minecraftVersion', 'minecraftType', 'minecraftMemory']:
+            if field in input_data:
+                message_data[field] = input_data[field]
         
         logger.info(f"Queuing server creation: user={user_attributes.get('email', 'unknown')}, server={input_data['serverName']}")
         

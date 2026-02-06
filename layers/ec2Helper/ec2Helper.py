@@ -2,6 +2,8 @@ import boto3
 import logging
 import os
 import json
+import base64
+import shlex
 from datetime import datetime, timezone
 from botocore.exceptions import ClientError
 
@@ -47,15 +49,17 @@ class Ec2Utils:
 
     def create_ec2_instance(self, instance_name, instance_type='t3.micro', 
                        subnet_id=None,
-                       security_group_id=None):
+                       security_group_id=None,
+                       minecraft_config=None):
         """
-        Create a new EC2 instance with specified configuration
+        Create a new EC2 instance with Docker user data
         
         Args:
             instance_name (str): Name tag for the instance
             instance_type (str): EC2 instance type (default: t3.micro)
             subnet_id (str): Subnet ID (None for default)
             security_group_id (list): Security group IDs (None for default)
+            minecraft_config (dict): Minecraft settings (version, type, memory)
             
         Returns:
             str: Instance ID if successful, None if failed
@@ -108,12 +112,30 @@ class Ec2Utils:
             
             logger.info("Configured two EBS volumes: 16GB root (/dev/sda1), 50GB data (/dev/sdf)")
             
+            # Generate user data script
+            mc = minecraft_config or {}
+            support_bucket = os.environ.get('SUPPORT_BUCKET', '')
+            ecr_registry = f"{os.environ.get('AWS_ACCOUNT_ID', '')}.dkr.ecr.{os.environ.get('AWS_REGION', 'us-west-2')}.amazonaws.com"
+            region = os.environ.get('AWS_REGION', 'us-west-2')
+            
+            user_data_script = f"""#!/bin/bash
+export SUPPORT_BUCKET={shlex.quote(support_bucket)}
+export ECR_REGISTRY={shlex.quote(ecr_registry)}
+export AWS_REGION={shlex.quote(region)}
+export MINECRAFT_VERSION={shlex.quote(mc.get('minecraftVersion', 'LATEST'))}
+export MINECRAFT_TYPE={shlex.quote(mc.get('minecraftType', 'VANILLA'))}
+export MINECRAFT_MEMORY={shlex.quote(mc.get('minecraftMemory', '2G'))}
+curl -s "https://{support_bucket}.s3.{region}.amazonaws.com/ec2-docker-userdata.sh" | bash
+"""
+            user_data_b64 = base64.b64encode(user_data_script.encode()).decode()
+
             # Prepare run_instances parameters
             run_params = {
                 'ImageId': ami_id,
                 'InstanceType': instance_type,
                 'MinCount': 1,
                 'MaxCount': 1,
+                'UserData': user_data_b64,
                 'IamInstanceProfile': {'Arn': self.ec2InstanceProfileArn},
                 'BlockDeviceMappings': block_device_mappings,
                 'TagSpecifications': [

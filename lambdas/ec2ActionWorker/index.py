@@ -599,11 +599,17 @@ def process_create_server(message):
         
         # Create EC2 instance using ec2Helper
         logger.info(f"Creating EC2 instance: name={server_name}, type={instance_type}")
+        minecraft_config = {
+            'minecraftVersion': message.get('minecraftVersion', 'LATEST'),
+            'minecraftType': message.get('minecraftType', 'VANILLA'),
+            'minecraftMemory': message.get('minecraftMemory', '2G'),
+        }
         instance_id = ec2_utils.create_ec2_instance(
             instance_name=server_name,
             instance_type=instance_type,
-            subnet_id=None,  # Use default
-            security_group_id=None  # Use default
+            subnet_id=None,
+            security_group_id=None,
+            minecraft_config=minecraft_config
         )
         
         if not instance_id:
