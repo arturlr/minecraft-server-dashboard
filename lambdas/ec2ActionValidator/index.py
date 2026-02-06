@@ -374,11 +374,11 @@ def handle_create_server(input_data, user_attributes):
     try:
         logger.info(f"Server creation request: user={user_attributes.get('email', 'unknown')}, data={input_data}")
         
-        # Check if user is admin
-        cognito_groups = user_attributes.get('cognito:groups', [])
-        admin_group_name = os.getenv('ADMIN_GROUP_NAME', 'admin')
+        # Check if user is admin (stored in DynamoDB)
+        user_id = user_attributes.get('sub', '')
+        is_admin = core_dyn.check_global_admin(user_id)
         
-        if admin_group_name not in cognito_groups:
+        if not is_admin:
             logger.warning(f"Non-admin user attempted server creation: user={user_attributes.get('email', 'unknown')}, groups={cognito_groups}")
             return utl.response(403, {"err": "Only admin users can create servers"})
         
