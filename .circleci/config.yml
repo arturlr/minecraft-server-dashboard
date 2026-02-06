@@ -178,15 +178,6 @@ jobs:
       - aws-cli/setup
       - aws-sam/install
       - run:
-          name: Setup Rust
-          command: |
-            echo "Rust files changed, setting up Rust toolchain"
-            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-            source $HOME/.cargo/env
-            rustup target add x86_64-unknown-linux-musl
-            sudo apt-get update
-            sudo apt-get install -y musl-tools
-      - run:
           name: Setup Python for SAM build
           command: |
             # Find the actual Python binary and create a symlink
@@ -282,45 +273,33 @@ jobs:
               --stack-name msd-<< parameters.stage >> \
               --query 'Stacks[0].Outputs' \
               --output table
-      - run:
-          name: Build Rust binaries
-          command: |
-            echo "Building Rust binaries"
-            source $HOME/.cargo/env
-            cd rust/msd-metrics
-            cargo build --release --target x86_64-unknown-linux-musl
-            cp target/x86_64-unknown-linux-musl/release/msd-metrics ../../
+      # - run:
+      #     name: Upload Rust binaries and scripts to SupportBucket
+      #     command: |
+      #       # Get bucket name from CloudFormation stack outputs
+      #       SUPPORT_BUCKET=$(aws cloudformation describe-stacks \
+      #         --stack-name msd-<< parameters.stage >> \
+      #         --query 'Stacks[0].Outputs[?OutputKey==`SupportBucket`].OutputValue' \
+      #         --output text)
             
-            cd ../msd-logs
-            cargo build --release --target x86_64-unknown-linux-musl
-            cp target/x86_64-unknown-linux-musl/release/msd-logs ../../
-      - run:
-          name: Upload Rust binaries and scripts to SupportBucket
-          command: |
-            # Get bucket name from CloudFormation stack outputs
-            SUPPORT_BUCKET=$(aws cloudformation describe-stacks \
-              --stack-name msd-<< parameters.stage >> \
-              --query 'Stacks[0].Outputs[?OutputKey==`SupportBucket`].OutputValue' \
-              --output text)
+      #       echo "Using support bucket: $SUPPORT_BUCKET"
             
-            echo "Using support bucket: $SUPPORT_BUCKET"
+      #       # Get script version
+      #       SCRIPT_VERSION=$(cat scripts/VERSION)
+      #       echo "Script version: $SCRIPT_VERSION"
             
-            # Get script version
-            SCRIPT_VERSION=$(cat scripts/VERSION)
-            echo "Script version: $SCRIPT_VERSION"
+      #       echo "Uploading Rust binaries to s3://$SUPPORT_BUCKET/"
+      #       aws s3 cp msd-metrics "s3://$SUPPORT_BUCKET/msd-metrics"
+      #       aws s3 cp msd-logs "s3://$SUPPORT_BUCKET/msd-logs"
             
-            echo "Uploading Rust binaries to s3://$SUPPORT_BUCKET/"
-            aws s3 cp msd-metrics "s3://$SUPPORT_BUCKET/msd-metrics"
-            aws s3 cp msd-logs "s3://$SUPPORT_BUCKET/msd-logs"
+      #       echo "Uploading bootstrap scripts to s3://$SUPPORT_BUCKET/scripts/v${SCRIPT_VERSION}/"
+      #       if [ -d "scripts" ]; then
+      #         aws s3 sync scripts/ "s3://$SUPPORT_BUCKET/scripts/v${SCRIPT_VERSION}/" --delete
+      #       fi
             
-            echo "Uploading bootstrap scripts to s3://$SUPPORT_BUCKET/scripts/v${SCRIPT_VERSION}/"
-            if [ -d "scripts" ]; then
-              aws s3 sync scripts/ "s3://$SUPPORT_BUCKET/scripts/v${SCRIPT_VERSION}/" --delete
-            fi
-            
-            # Also upload to 'latest' for convenience
-            echo "Uploading to s3://$SUPPORT_BUCKET/scripts/latest/"
-            aws s3 sync scripts/ "s3://$SUPPORT_BUCKET/scripts/latest/" --delete
+      #       # Also upload to 'latest' for convenience
+      #       echo "Uploading to s3://$SUPPORT_BUCKET/scripts/latest/"
+      #       aws s3 sync scripts/ "s3://$SUPPORT_BUCKET/scripts/latest/" --delete
       - run:
           name: Upload CloudWatch agent config
           command: |

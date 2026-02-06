@@ -11,7 +11,7 @@ cp .env.example .env
 
 AWS_REGION=us-west-2
 INSTANCE_ID=local-dev
-ECR_REGISTRY=<your-account>.dkr.ecr.us-west-2.amazonaws.com
+ECR_REGISTRY=514046899996.dkr.ecr.us-west-2.amazonaws.com
 IMAGE_TAG=latest
 MINECRAFT_VERSION=LATEST
 MINECRAFT_MEMORY=2G
