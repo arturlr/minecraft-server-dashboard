@@ -106,6 +106,11 @@ jobs:
             aws ecr get-login-password --region $AWS_DEFAULT_REGION | \
               docker login --username AWS --password-stdin $ECR_REGISTRY
       - run:
+          name: Ensure ECR repo exists
+          command: |
+            aws ecr describe-repositories --repository-names msd-metrics --region $AWS_DEFAULT_REGION 2>/dev/null || \
+              aws ecr create-repository --repository-name msd-metrics --region $AWS_DEFAULT_REGION
+      - run:
           name: Build and push msd-metrics
           command: |
             cd rust/msd-metrics
@@ -140,6 +145,11 @@ jobs:
           command: |
             aws ecr get-login-password --region $AWS_DEFAULT_REGION | \
               docker login --username AWS --password-stdin $ECR_REGISTRY
+      - run:
+          name: Ensure ECR repo exists
+          command: |
+            aws ecr describe-repositories --repository-names msd-logs --region $AWS_DEFAULT_REGION 2>/dev/null || \
+              aws ecr create-repository --repository-name msd-logs --region $AWS_DEFAULT_REGION
       - run:
           name: Build and push msd-logs
           command: |
