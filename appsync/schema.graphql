@@ -104,11 +104,8 @@ type ServerConfig @aws_iam
 	runCommand: String
 	workDir: String
 	timezone: String
-	scriptVersion: String
-	isBootstrapComplete: Boolean
-	bootstrapStage: String
-	bootstrapStatus: String
-	bootstrapError: String
+	dockerImageTag: String
+	dockerComposeVersion: String
 	hasCognitoGroup: Boolean
 	minecraftVersion: String
 	latestPatchUpdate: String
@@ -128,11 +125,8 @@ input ServerConfigInput {
 	runCommand: String
 	workDir: String
 	timezone: String
-	scriptVersion: String
-	isBootstrapComplete: Boolean
-	bootstrapStage: String
-	bootstrapStatus: String
-	bootstrapError: String
+	dockerImageTag: String
+	dockerComposeVersion: String
 	hasCognitoGroup: Boolean
 	minecraftVersion: String
 	latestPatchUpdate: String
@@ -149,6 +143,30 @@ type ServerUsers @aws_iam
 	email: AWSEmail!
 	fullName: String!
 	role: MembershipRole!
+}
+
+enum ContainerState {
+	RUNNING
+	STOPPED
+	ERROR
+	STARTING
+	STOPPING
+	UNHEALTHY
+}
+
+type ContainerStatus @aws_iam
+@aws_cognito_user_pools {
+	service: String!
+	state: ContainerState!
+	health: String
+	uptime: String
+}
+
+input ContainerStatusInput {
+	service: String!
+	state: String!
+	health: String
+	uptime: String
 }
 
 input ServerUsersInput {
@@ -179,6 +197,7 @@ type ServerInfo @aws_iam
 	configWarnings: [String]
 	configErrors: [String]
 	autoConfigured: Boolean
+	containerStatus: [ContainerStatus]
 }
 
 input ServerInfoInput {
@@ -201,6 +220,7 @@ input ServerInfoInput {
 	configWarnings: [String]
 	configErrors: [String]
 	autoConfigured: Boolean
+	containerStatus: [ContainerStatusInput]
 }
 
 type ServerMetric @aws_iam
@@ -253,8 +273,6 @@ type Mutation {
 	restartServer(instanceId: String!): AWSJSON
 		@aws_cognito_user_pools
 	stopServer(instanceId: String!): AWSJSON
-		@aws_cognito_user_pools
-	bootstrapServer(instanceId: String!): AWSJSON
 		@aws_cognito_user_pools
 	iamProfileManager(instanceId: String!): AWSJSON
 		@aws_cognito_user_pools  

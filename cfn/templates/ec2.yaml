@@ -36,15 +36,45 @@ Resources:
               - Effect: Allow
                 Action:
                   - "cloudwatch:PutMetricData"
-                  - "cloudwatch:List*"
-                  - "cloudwatch:Get*"
+                  - "cloudwatch:DescribeAlarms"
+                  - "cloudwatch:GetMetricStatistics"
                 Resource: "*"
               - Effect: Allow
                 Action:
                   - "ssm:DescribeParameters"
                   - "ssm:PutParameter"
                   - "ssm:GetParameter"
-                Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/minecraft*"
+                  - "ssm:GetParameters"
+                Resource:
+                  - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/minecraft-dashboard/jwt-secret"
+                  - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/minecraft-dashboard/rcon-password"
+        - PolicyName: cloudwatchLogs
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "logs:CreateLogGroup"
+                  - "logs:CreateLogStream"
+                  - "logs:PutLogEvents"
+                  - "logs:DescribeLogStreams"
+                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/minecraft-dashboard/*"
+        - PolicyName: ecrAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "ecr:GetAuthorizationToken"
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - "ecr:BatchCheckLayerAvailability"
+                  - "ecr:GetDownloadUrlForLayer"
+                  - "ecr:BatchGetImage"
+                Resource:
+                  - !Sub "arn:aws:ecr:${AWS::Region}:${AWS::AccountId}:repository/msd-metrics"
+                  - !Sub "arn:aws:ecr:${AWS::Region}:${AWS::AccountId}:repository/msd-logs"
         - PolicyName: dynamoDBServersTableAccess
           PolicyDocument:
             Version: "2012-10-17"
@@ -55,10 +85,6 @@ Resources:
                   - "dynamodb:PutItem"
                 Resource:
                   Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTable"
-                Condition:
-                  ForAllValues:StringLike:
-                    "dynamodb:LeadingKeys":
-                      - "SERVER#${ec2:SourceInstanceARN}"
         - PolicyName: ec2TagsAccess
           PolicyDocument:
             Version: "2012-10-17"

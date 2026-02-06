@@ -41,7 +41,9 @@ Resources:
 
   EC2Stack:
     Type: AWS::Serverless::Application
-    DependsOn: DynamoDBStack
+    DependsOn: 
+      - DynamoDBStack
+      - ECRStack
     Properties:
       Location: ./templates/ec2.yaml
       Parameters:
@@ -50,17 +52,13 @@ Resources:
         AppValue: !Ref AppValue
         SupportBucketName: !Ref SupportBucketName
 
-  SSMStack:
+  ECRStack:
     Type: AWS::Serverless::Application
-    DependsOn: DynamoDBStack
     Properties:
-      Location: ./templates/ssm.yaml
+      Location: ./templates/ecr.yaml
       Parameters:
         ProjectName: !Ref ProjectName
         EnvironmentName: !Ref EnvironmentName
-        AppValue: !Ref AppValue
-        SupportBucket: !Ref SupportBucketName
-        ScriptVersion: latest
 
   LambdasStack:
     Type: AWS::Serverless::Application
@@ -73,7 +71,6 @@ Resources:
         ProjectName: !Ref ProjectName
         EnvironmentName: !Ref EnvironmentName
         AppValue: !Ref AppValue
-        BootstrapSSMDoc: !GetAtt SSMStack.Outputs.BootstrapDocumentName
         IAMEC2RoleArn: !GetAtt EC2Stack.Outputs.IAMEC2RoleArn
         IAMEC2InstanceProfile: !GetAtt EC2Stack.Outputs.IAMEC2InstanceProfile
         IAMEC2InstanceProfileArn: !GetAtt EC2Stack.Outputs.IAMEC2InstanceProfileArn

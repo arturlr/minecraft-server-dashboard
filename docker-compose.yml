@@ -1,0 +1,136 @@
+version: '3.9'
+
+services:
+  minecraft:
+    image: itzg/minecraft-server:latest
+    container_name: minecraft
+    environment:
+      EULA: "TRUE"
+      VERSION: "${MINECRAFT_VERSION:-LATEST}"
+      MEMORY: "${MINECRAFT_MEMORY:-2G}"
+      TYPE: "${MINECRAFT_TYPE:-VANILLA}"
+      ENABLE_RCON: "true"
+      RCON_PASSWORD_FILE: /run/secrets/rcon_password
+      LOG_TIMESTAMP: "true"
+      TZ: "${TIMEZONE:-UTC}"
+    ports:
+      - "25565:25565"
+    volumes:
+      - minecraft-data:/data
+      - minecraft-logs:/data/logs
+    secrets:
+      - rcon_password
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mc-health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+    logging:
+      driver: awslogs
+      options:
+        awslogs-region: "${AWS_REGION}"
+        awslogs-group: "/minecraft-dashboard/minecraft"
+        awslogs-stream: "${INSTANCE_ID}"
+        awslogs-create-group: "true"
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 3G
+        reservations:
+          cpus: '1'
+          memory: 2G
+    networks:
+      - minecraft-net
+
+  msd-metrics:
+    image: "${ECR_REGISTRY}/msd-metrics:${IMAGE_TAG:-latest}"
+    container_name: msd-metrics
+    environment:
+      CLOUDWATCH_NAMESPACE: "MinecraftDashboard"
+      INSTANCE_ID: "${INSTANCE_ID}"
+      AWS_REGION: "${AWS_REGION}"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "pgrep", "-x", "msd-metrics"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+    logging:
+      driver: awslogs
+      options:
+        awslogs-region: "${AWS_REGION}"
+        awslogs-group: "/minecraft-dashboard/msd-metrics"
+        awslogs-stream: "${INSTANCE_ID}"
+        awslogs-create-group: "true"
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.1'
+          memory: 64M
+    networks:
+      - minecraft-net
+
+  msd-logs:
+    image: "${ECR_REGISTRY}/msd-logs:${IMAGE_TAG:-latest}"
+    container_name: msd-logs
+    environment:
+      LOG_FILE_PATH: "/logs/latest.log"
+    secrets:
+      - jwt_secret
+    ports:
+      - "25566:25566"
+    volumes:
+      - minecraft-logs:/logs:ro
+    restart: unless-stopped
+    depends_on:
+      minecraft:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:25566/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    logging:
+      driver: awslogs
+      options:
+        awslogs-region: "${AWS_REGION}"
+        awslogs-group: "/minecraft-dashboard/msd-logs"
+        awslogs-stream: "${INSTANCE_ID}"
+        awslogs-create-group: "true"
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.1'
+          memory: 64M
+    networks:
+      - minecraft-net
+
+volumes:
+  minecraft-data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /mnt/minecraft-world
+  minecraft-logs:
+    driver: local
+
+networks:
+  minecraft-net:
+    driver: bridge
+
+secrets:
+  rcon_password:
+    file: ./secrets/rcon_password.txt
+  jwt_secret:
+    file: ./secrets/jwt_secret.txt
+

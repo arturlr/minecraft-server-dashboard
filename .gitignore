@@ -8,6 +8,13 @@ node_modules
 *.env
 .env.*
 
+# Docker secrets
+secrets/
+*.secret
+*_secret.txt
+rcon_password.txt
+jwt_secret.txt
+
 # Log files
 npm-debug.log*
 yarn-debug.log*

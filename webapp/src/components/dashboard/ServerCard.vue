@@ -47,6 +47,13 @@
         <span class="material-symbols-outlined" style="font-size: 14px;">schedule</span>
         <span>{{ shutdownPattern }}</span>
       </div>
+      <div v-if="containerStatus && containerStatus.length > 0" class="container-status">
+        <div v-for="container in containerStatus" :key="container?.service || Math.random()" class="container-item">
+          <span class="container-dot" :class="getContainerClass(container?.state)" />
+          <span class="container-name">{{ container?.service || 'Unknown' }}</span>
+          <span v-if="container?.health && container.health !== 'N/A'" class="container-health">{{ container.health }}</span>
+        </div>
+      </div>
       <div class="metrics-grid">
         <div class="metric">
           <div class="metric-label">CPU</div>
@@ -197,6 +204,27 @@ const shutdownPattern = computed(() => {
   
   return patterns.length > 0 ? `Auto-shutdown: ${patterns.join(' • ')}` : null
 })
+
+const containerStatus = computed(() => {
+  const status = props.server.containerStatus
+  return Array.isArray(status) ? status : []
+})
+
+const getContainerClass = (state) => {
+  if (!state) return 'stopped'
+  const normalized = state.toLowerCase()
+  const stateMap = {
+    'running': 'running',
+    'stopped': 'stopped',
+    'exited': 'stopped',
+    'error': 'error',
+    'failed': 'error',
+    'unhealthy': 'error',
+    'starting': 'warning',
+    'restarting': 'warning'
+  }
+  return stateMap[normalized] || 'stopped'
+}
 </script>
 
 <style scoped>
@@ -293,5 +321,43 @@ const shutdownPattern = computed(() => {
   padding: 8px 12px;
   background: #fafafa;
   border-radius: 6px;
+}
+.container-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding: 8px 12px;
+  background: #fafafa;
+  border-radius: 6px;
+}
+.container-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: #737373;
+}
+.container-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+.container-dot.running {
+  background: #22c55e;
+}
+.container-dot.stopped {
+  background: #a3a3a3;
+}
+.container-dot.error {
+  background: #ef4444;
+}
+.container-name {
+  font-weight: 500;
+  color: #171717;
+}
+.container-health {
+  font-size: 10px;
+  color: #a3a3a3;
 }
 </style>

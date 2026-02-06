@@ -1,0 +1,183 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: ECR repositories for Minecraft Dashboard Docker images
+
+Parameters:
+  ProjectName:
+    Type: String
+  EnvironmentName:
+    Type: String
+
+Resources:
+
+  MsdMetricsRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: msd-metrics
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      EncryptionConfiguration:
+        EncryptionType: AES256
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+          {
+            "rules": [
+              {
+                "rulePriority": 1,
+                "description": "Keep last 10 tagged images",
+                "selection": {
+                  "tagStatus": "tagged",
+                  "tagPrefixList": ["v", "latest"],
+                  "countType": "imageCountMoreThan",
+                  "countNumber": 10
+                },
+                "action": {
+                  "type": "expire"
+                }
+              },
+              {
+                "rulePriority": 2,
+                "description": "Keep last 3 untagged images",
+                "selection": {
+                  "tagStatus": "untagged",
+                  "countType": "imageCountMoreThan",
+                  "countNumber": 3
+                },
+                "action": {
+                  "type": "expire"
+                }
+              }
+            ]
+          }
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+  MsdLogsRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: msd-logs
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      EncryptionConfiguration:
+        EncryptionType: AES256
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+          {
+            "rules": [
+              {
+                "rulePriority": 1,
+                "description": "Keep last 10 tagged images",
+                "selection": {
+                  "tagStatus": "tagged",
+                  "tagPrefixList": ["v", "latest"],
+                  "countType": "imageCountMoreThan",
+                  "countNumber": 10
+                },
+                "action": {
+                  "type": "expire"
+                }
+              },
+              {
+                "rulePriority": 2,
+                "description": "Keep last 3 untagged images",
+                "selection": {
+                  "tagStatus": "untagged",
+                  "countType": "imageCountMoreThan",
+                  "countNumber": 3
+                },
+                "action": {
+                  "type": "expire"
+                }
+              }
+            ]
+          }
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+  # SSM Parameters for Docker secrets
+  JwtSecretParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /minecraft-dashboard/jwt-secret
+      Description: JWT secret for msd-logs authentication
+      Type: String
+      Tier: Advanced
+      Value: !Sub "{{resolve:secretsmanager:${JwtSecret}:SecretString:password}}"
+      Tags:
+        Project: !Ref ProjectName
+        Environment: !Ref EnvironmentName
+
+  RconPasswordParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /minecraft-dashboard/rcon-password
+      Description: RCON password for Minecraft server
+      Type: String
+      Tier: Advanced
+      Value: !Sub "{{resolve:secretsmanager:${RconPassword}:SecretString:password}}"
+      Tags:
+        Project: !Ref ProjectName
+        Environment: !Ref EnvironmentName
+
+  # Secrets Manager secrets (generated randomly)
+  JwtSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub "${ProjectName}-${EnvironmentName}-jwt-secret"
+      Description: JWT secret for msd-logs service
+      GenerateSecretString:
+        SecretStringTemplate: '{}'
+        GenerateStringKey: password
+        PasswordLength: 64
+        ExcludeCharacters: '"@/\$&*()[]{}|;:,<>?`~'
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+  RconPassword:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub "${ProjectName}-${EnvironmentName}-rcon-password"
+      Description: RCON password for Minecraft server
+      GenerateSecretString:
+        SecretStringTemplate: '{}'
+        GenerateStringKey: password
+        PasswordLength: 32
+        ExcludeCharacters: '"@/\$&*()[]{}|;:,<>?`~'
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+Outputs:
+  MsdMetricsRepositoryUri:
+    Description: URI of msd-metrics ECR repository
+    Value: !GetAtt MsdMetricsRepository.RepositoryUri
+    Export:
+      Name: !Sub "${ProjectName}-${EnvironmentName}-MsdMetricsRepositoryUri"
+
+  MsdLogsRepositoryUri:
+    Description: URI of msd-logs ECR repository
+    Value: !GetAtt MsdLogsRepository.RepositoryUri
+    Export:
+      Name: !Sub "${ProjectName}-${EnvironmentName}-MsdLogsRepositoryUri"
+
+  JwtSecretParameterArn:
+    Description: ARN of JWT secret SSM parameter
+    Value: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/minecraft-dashboard/jwt-secret"
+    Export:
+      Name: !Sub "${ProjectName}-${EnvironmentName}-JwtSecretParameterArn"
+
+  RconPasswordParameterArn:
+    Description: ARN of RCON password SSM parameter
+    Value: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/minecraft-dashboard/rcon-password"
+    Export:
+      Name: !Sub "${ProjectName}-${EnvironmentName}-RconPasswordParameterArn"

@@ -659,7 +659,6 @@ def process_create_server(message):
                 'workDir': '/opt/minecraft',  # Default working directory
                 'timezone': message.get('timezone', 'UTC'),
                 'autoConfigured': False,  # User-configured server
-                'isBootstrapComplete': False,  # Will be set to true after bootstrap
                 'minecraftVersion': '',
                 'latestPatchUpdate': ''
             }

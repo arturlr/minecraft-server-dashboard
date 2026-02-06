@@ -669,7 +669,6 @@ def handle_get_server_config_old(instance_id):
         server_config = core_dyn.get_server_config(instance_id)
         if server_config is None:
             logger.warning(f"No config found for instance {instance_id}, returning empty config")
-            # Return empty config structure matching GraphQL schema
             return {
                 'id': instance_id,
                 'shutdownMethod': '',
@@ -680,7 +679,6 @@ def handle_get_server_config_old(instance_id):
                 'runCommand': '',
                 'workDir': '',
                 'timezone': 'UTC',
-                'isBootstrapComplete': False,
                 'hasCognitoGroup': False,
                 'minecraftVersion': '',
                 'latestPatchUpdate': '',
@@ -699,7 +697,6 @@ def handle_get_server_config(instance_id):
         server_config = core_dyn.get_server_config(instance_id)
         if server_config is None:
             logger.warning(f"No config found for instance {instance_id}, returning empty config")
-            # Return empty config structure matching GraphQL schema
             return {
                 'id': instance_id,
                 'shutdownMethod': '',
@@ -710,7 +707,6 @@ def handle_get_server_config(instance_id):
                 'runCommand': '',
                 'workDir': '',
                 'timezone': 'UTC',
-                'isBootstrapComplete': False,
                 'hasCognitoGroup': False,
                 'minecraftVersion': '',
                 'latestPatchUpdate': '',

@@ -1,0 +1,12 @@
+target/
+.git/
+.gitignore
+*.md
+Dockerfile
+.dockerignore
+msd-metrics
+*.orig
+*.rej
+.cargo/
+**/*.rs.bk
+

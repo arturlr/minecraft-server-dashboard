@@ -27,9 +27,6 @@ Parameters:
     Type: String
   AppValue:
     Type: String
-  BootstrapSSMDoc:
-    Type: String
-    Description: Bootstrap SSM Document Name
   IAMEC2RoleArn:
     Type: String
     Description: IAM EC2 Role ARN
@@ -93,8 +90,6 @@ Resources:
             FunctionArn: !GetAtt ec2ActionValidator.Arn
           iamProfileManagerDataSource:
             FunctionArn: !GetAtt iamProfileManager.Arn
-          bootstrapServerDataSource:
-            FunctionArn: !GetAtt bootstrapServer.Arn
           ec2MetricsHandlerDataSource:
             FunctionArn: !GetAtt ec2MetricsHandler.Arn
           getServerLogsDataSource:
@@ -117,12 +112,6 @@ Resources:
             Name: APPSYNC_JS
             Version: "1.0.0"
           DataSource: iamProfileManagerDataSource
-          CodeUri: ../../appsync/resolvers/lambdaInvoker.js
-        bootstrapServerFunction:
-          Runtime:
-            Name: APPSYNC_JS
-            Version: "1.0.0"
-          DataSource: bootstrapServerDataSource
           CodeUri: ../../appsync/resolvers/lambdaInvoker.js
         ec2MetricsHandlerFunction:
           Runtime:
@@ -186,12 +175,6 @@ Resources:
               Version: "1.0.0"
             Pipeline:
               - ec2ActionValidatorFunction
-          bootstrapServer:
-            Runtime:
-              Name: APPSYNC_JS
-              Version: "1.0.0"
-            Pipeline:
-              - bootstrapServerFunction
           restartServer:
             Runtime:
               Name: APPSYNC_JS
@@ -438,17 +421,6 @@ Resources:
     Metadata:
       BuildMethod: makefile
 
-  SsmLayer:
-    Type: AWS::Serverless::LayerVersion
-    Properties:
-      Description: SSM Command Helper
-      ContentUri: ../../layers/ssmHelper/
-      CompatibleRuntimes:
-        - python3.13
-      RetentionPolicy: Delete
-    Metadata:
-      BuildMethod: makefile
-
   ErrorLayer:
     Type: AWS::Serverless::LayerVersion
     Properties:
@@ -535,7 +507,6 @@ Resources:
           APPSYNC_URL: !GetAtt GraphQLAPI.GraphQLUrl
           COGNITO_USER_POOL_ID: 
             Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-UserPoolId"
-          BOOTSTRAP_SSM_DOC_NAME: !Ref BootstrapSSMDoc
           CORE_TABLE_NAME:
             Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTableName"
 
@@ -831,35 +802,6 @@ Resources:
           COGNITO_USER_POOL_ID:
             Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-UserPoolId"
 
-  bootstrapServer:
-    Type: AWS::Serverless::Function
-    Properties:
-      Timeout: 120
-      FunctionName: !Sub "${ProjectName}-${EnvironmentName}-bootstrapServer"
-      CodeUri: ../../lambdas/bootstrapServer/
-      Layers:
-        - !Ref UtilLayer
-        - !Ref DdbLayer
-        - !Ref SsmLayer
-      Policies:
-        - arn:aws:iam::aws:policy/AWSXrayWriteOnlyAccess
-        - arn:aws:iam::aws:policy/AmazonSSMFullAccess
-        - Version: "2012-10-17"
-          Statement:
-            - Effect: Allow
-              Action:
-                - dynamodb:GetItem
-                - dynamodb:UpdateItem
-              Resource:
-                Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-CoreTable"
-      Environment:
-        Variables:
-          SUPPORT_BUCKET: !Ref SupportBucket
-          APP_NAME: !Ref ProjectName
-          ENVIRONMENT_NAME: !Ref EnvironmentName
-          COGNITO_USER_POOL_ID:  
-            Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-UserPoolId"
-
   CalculateMonthlyRuntime:
     Type: AWS::Serverless::Function
     Properties:
@@ -929,9 +871,3 @@ Outputs:
     Value: !GetAtt CalculateMonthlyRuntime.Arn
     Export:
       Name: !Sub "${ProjectName}-${EnvironmentName}-CalculateMonthlyRuntime"
-
-
-  bootstrapServer:
-    Value: !GetAtt bootstrapServer.Arn
-    Export:
-      Name: !Sub "${ProjectName}-${EnvironmentName}-bootstrapServer"

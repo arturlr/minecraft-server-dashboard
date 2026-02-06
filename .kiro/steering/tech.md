@@ -19,22 +19,31 @@
 - **Scheduling**: Amazon EventBridge for scheduled server operations
 - **Content Delivery**: Amazon CloudFront
 - **Log Streaming**: Custom Rust service (msd-logs) on port 25566
-- **Configuration Management**: AWS Systems Manager (SSM) for bootstrap automation
-- **Storage**: Amazon S3 for bootstrap scripts, Rust binaries, and frontend hosting
+- **Configuration Management**: AWS Systems Manager (SSM) Parameter Store for secrets
+- **Container Registry**: Amazon ECR for custom Docker images (msd-metrics, msd-logs)
+- **Container Runtime**: Docker with docker-compose on EC2 instances
+- **Storage**: Amazon S3 for docker-compose files and frontend hosting
 
-## Rust Services
-- **msd-metrics**: Collects and sends server metrics (CPU, memory, network, active users) to CloudWatch
-  - Runs as systemd service with 60-second intervals
-  - Deployed via bootstrap script 05-setup-metrics.sh
-  - Static binary built with musl target (no runtime dependencies)
-- **msd-logs**: HTTP server that streams Minecraft logs via journalctl with JWT authentication
+## Docker Services
+- **minecraft**: itzg/minecraft-server image from Docker Hub
+  - Configurable via environment variables (VERSION, MEMORY, TYPE)
+  - Health checks, resource limits, RCON enabled
+  - World data persisted on EBS volume at /mnt/minecraft-world
+- **msd-metrics**: Custom image (ECR) - Collects and sends server metrics to CloudWatch
+  - Runs as Docker container with 60-second intervals
+  - Static binary built with musl target (multi-stage Dockerfile)
+- **msd-logs**: Custom image (ECR) - HTTP server that streams Minecraft logs with JWT authentication
   - Listens on port 25566
-  - Validates JWT token format (Bearer token)
+  - Reads logs from shared volume (/data/logs)
+  - Validates JWT token (Bearer token)
   - Provides GET /logs?lines=N endpoint (max 1000 lines)
   - Provides GET /health endpoint for monitoring
-  - Runs as systemd service with auto-restart
-  - Deployed via bootstrap script 07-setup-log-server.sh
-  - Reads logs from systemd journal (minecraft.service)
+
+## Container Update Flow
+- CircleCI builds and pushes Docker images to ECR on every commit
+- EC2 instances run a systemd service (docker-update.service) on every boot
+- Service pulls latest images from ECR and starts containers
+- Users stop/start EC2 instance to update containers
 
 ## Development Tools
 - **Package Manager**: npm (frontend), pip (Python dependencies)
@@ -44,8 +53,8 @@
 - **Build Tools**: AWS SAM CLI for infrastructure, Make for Lambda layers
 - **CI/CD**: CircleCI for automated deployments
   - Separate dev and prod pipelines
+  - Parallel Docker image builds (msd-metrics, msd-logs) and ECR push
   - Automated CloudFormation stack deployment
-  - Rust binary compilation and S3 upload
   - Frontend build and CloudFront invalidation
   - Stack rollback handling
 - **Version Control**: Git with semantic versioning for bootstrap scripts
@@ -115,27 +124,14 @@ cd layers/authHelper && make
 # 4. SAM packages this structure as a layer
 ```
 
-### Bootstrap Script Deployment
+### Docker Image Deployment
 ```bash
-# Update version
-echo "1.0.1" > scripts/VERSION
+# Images are built and pushed by CircleCI:
+# msd-metrics → ECR (tagged with SHA + latest)
+# msd-logs → ECR (tagged with SHA + latest)
 
-# Scripts are deployed via CircleCI to S3:
-# s3://{SupportBucket}/scripts/v1.0.1/
-# s3://{SupportBucket}/scripts/latest/
-
-# Manual upload (if needed)
-aws s3 sync scripts/ s3://{SupportBucket}/scripts/latest/ --exclude ".git*"
-```
-
-### EC2 Bootstrap Execution
-```bash
-# Triggered by Lambda (ec2BootWorker or ssmCommandWorker)
-# Executes SSM Run Command on EC2 instance
-# Downloads and runs scripts from S3 in order:
-# 00-bootstrap-helper.sh → 03-setup-cloudwatch.sh → 
-# 05-setup-metrics.sh → 07-setup-log-server.sh → 
-# 09-setup-minecraft-service.sh → 10-update-bootstrap-status.sh
+# EC2 instances pull latest on every boot via systemd:
+# docker-compose pull && docker-compose up -d
 ```
 
 ## Architecture Patterns
@@ -200,24 +196,18 @@ aws s3 sync scripts/ s3://{SupportBucket}/scripts/latest/ --exclude ".git*"
 - **Benefits**: Automatic shutdown when server is idle, prevents premature shutdown during brief disconnections
 - **Cost Savings**: ~$20-50/month in EC2 costs vs ~$0.40/month in CloudWatch costs (50-125x ROI)
 
-### EC2 Bootstrap Architecture
-- **Pattern**: Automated server configuration via SSM Run Command
+### Docker Container Architecture
+- **Pattern**: Containerized services with automatic updates on EC2 boot
 - **Components**:
-  - **S3 Support Bucket**: Stores versioned bootstrap scripts and Rust binaries
-  - **SSM Document** (cfn/templates/ssm.yaml): Defines bootstrap automation workflow
-  - **Lambda Triggers**: `ec2BootWorker` or `ssmCommandWorker` invoke SSM Run Command
-  - **EC2 IAM Profile**: Grants permissions for S3 access, CloudWatch, DynamoDB, SSM
-  - **Bootstrap Scripts**: Execute sequentially to configure server
-- **Script Execution Flow**:
-  1. **00-bootstrap-helper.sh**: Loads common functions and utilities
-  2. **03-setup-cloudwatch.sh**: Installs CloudWatch agent, configures metrics/logs
-  3. **05-setup-metrics.sh**: Downloads and installs msd-metrics binary, creates systemd service
-  4. **07-setup-log-server.sh**: Downloads and installs msd-logs binary, creates systemd service
-  5. **09-setup-minecraft-service.sh**: Configures Minecraft as systemd service with auto-restart
-  6. **10-update-bootstrap-status.sh**: Updates DynamoDB with bootstrap completion status
-- **Versioning**: Scripts use semantic versioning, servers can pin to specific versions
-- **Rollback**: Change `scriptVersion` in DynamoDB config and re-trigger bootstrap
-- **Benefits**: Consistent server configuration, automated updates, version control
+  - **ECR Repositories**: Store msd-metrics and msd-logs Docker images
+  - **docker-compose.yml**: Defines 3 services (minecraft, msd-metrics, msd-logs)
+  - **Systemd Service**: docker-update.service pulls and starts containers on every boot
+  - **EC2 User Data**: One-time setup (Docker install, EBS mount, secrets)
+- **Update Flow**:
+  1. CircleCI builds and pushes images to ECR (tagged with SHA + latest)
+  2. User stops/starts EC2 instance from dashboard
+  3. Systemd service pulls latest images and starts containers
+- **Benefits**: Simple updates, no SSM complexity, automatic on boot
 
 ### CloudFormation Nested Stack Pattern
 - **Pattern**: Modular infrastructure with nested CloudFormation stacks
@@ -225,9 +215,9 @@ aws s3 sync scripts/ s3://{SupportBucket}/scripts/latest/ --exclude ".git*"
 - **Nested Stacks**:
   - **DynamoDBStack**: Core data tables (base dependency)
   - **CognitoStack**: Authentication resources (base dependency)
-  - **EC2Stack**: IAM roles and instance profiles (depends on DynamoDB)
-  - **SSMStack**: Bootstrap automation documents (depends on DynamoDB)
-  - **LambdasStack**: Functions, layers, AppSync API, SQS (depends on all others)
+  - **ECRStack**: ECR repositories, Secrets Manager, SSM parameters
+  - **EC2Stack**: IAM roles and instance profiles (depends on DynamoDB, ECR)
+  - **LambdasStack**: Functions, layers, AppSync API, SQS (depends on Cognito, DynamoDB)
 - **Stack Exports**: Each stack exports values (ARNs, IDs) for cross-stack references
 - **Benefits**: Modular deployment, clear dependencies, easier updates, resource isolation
 - **Deployment**: `sam build && sam deploy` handles nested stack orchestration
@@ -280,15 +270,14 @@ aws s3 sync scripts/ s3://{SupportBucket}/scripts/latest/ --exclude ".git*"
 6. **Response**: Returns formatted logs (up to 1000 lines)
 7. **Frontend**: Displays logs with syntax highlighting and auto-refresh
 
-### Bootstrap and Configuration Update Flow
-1. **Trigger**: New server detected or configuration change requested
-2. **Lambda**: `ec2BootWorker` or `ssmCommandWorker` invoked
-3. **SSM Run Command**: Lambda invokes SSM document on target EC2 instance
-4. **Script Download**: EC2 downloads bootstrap scripts from S3 (versioned or latest)
-5. **Sequential Execution**: Scripts run in order (00 → 03 → 05 → 07 → 09 → 10)
-6. **Service Installation**: CloudWatch agent, msd-metrics, msd-logs, Minecraft service
-7. **Status Update**: Final script updates DynamoDB with bootstrap status
-8. **Verification**: Lambda polls for completion, updates AppSync
+### Docker Container Update Flow
+1. **CircleCI**: Builds Docker images and pushes to ECR (tagged with SHA + latest)
+2. **User**: Stops server from dashboard (EC2 stops)
+3. **User**: Starts server from dashboard (EC2 starts)
+4. **Systemd**: docker-update.service runs on boot
+5. **Docker Compose**: Pulls latest images from ECR
+6. **Docker Compose**: Starts all containers (minecraft, msd-metrics, msd-logs)
+7. **Ready**: Server running with latest code
 
 ## Recent Improvements & Fixes
 
@@ -378,24 +367,26 @@ cd webapp && npm run dev
 # Network tab shows GraphQL requests/responses
 ```
 
-### Bootstrap Script Testing
+### Docker Container Testing
 ```bash
-# Test scripts locally on EC2 instance
-sudo su -
-cd /tmp
-aws s3 sync s3://{SupportBucket}/scripts/latest/ ./scripts/
-chmod +x scripts/*.sh
-./scripts/00-bootstrap-helper.sh
+# Check container status
+cd /opt/minecraft-dashboard
+docker-compose ps
 
-# Check systemd services
-systemctl status msd-metrics
-systemctl status msd-logs
-systemctl status minecraft
-journalctl -u minecraft -f
+# View container logs
+docker-compose logs minecraft
+docker-compose logs msd-metrics
+docker-compose logs msd-logs
 
-# Verify CloudWatch agent
-/opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
-  -a fetch-config -m ec2 -s -c file:/opt/aws/amazon-cloudwatch-agent/etc/config.json
+# Restart a specific container
+docker-compose restart minecraft
+
+# Pull latest images and restart
+docker-compose pull && docker-compose up -d
+
+# Check systemd boot service
+systemctl status docker-update.service
+journalctl -u docker-update.service
 ```
 
 ### Common Debugging Commands

@@ -11,14 +11,20 @@
         label="Run Command" 
         variant="outlined"
         density="compact"
-        placeholder="java -jar server.jar" 
+        placeholder="java -jar server.jar"
+        hint="Legacy field - not used with Docker"
+        persistent-hint
+        disabled
       />
       <v-text-field 
         v-model="form.workDir" 
         label="Working Directory" 
         variant="outlined"
         density="compact"
-        placeholder="/home/minecraft" 
+        placeholder="/home/minecraft"
+        hint="Legacy field - not used with Docker"
+        persistent-hint
+        disabled
       />
       <v-text-field 
         v-model="form.minecraftVersion" 
@@ -26,6 +32,26 @@
         variant="outlined"
         density="compact"
         placeholder="1.20.4" 
+      />
+      <v-text-field 
+        v-model="form.dockerImageTag" 
+        label="Docker Image Tag" 
+        variant="outlined"
+        density="compact"
+        placeholder="latest"
+        hint="Stop and start server to update containers"
+        persistent-hint
+        :rules="dockerTagRules"
+      />
+      <v-text-field 
+        v-model="form.dockerComposeVersion" 
+        label="Docker Compose Version" 
+        variant="outlined"
+        density="compact"
+        placeholder="1.0.0"
+        hint="Version of docker-compose.yml configuration"
+        persistent-hint
+        :rules="dockerTagRules"
       />
     </div>
   </div>
@@ -39,8 +65,16 @@ const emit = defineEmits(['update:modelValue'])
 
 const form = computed({
   get: () => props.modelValue || {},
-  set: (val) => emit('update:modelValue', val)
+  set: (val) => {
+    if (val && typeof val === 'object') {
+      emit('update:modelValue', { ...val })
+    }
+  }
 })
+
+const dockerTagRules = [
+  v => !v || /^[a-zA-Z0-9._-]+$/.test(v) || 'Only alphanumeric, dots, dashes, and underscores allowed'
+]
 </script>
 
 <style scoped>

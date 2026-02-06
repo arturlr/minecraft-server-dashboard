@@ -105,7 +105,6 @@ export const putServerConfig = /* GraphQL */ `
       alarmThreshold
       alarmEvaluationPeriod
       timezone
-      isBootstrapComplete
       minecraftVersion
       latestPatchUpdate
       createdAt

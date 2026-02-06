@@ -69,7 +69,6 @@ query GetServerConfig($id: String!) {
     alarmThreshold
     alarmEvaluationPeriod
     timezone
-    isBootstrapComplete
     minecraftVersion
     latestPatchUpdate
     createdAt
