@@ -157,17 +157,26 @@ curl -s "https://{support_bucket}.s3.{region}.amazonaws.com/ec2-docker-userdata.
             }
             
             # Add optional parameters if provided
-            if subnet_id:
-                run_params['SubnetId'] = subnet_id
-                logger.info(f"Using subnet: {subnet_id}")
-            else:
-                logger.info("Using default subnet")
+            if not subnet_id:
+                subnet_id = os.environ.get('DEFAULT_SUBNET_ID')
+                if subnet_id:
+                    logger.info(f"Using default subnet from env: {subnet_id}")
+                else:
+                    logger.error("No subnet_id provided and DEFAULT_SUBNET_ID not set")
+                    return None
+            
+            run_params['SubnetId'] = subnet_id
                 
-            if security_group_id:
-                run_params['SecurityGroupIds'] = security_group_id
-                logger.info(f"Using security groups: {security_group_id}")
-            else:
-                logger.info("Using default security group")
+            if not security_group_id:
+                sg_id = os.environ.get('DEFAULT_SECURITY_GROUP_ID')
+                if sg_id:
+                    security_group_id = [sg_id]
+                    logger.info(f"Using default security group from env: {security_group_id}")
+                else:
+                    logger.error("No security_group_id provided and DEFAULT_SECURITY_GROUP_ID not set")
+                    return None
+            
+            run_params['SecurityGroupIds'] = security_group_id
                         
             response = self.ec2_client.run_instances(**run_params)
             
