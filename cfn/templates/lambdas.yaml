@@ -656,6 +656,15 @@ Resources:
                 - 'arn:aws:ec2:*::image/*'
             - Effect: Allow
               Action:
+                - ec2:CreateTags
+              Resource:
+                - 'arn:aws:ec2:*:*:instance/*'
+                - 'arn:aws:ec2:*:*:volume/*'
+              Condition:
+                StringEquals:
+                  'ec2:CreateAction': 'RunInstances'
+            - Effect: Allow
+              Action:
                 - iam:PassRole
               Resource:
                 Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-IAMEC2RoleArn"
