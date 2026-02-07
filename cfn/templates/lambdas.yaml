@@ -703,7 +703,7 @@ Resources:
           EC2_INSTANCE_PROFILE_ARN: !Ref IAMEC2InstanceProfileArn
           EC2_INSTANCE_PROFILE_NAME: !Ref IAMEC2InstanceProfile
           SUPPORT_BUCKET: !Ref SupportBucket
-          AWS_ACCOUNT_ID: !Ref AWS::AccountId
+          AWS_ACCOUNT_ID: !Sub "${AWS::AccountId}"
 
   ec2ActionValidator:
     Type: AWS::Serverless::Function
