@@ -650,7 +650,7 @@ Resources:
               Action:
                 - iam:PassRole
               Resource:
-                Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-EC2RoleArn"
+                Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-IAMEC2RoleArn"
         - Version: "2012-10-17"
           Statement:
             - Effect: Allow
