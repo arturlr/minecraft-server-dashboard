@@ -638,6 +638,23 @@ Resources:
           Statement:
             - Effect: Allow
               Action:
+                - ec2:RunInstances
+              Resource:
+                - 'arn:aws:ec2:*:*:instance/*'
+                - 'arn:aws:ec2:*:*:volume/*'
+                - 'arn:aws:ec2:*:*:network-interface/*'
+                - 'arn:aws:ec2:*:*:security-group/*'
+                - 'arn:aws:ec2:*:*:subnet/*'
+                - 'arn:aws:ec2:*::image/*'
+            - Effect: Allow
+              Action:
+                - iam:PassRole
+              Resource:
+                Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-EC2RoleArn"
+        - Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Action:
                 - events:PutRule
                 - events:PutTargets
                 - events:DeleteRule
@@ -675,12 +692,18 @@ Resources:
             - Effect: Allow
               Action:
                 - ssm:GetParameter
-              Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/minecraft-dashboard/notification-sender-email"
+              Resource:
+                - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/minecraft-dashboard/notification-sender-email"
+                - !Sub "arn:aws:ssm:${AWS::Region}::parameter/aws/service/canonical/ubuntu/server/22.04/stable/current/amd64/hvm/ebs-gp2/ami-id"
       Environment:
         Variables:
           APPSYNC_URL: !GetAtt GraphQLAPI.GraphQLUrl
           LOG_AUDIT_TABLE_NAME:
             Fn::ImportValue: !Sub "${ProjectName}-${EnvironmentName}-LogAuditTableName"
+          EC2_INSTANCE_PROFILE_ARN: !Ref IAMEC2InstanceProfileArn
+          EC2_INSTANCE_PROFILE_NAME: !Ref IAMEC2InstanceProfile
+          SUPPORT_BUCKET: !Ref SupportBucket
+          AWS_ACCOUNT_ID: !Ref AWS::AccountId
 
   ec2ActionValidator:
     Type: AWS::Serverless::Function

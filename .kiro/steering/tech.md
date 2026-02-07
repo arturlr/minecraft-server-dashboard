@@ -327,8 +327,35 @@ cd layers/authHelper && make
 ## Authentication & Authorization
 - **Primary Auth**: Amazon Cognito User Pools with Google OAuth
 - **API Security**: AppSync secured with @aws_cognito_user_pools and @aws_iam directives
-- **User Roles**: Admin group has full access, regular users access owned/invited servers
 - **Token Flow**: JWT tokens → AppSync authorization → Temporary AWS credentials via Identity Pool
+
+### Role-Based Access Control (DynamoDB)
+Roles and permissions are stored in DynamoDB CoreTable, **not** in Cognito groups.
+
+**DynamoDB Key Schema:**
+- **Global Admin**: `PK: USER#{cognito_sub}`, `SK: ADMIN`
+  - Checked via `check_global_admin(user_sub)` in ddbHelper
+  - Full access to all servers and operations (including server creation)
+- **Server Membership**: `PK: USER#{cognito_sub}`, `SK: SERVER#{instance_id}`
+  - Stores `role` (admin, support, moderator, viewer) and `permissions` array
+  - Queried via GSI `SK-PK-index` to list all members of a server
+
+**Role Hierarchy (permission levels):**
+| Role | Level | Permissions |
+|------|-------|-------------|
+| viewer | 1 | read_server, read_metrics, read_config |
+| moderator | 2 | viewer + limited management |
+| support | 3 | moderator + manage_server (start/stop/config) |
+| admin | 4 | support + manage_users |
+
+**Authorization Flow:**
+1. Extract user `sub` from Cognito JWT token
+2. Check `check_global_admin(sub)` → if true, allow all
+3. Check `check_user_server_access(sub, server_id)` → get role
+4. Compare role level against required permission level
+5. Return (is_authorized, role, reason)
+
+**Important:** Do NOT use `cognito:groups` for admin checks — admin status is in DynamoDB.
 
 ## Security Best Practices
 - All data in transit encrypted via HTTPS

@@ -41,10 +41,10 @@ class Ec2Utils:
         try:
             response = self.ssm.get_parameter(Name=parameter_name)
             ami_id = response['Parameter']['Value']
-            print(f"Latest Ubuntu 22.04 AMI ID: {ami_id}")
+            logger.info(f"Latest Ubuntu 22.04 AMI ID: {ami_id}")
             return ami_id
         except Exception as e:
-            print(f"Error retrieving AMI from Parameter Store: {e}")
+            logger.error(f"Error retrieving AMI from Parameter Store: {e}", exc_info=True)
             return None
 
     def create_ec2_instance(self, instance_name, instance_type='t3.micro', 
