@@ -236,9 +236,13 @@ jobs:
             if [ "<< parameters.stage >>" = "dev" ]; then
               SUPPORT_BUCKET="${ARTIFACTS_BUCKET_DEV}"
               FRONTEND_BUCKET="${FRONTEND_BUCKET_DEV}"
+              DEFAULT_SUBNET_IDS="${DEFAULT_SUBNET_IDS_DEV}"
+              DEFAULT_SECURITY_GROUP_ID="${DEFAULT_SECURITY_GROUP_ID_DEV}"
             elif [ "<< parameters.stage >>" = "prod" ]; then
               SUPPORT_BUCKET="${ARTIFACTS_BUCKET_PROD}"
               FRONTEND_BUCKET="${FRONTEND_BUCKET_PROD}"
+              DEFAULT_SUBNET_IDS="${DEFAULT_SUBNET_IDS_PROD}"
+              DEFAULT_SECURITY_GROUP_ID="${DEFAULT_SECURITY_GROUP_ID_PROD}"
             fi
             
             sam deploy \
@@ -246,7 +250,7 @@ jobs:
               --config-env << parameters.stage >> \
               --resolve-s3 \
               --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND \
-              --parameter-overrides "ProjectName=msd EnvironmentName=<< parameters.stage >> AppValue=minecraft SupportBucketName=$SUPPORT_BUCKET FrontendBucketName=$FRONTEND_BUCKET" \
+              --parameter-overrides "ProjectName=msd EnvironmentName=<< parameters.stage >> AppValue=minecraft SupportBucketName=$SUPPORT_BUCKET FrontendBucketName=$FRONTEND_BUCKET DefaultSubnetIds=$DEFAULT_SUBNET_IDS DefaultSecurityGroupId=$DEFAULT_SECURITY_GROUP_ID" \
               --no-confirm-changeset \
               --no-fail-on-empty-changeset \
               --disable-rollback &

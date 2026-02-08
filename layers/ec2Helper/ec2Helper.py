@@ -158,11 +158,15 @@ curl -s "https://{support_bucket}.s3.{region}.amazonaws.com/ec2-docker-userdata.
             
             # Add optional parameters if provided
             if not subnet_id:
-                subnet_id = os.environ.get('DEFAULT_SUBNET_ID')
-                if subnet_id:
-                    logger.info(f"Using default subnet from env: {subnet_id}")
+                subnet_ids_str = os.environ.get('DEFAULT_SUBNET_IDS')
+                if subnet_ids_str:
+                    subnet_ids = [s.strip() for s in subnet_ids_str.split(',')]
+                    # Randomly pick a subnet for distribution
+                    import random
+                    subnet_id = random.choice(subnet_ids)
+                    logger.info(f"Using subnet from env (randomly selected): {subnet_id}")
                 else:
-                    logger.error("No subnet_id provided and DEFAULT_SUBNET_ID not set")
+                    logger.error("No subnet_id provided and DEFAULT_SUBNET_IDS not set")
                     return None
             
             run_params['SubnetId'] = subnet_id

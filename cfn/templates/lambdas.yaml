@@ -39,14 +39,12 @@ Parameters:
   SupportBucket:
     Type: String
     Description: S3 Support Bucket Name
-  DefaultSubnetId:
-    Type: String
-    Description: Default subnet for EC2 instances
-    Default: subnet-b45b8ffc
+  DefaultSubnetIds:
+    Type: CommaDelimitedList
+    Description: Comma-separated list of subnet IDs for EC2 instances
   DefaultSecurityGroupId:
     Type: String
     Description: Default security group for EC2 instances
-    Default: sg-056df248f87c05ebd
 Resources:
 
   ec2ActionValidatorQueue:
@@ -721,7 +719,7 @@ Resources:
           EC2_INSTANCE_PROFILE_NAME: !Ref IAMEC2InstanceProfile
           SUPPORT_BUCKET: !Ref SupportBucket
           AWS_ACCOUNT_ID: !Sub "${AWS::AccountId}"
-          DEFAULT_SUBNET_ID: !Ref DefaultSubnetId
+          DEFAULT_SUBNET_IDS: !Join [',', !Ref DefaultSubnetIds]
           DEFAULT_SECURITY_GROUP_ID: !Ref DefaultSecurityGroupId
 
   ec2ActionValidator:

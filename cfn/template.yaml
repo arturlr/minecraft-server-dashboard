@@ -17,6 +17,12 @@ Parameters:
   FrontendBucketName:
     Type: String
     Description: Pre-existing S3 frontend bucket name from CircleCI
+  DefaultSubnetIds:
+    Type: CommaDelimitedList
+    Description: Comma-separated list of subnet IDs for EC2 instances
+  DefaultSecurityGroupId:
+    Type: String
+    Description: Default security group for EC2 instances
 
 
 Resources:
@@ -75,8 +81,8 @@ Resources:
         IAMEC2InstanceProfile: !GetAtt EC2Stack.Outputs.IAMEC2InstanceProfile
         IAMEC2InstanceProfileArn: !GetAtt EC2Stack.Outputs.IAMEC2InstanceProfileArn
         SupportBucket: !Ref SupportBucketName
-        DefaultSubnetId: subnet-b45b8ffc
-        DefaultSecurityGroupId: sg-056df248f87c05ebd
+        DefaultSubnetIds: !Ref DefaultSubnetIds
+        DefaultSecurityGroupId: !Ref DefaultSecurityGroupId
 
 Outputs:
   GraphQLAPIEndpoint:
