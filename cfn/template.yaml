@@ -18,7 +18,7 @@ Parameters:
     Type: String
     Description: Pre-existing S3 frontend bucket name from CircleCI
   DefaultSubnetIds:
-    Type: CommaDelimitedList
+    Type: String
     Description: Comma-separated list of subnet IDs for EC2 instances
   DefaultSecurityGroupId:
     Type: String

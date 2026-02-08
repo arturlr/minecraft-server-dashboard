@@ -40,7 +40,7 @@ Parameters:
     Type: String
     Description: S3 Support Bucket Name
   DefaultSubnetIds:
-    Type: CommaDelimitedList
+    Type: String
     Description: Comma-separated list of subnet IDs for EC2 instances
   DefaultSecurityGroupId:
     Type: String
@@ -719,7 +719,7 @@ Resources:
           EC2_INSTANCE_PROFILE_NAME: !Ref IAMEC2InstanceProfile
           SUPPORT_BUCKET: !Ref SupportBucket
           AWS_ACCOUNT_ID: !Sub "${AWS::AccountId}"
-          DEFAULT_SUBNET_IDS: !Join [',', !Ref DefaultSubnetIds]
+          DEFAULT_SUBNET_IDS: !Ref DefaultSubnetIds
           DEFAULT_SECURITY_GROUP_ID: !Ref DefaultSecurityGroupId
 
   ec2ActionValidator:
