@@ -318,6 +318,11 @@ jobs:
               aws s3 cp user-data/ec2-docker-userdata.sh "s3://$SUPPORT_BUCKET/ec2-docker-userdata.sh"
             fi
             
+            if [ -f "docker-compose.yml" ]; then
+              echo "Uploading docker-compose.yml to s3://$SUPPORT_BUCKET/"
+              aws s3 cp docker-compose.yml "s3://$SUPPORT_BUCKET/docker-compose.yml"
+            fi
+            
             if [ -f "amazon-cloudwatch-agent.json" ]; then
               echo "Uploading CloudWatch agent config to s3://$SUPPORT_BUCKET/"
               aws s3 cp amazon-cloudwatch-agent.json "s3://$SUPPORT_BUCKET/amazon-cloudwatch-agent.json"

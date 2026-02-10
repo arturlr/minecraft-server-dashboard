@@ -12,8 +12,8 @@ exec 2>&1
 echo "=== Minecraft Dashboard Docker Setup Started at $(date) ==="
 
 # Configuration
-INSTANCE_ID="${INSTANCE_ID:-$(ec2-metadata --instance-id | cut -d ' ' -f 2)}"
-AWS_REGION="${AWS_REGION:-us-west-2}"
+INSTANCE_ID="${INSTANCE_ID:-$(curl -s http://169.254.169.254/latest/meta-data/instance-id)}"
+AWS_REGION="${AWS_REGION:-$(curl -s http://169.254.169.254/latest/meta-data/placement/region)}"
 SUPPORT_BUCKET="${SUPPORT_BUCKET}"
 ECR_REGISTRY="${ECR_REGISTRY}"
 IMAGE_TAG="${IMAGE_TAG:-latest}"
@@ -38,7 +38,7 @@ install_docker() {
         echo "Docker already installed"
         return 0
     fi
-    yum update -y && yum install -y docker && systemctl start docker && systemctl enable docker
+    apt-get update && apt-get install -y docker.io && systemctl start docker && systemctl enable docker
 }
 
 install_docker_compose() {
@@ -58,15 +58,26 @@ setup_ebs_volume() {
         return 0
     fi
     
-    # Wait with exponential backoff
-    MAX_WAIT=300
-    WAIT=0
-    SLEEP=2
-    while [ ! -e "$EBS_DEVICE" ] && [ $WAIT -lt $MAX_WAIT ]; do
-        sleep $SLEEP
-        WAIT=$((WAIT + SLEEP))
-        [ $SLEEP -lt 16 ] && SLEEP=$((SLEEP * 2))
+    # Try multiple device names
+    for device in /dev/xvdf /dev/nvme1n1 /dev/sdf; do
+        if [ -e "$device" ]; then
+            EBS_DEVICE="$device"
+            echo "Found EBS device: $EBS_DEVICE"
+            break
+        fi
     done
+    
+    # Wait with exponential backoff if not found
+    if [ ! -e "$EBS_DEVICE" ]; then
+        MAX_WAIT=300
+        WAIT=0
+        SLEEP=2
+        while [ ! -e "$EBS_DEVICE" ] && [ $WAIT -lt $MAX_WAIT ]; do
+            sleep $SLEEP
+            WAIT=$((WAIT + SLEEP))
+            [ $SLEEP -lt 16 ] && SLEEP=$((SLEEP * 2))
+        done
+    fi
     
     [ ! -e "$EBS_DEVICE" ] && { error_log "EBS device not found"; return 1; }
     
@@ -115,8 +126,8 @@ EOF
 
 install_cloudwatch_agent() {
     [ -f /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl ] && return 0
-    wget https://s3.amazonaws.com/amazoncloudwatch-agent/amazon_linux/amd64/latest/amazon-cloudwatch-agent.rpm -O /tmp/cw.rpm 2>>"$SECURE_LOG"
-    rpm -U /tmp/cw.rpm
+    wget https://s3.amazonaws.com/amazoncloudwatch-agent/ubuntu/amd64/latest/amazon-cloudwatch-agent.deb -O /tmp/cw.deb 2>>"$SECURE_LOG"
+    dpkg -i /tmp/cw.deb
 }
 
 ecr_login() {
@@ -162,8 +173,8 @@ EOF
 verify_services() {
     sleep 60
     docker-compose ps
-    netstat -tuln | grep ":25565" && echo "✓ Minecraft ready"
-    netstat -tuln | grep ":25566" && echo "✓ Logs ready"
+    ss -tuln | grep ":25565" && echo "✓ Minecraft ready"
+    ss -tuln | grep ":25566" && echo "✓ Logs ready"
     curl -s http://localhost:25566/health | grep -q "OK" && echo "✓ Health check passed"
 }
 
