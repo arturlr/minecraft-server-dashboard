@@ -118,6 +118,14 @@ class Ec2Utils:
             ecr_registry = f"{os.environ.get('AWS_ACCOUNT_ID', '')}.dkr.ecr.{os.environ.get('AWS_REGION', 'us-west-2')}.amazonaws.com"
             region = os.environ.get('AWS_REGION', 'us-west-2')
             
+            # Generate presigned URL for user data script (valid for 1 hour)
+            s3_client = boto3.client('s3', region_name=region)
+            userdata_url = s3_client.generate_presigned_url(
+                'get_object',
+                Params={'Bucket': support_bucket, 'Key': 'ec2-docker-userdata.sh'},
+                ExpiresIn=3600
+            )
+            
             user_data_script = f"""#!/bin/bash
 export SUPPORT_BUCKET={shlex.quote(support_bucket)}
 export ECR_REGISTRY={shlex.quote(ecr_registry)}
@@ -125,7 +133,7 @@ export AWS_REGION={shlex.quote(region)}
 export MINECRAFT_VERSION={shlex.quote(mc.get('minecraftVersion', 'LATEST'))}
 export MINECRAFT_TYPE={shlex.quote(mc.get('minecraftType', 'VANILLA'))}
 export MINECRAFT_MEMORY={shlex.quote(mc.get('minecraftMemory', '2G'))}
-curl -s "https://{support_bucket}.s3.{region}.amazonaws.com/ec2-docker-userdata.sh" | bash
+curl -s {shlex.quote(userdata_url)} | bash
 """
             user_data_b64 = base64.b64encode(user_data_script.encode()).decode()
 

@@ -305,13 +305,18 @@ jobs:
       #       echo "Uploading to s3://$SUPPORT_BUCKET/scripts/latest/"
       #       aws s3 sync scripts/ "s3://$SUPPORT_BUCKET/scripts/latest/" --delete
       - run:
-          name: Upload CloudWatch agent config
+          name: Upload user data and CloudWatch config
           command: |
             # Get bucket name from CloudFormation stack outputs
             SUPPORT_BUCKET=$(aws cloudformation describe-stacks \
               --stack-name msd-<< parameters.stage >> \
               --query 'Stacks[0].Outputs[?OutputKey==`SupportBucket`].OutputValue' \
               --output text)
+            
+            if [ -f "user-data/ec2-docker-userdata.sh" ]; then
+              echo "Uploading user data script to s3://$SUPPORT_BUCKET/"
+              aws s3 cp user-data/ec2-docker-userdata.sh "s3://$SUPPORT_BUCKET/ec2-docker-userdata.sh"
+            fi
             
             if [ -f "amazon-cloudwatch-agent.json" ]; then
               echo "Uploading CloudWatch agent config to s3://$SUPPORT_BUCKET/"
