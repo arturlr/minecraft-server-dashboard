@@ -131,10 +131,10 @@ def schedule_event_response():
     for instance in instances_running["Instances"]:
         instance_info = {
             'id': instance["InstanceId"],
-            'memStats': utl.get_metrics_data(instance["InstanceId"], 'MinecraftDashboard', 'mem_usage', 'Percent', 'Average', dt_start_time, dt_now, 60),
+            'memStats': utl.get_metrics_data(instance["InstanceId"], 'MinecraftDashboard', 'memory_usage', 'Percent', 'Average', dt_start_time, dt_now, 60),
             'cpuStats': utl.get_metrics_data(instance["InstanceId"], 'MinecraftDashboard', 'cpu_usage', 'Percent', 'Average', dt_start_time, dt_now, 60),
             'networkStats': utl.get_metrics_data(instance["InstanceId"], 'MinecraftDashboard', 'transmit_bandwidth', 'Bytes/Second', 'Sum', dt_start_time, dt_now, 60),
-            'activeUsers': utl.get_metrics_data(instance["InstanceId"], 'MinecraftDashboard', 'user_count', 'Count', 'Maximum', dt_start_time, dt_now, 60)
+            'activeUsers': utl.get_metrics_data(instance["InstanceId"], 'MinecraftDashboard', 'active_players', 'Count', 'Maximum', dt_start_time, dt_now, 60)
         }
         instances_payload.append(instance_info)
 

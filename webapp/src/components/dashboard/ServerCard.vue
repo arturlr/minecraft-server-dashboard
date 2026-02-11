@@ -68,10 +68,12 @@
         <div class="metric">
           <div class="metric-label">Players</div>
           <div class="metric-value">{{ players }}</div>
+          <SparkLine :data="history.players" :width="120" :height="32" color="#171717" />
         </div>
         <div class="metric">
           <div class="metric-label">Network</div>
           <div class="metric-value">{{ networkRx }}</div>
+          <SparkLine :data="history.net" :width="120" :height="32" color="#171717" />
         </div>
       </div>
     </template>
