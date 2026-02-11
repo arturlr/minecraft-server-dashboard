@@ -59,6 +59,32 @@ wait_for_apt_lock() {
     return 0
 }
 
+apt_install_with_retry() {
+    local package_name=$1
+    local max_retries=3
+    local retry=0
+    
+    echo "Installing $package_name..."
+    
+    while [ $retry -lt $max_retries ]; do
+        if wait_for_apt_lock; then
+            if apt-get update && apt-get install -y $package_name; then
+                echo "✓ $package_name installed successfully"
+                return 0
+            fi
+        fi
+        
+        retry=$((retry + 1))
+        if [ $retry -lt $max_retries ]; then
+            echo "Retry $retry/$max_retries for $package_name after 10 seconds..."
+            sleep 10
+        fi
+    done
+    
+    error_log "Failed to install $package_name after $max_retries attempts"
+    return 1
+}
+
 install_aws_cli() {
     echo ">>> [FUNCTION START] install_aws_cli"
     if command_exists aws; then
@@ -68,18 +94,11 @@ install_aws_cli() {
         return 0
     fi
     
-    echo "Installing AWS CLI..."
-    wait_for_apt_lock
-    
-    apt-get update && apt-get install -y awscli
-    
-    if command_exists aws; then
-        echo "✓ AWS CLI installed successfully"
+    if apt_install_with_retry awscli; then
         aws --version
         echo "<<< [FUNCTION END] install_aws_cli"
         return 0
     else
-        error_log "Failed to install AWS CLI"
         echo "<<< [FUNCTION END] install_aws_cli (FAILED)"
         return 1
     fi
@@ -87,14 +106,20 @@ install_aws_cli() {
 
 install_docker() {
     echo ">>> [FUNCTION START] install_docker"
-    echo "Installing Docker..."
     if command_exists docker; then
         echo "Docker already installed"
         echo "<<< [FUNCTION END] install_docker (skipped - already installed)"
         return 0
     fi
-    apt-get update && apt-get install -y docker.io && systemctl start docker && systemctl enable docker
-    echo "<<< [FUNCTION END] install_docker"
+    
+    if apt_install_with_retry docker.io; then
+        systemctl start docker && systemctl enable docker
+        echo "<<< [FUNCTION END] install_docker"
+        return 0
+    else
+        echo "<<< [FUNCTION END] install_docker (FAILED)"
+        return 1
+    fi
 }
 
 install_docker_compose() {
