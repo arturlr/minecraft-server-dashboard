@@ -49,7 +49,14 @@ impl MetricsCollector {
     }
 
     async fn get_instance_id() -> Result<String> {
-        // Try ec2metadata first, fallback to hostname
+        // Try environment variable first (set by docker-compose)
+        if let Ok(instance_id) = std::env::var("INSTANCE_ID") {
+            if !instance_id.is_empty() {
+                return Ok(instance_id);
+            }
+        }
+
+        // Try ec2metadata, fallback to hostname
         match tokio::process::Command::new("ec2metadata")
             .arg("--instance-id")
             .output()
