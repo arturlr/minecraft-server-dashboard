@@ -32,6 +32,27 @@ command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
+wait_for_apt_lock() {
+    echo "Waiting for apt/dpkg locks to be released..."
+    local max_wait=300
+    local waited=0
+    
+    while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || \
+          fuser /var/lib/dpkg/lock >/dev/null 2>&1 || \
+          fuser /var/lib/apt/lists/lock >/dev/null 2>&1; do
+        if [ $waited -ge $max_wait ]; then
+            echo "WARNING: Timeout waiting for apt locks after ${max_wait}s"
+            return 1
+        fi
+        echo "Waiting for other package managers to finish... (${waited}s)"
+        sleep 5
+        waited=$((waited + 5))
+    done
+    
+    echo "✓ Apt locks released"
+    return 0
+}
+
 install_aws_cli() {
     echo ">>> [FUNCTION START] install_aws_cli"
     if command_exists aws; then
@@ -42,6 +63,8 @@ install_aws_cli() {
     fi
     
     echo "Installing AWS CLI..."
+    wait_for_apt_lock
+    
     apt-get update && apt-get install -y awscli
     
     if command_exists aws; then
