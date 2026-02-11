@@ -11,9 +11,15 @@ exec 2>&1
 
 echo "=== Minecraft Dashboard Docker Setup Started at $(date) ==="
 
-# Configuration
-INSTANCE_ID="${INSTANCE_ID:-$(curl -s http://169.254.169.254/latest/meta-data/instance-id)}"
-AWS_REGION="${AWS_REGION:-$(curl -s http://169.254.169.254/latest/meta-data/placement/region)}"
+# Configuration - Use IMDSv2 for metadata
+get_metadata() {
+    local path=$1
+    local token=$(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600" 2>/dev/null)
+    curl -H "X-aws-ec2-metadata-token: $token" "http://169.254.169.254/latest/meta-data/${path}" 2>/dev/null
+}
+
+INSTANCE_ID="${INSTANCE_ID:-$(get_metadata instance-id)}"
+AWS_REGION="${AWS_REGION:-$(get_metadata placement/region)}"
 SUPPORT_BUCKET="${SUPPORT_BUCKET}"
 ECR_REGISTRY="${ECR_REGISTRY}"
 IMAGE_TAG="${IMAGE_TAG:-latest}"
