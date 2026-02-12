@@ -55,6 +55,32 @@
         </div>
       </div>
 
+      <div v-if="isOnline" class="settings-section">
+        <div class="section-header">
+          <span class="material-symbols-outlined">description</span>
+          <h3>Server Logs</h3>
+          <v-btn 
+            size="small" 
+            variant="text" 
+            :loading="logsLoading"
+            @click="fetchLogs"
+          >
+            <span class="material-symbols-outlined">refresh</span>
+            Refresh
+          </v-btn>
+        </div>
+        <div class="logs-container">
+          <div v-if="logsError" class="logs-error">
+            <span class="material-symbols-outlined">error</span>
+            {{ logsError }}
+          </div>
+          <pre v-else-if="logs" class="logs-content">{{ logs }}</pre>
+          <div v-else class="logs-empty">
+            Click refresh to load logs
+          </div>
+        </div>
+      </div>
+
       <div class="settings-section">
         <div class="section-header">
           <span class="material-symbols-outlined">dns</span>
@@ -157,6 +183,9 @@ const networkRx = computed(() => {
 
 const loading = ref(false)
 const saving = ref(false)
+const logsLoading = ref(false)
+const logs = ref('')
+const logsError = ref('')
 const snackbar = ref({ show: false, text: '', color: 'success' })
 const config = ref({
   id: '',
@@ -207,6 +236,25 @@ const handleRestart = async () => {
     snackbar.value = { show: true, text: 'Restarting server...', color: 'success' }
   } catch (e) {
     console.error('Failed to restart:', e)
+  }
+}
+
+const fetchLogs = async () => {
+  if (!props.serverId) return
+  logsLoading.value = true
+  logsError.value = ''
+  try {
+    const result = await serverStore.getServerLogs(props.serverId, 100)
+    if (result.success) {
+      logs.value = result.logs
+    } else {
+      logsError.value = result.error || 'Failed to fetch logs'
+    }
+  } catch (e) {
+    console.error('Failed to fetch logs:', e)
+    logsError.value = e.message || 'Failed to fetch logs'
+  } finally {
+    logsLoading.value = false
   }
 }
 
@@ -350,5 +398,35 @@ onMounted(loadConfig)
 }
 .status-dot.online {
   background: #22c55e;
+}
+.logs-container {
+  background: #fafafa;
+  border: 1px solid #e5e5e5;
+  border-radius: 8px;
+  padding: 16px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+.logs-content {
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #171717;
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.logs-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #ef4444;
+  font-size: 14px;
+}
+.logs-empty {
+  color: #a3a3a3;
+  font-size: 14px;
+  text-align: center;
+  padding: 32px;
 }
 </style>

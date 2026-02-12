@@ -291,6 +291,19 @@ export const useServerStore = defineStore("server", {
       }
     },
 
+    async getServerLogs(serverId, lines = 100) {
+      try {
+        const result = await client.graphql({
+          query: queries.GET_SERVER_LOGS,
+          variables: { instanceId: serverId, lines }
+        });
+        return result.data.getServerLogs;
+      } catch (error) {
+        this.error = parseGraphQLError(error);
+        throw error;
+      }
+    },
+
     async createServer(config) {
       try {
         await client.graphql({

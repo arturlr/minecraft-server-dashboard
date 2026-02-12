@@ -241,21 +241,25 @@ class Utils:
                 import sys
                 sys.path.append('/opt/python')
                 try:
-                    from authHelper import Auth
+                    from ddbHelper import MembershipDyn
                 except ImportError:
                     # Fallback for local testing
-                    sys.path.insert(0, '../authHelper')
-                    from authHelper import Auth
+                    sys.path.insert(0, '../ddbHelper')
+                    from ddbHelper import MembershipDyn
                 
-                # Initialize Auth helper
-                cognito_pool_id = os.getenv('COGNITO_USER_POOL_ID', 'dummy-pool-id')
-                auth = Auth(cognito_pool_id)
+                # Initialize DynamoDB helper
+                table_name = os.getenv('SERVERS_TABLE_NAME')
+                if not table_name:
+                    logger.error("SERVERS_TABLE_NAME environment variable not set")
+                    return False, "error", "Missing table configuration"
+                
+                membership_dyn = MembershipDyn(table_name)
                 
                 logger.info(f"Using DynamoDB authorization check: user={user_sub}, server={server_id}, permission={required_permission}")
                 
                 # Use the new DynamoDB-based permission checking
                 try:
-                    is_authorized, user_role, auth_reason = auth.check_user_permission(user_sub, server_id, required_permission)
+                    is_authorized, user_role, auth_reason = membership_dyn.check_user_permission(user_sub, server_id, required_permission)
                     
                     # Log the authorization attempt
                     # ErrorHandler.log_authorization_attempt(
