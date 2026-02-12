@@ -215,13 +215,13 @@ download_docker_compose() {
 create_env_file() {
     echo ">>> [FUNCTION START] create_env_file"
     echo "Creating environment files and secrets..."
-    mkdir -p /opt/minecraft-dashboard/secrets && chmod 700 /opt/minecraft-dashboard/secrets
+    mkdir -p /opt/minecraft-dashboard/secrets && chmod 755 /opt/minecraft-dashboard/secrets
     
     # JWT secret
     echo "Fetching JWT secret from SSM..."
     TEMP=$(mktemp -p /opt/minecraft-dashboard/secrets) && chmod 600 "$TEMP"
     aws ssm get-parameter --name "/minecraft-dashboard/jwt-secret" --with-decryption --region "$AWS_REGION" --query 'Parameter.Value' --output text > "$TEMP" 2>>"$SECURE_LOG"
-    touch /opt/minecraft-dashboard/secrets/jwt_secret.txt && chmod 600 /opt/minecraft-dashboard/secrets/jwt_secret.txt
+    touch /opt/minecraft-dashboard/secrets/jwt_secret.txt && chmod 644 /opt/minecraft-dashboard/secrets/jwt_secret.txt
     cat "$TEMP" > /opt/minecraft-dashboard/secrets/jwt_secret.txt && rm -f "$TEMP"
     echo "✓ JWT secret saved"
     
@@ -229,7 +229,7 @@ create_env_file() {
     echo "Fetching RCON password from SSM..."
     TEMP=$(mktemp -p /opt/minecraft-dashboard/secrets) && chmod 600 "$TEMP"
     aws ssm get-parameter --name "/minecraft-dashboard/rcon-password" --with-decryption --region "$AWS_REGION" --query 'Parameter.Value' --output text > "$TEMP" 2>>"$SECURE_LOG"
-    touch /opt/minecraft-dashboard/secrets/rcon_password.txt && chmod 600 /opt/minecraft-dashboard/secrets/rcon_password.txt
+    touch /opt/minecraft-dashboard/secrets/rcon_password.txt && chmod 644 /opt/minecraft-dashboard/secrets/rcon_password.txt
     cat "$TEMP" > /opt/minecraft-dashboard/secrets/rcon_password.txt && rm -f "$TEMP"
     echo "✓ RCON password saved"
     
